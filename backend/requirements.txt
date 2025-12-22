@@ -1,0 +1,32 @@
+# Django Core
+Django==4.2.11
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+django-filter==24.1
+
+# Database
+psycopg2-binary==2.9.9
+dj-database-url==2.1.0
+
+# Authentication & Security
+djangorestframework-simplejwt==5.3.1
+python-decouple==3.8
+
+# Celery & Background Tasks
+celery==5.3.6
+redis==5.0.1
+django-celery-beat==2.5.0
+django-celery-results==2.5.1
+
+# MikroTik API
+routeros-api==0.17.0
+
+# M-Pesa Integration
+requests==2.31.0
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2024.1
+
+# Development
+django-debug-toolbar==4.2.0

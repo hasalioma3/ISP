@@ -1,0 +1,726 @@
+ERROR 2025-12-17 21:59:30,846 mpesa_service Failed to get M-Pesa access token: 400 Client Error: Bad Request for url: https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials
+INFO 2025-12-17 21:59:43,983 mpesa_service Generated new M-Pesa access token
+DEBUG 2025-12-17 21:59:53,209 mpesa_service Using cached M-Pesa access token
+INFO 2025-12-17 21:59:53,210 mpesa_service Initiating STK Push for 254726686337, amount: 100.00
+ERROR 2025-12-17 21:59:53,947 mpesa_service STK Push request failed: 400 Client Error: Bad Request for url: https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest
+ERROR 2025-12-17 21:59:53,948 mpesa_service Error response: {'requestId': '434e-4d64-b394-7ce11ea2216d12503', 'errorCode': '400.002.02', 'errorMessage': 'Bad Request - Invalid CallBackURL'}
+INFO 2025-12-17 22:02:58,624 autoreload Watching for file changes with StatReloader
+INFO 2025-12-17 22:06:42,057 basehttp "GET /admin/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:06:42,094 basehttp "GET /admin/login/?next=/admin/ HTTP/1.1" 200 13559
+INFO 2025-12-17 22:06:42,115 basehttp "GET /static/admin/css/base.css HTTP/1.1" 200 21310
+INFO 2025-12-17 22:06:42,119 basehttp "GET /static/admin/css/dark_mode.css HTTP/1.1" 200 2929
+INFO 2025-12-17 22:06:42,119 basehttp "GET /static/admin/js/theme.js HTTP/1.1" 200 1943
+INFO 2025-12-17 22:06:42,120 basehttp "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 200 2694
+INFO 2025-12-17 22:06:42,120 basehttp "GET /static/admin/css/responsive.css HTTP/1.1" 200 18559
+INFO 2025-12-17 22:06:42,123 basehttp "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 200 3063
+INFO 2025-12-17 22:06:42,124 basehttp "GET /static/admin/css/login.css HTTP/1.1" 200 958
+INFO 2025-12-17 22:06:42,125 basehttp "GET /static/debug_toolbar/js/toolbar.js HTTP/1.1" 200 13404
+INFO 2025-12-17 22:06:42,125 basehttp "GET /static/debug_toolbar/css/toolbar.css HTTP/1.1" 200 12621
+INFO 2025-12-17 22:06:42,126 basehttp "GET /static/debug_toolbar/css/print.css HTTP/1.1" 200 43
+INFO 2025-12-17 22:06:42,137 basehttp "GET /static/debug_toolbar/js/utils.js HTTP/1.1" 200 4527
+WARNING 2025-12-17 22:06:42,257 log Not Found: /apple-touch-icon-precomposed.png
+WARNING 2025-12-17 22:06:42,258 basehttp "GET /apple-touch-icon-precomposed.png HTTP/1.1" 404 11981
+WARNING 2025-12-17 22:06:42,260 log Not Found: /favicon.ico
+WARNING 2025-12-17 22:06:42,260 basehttp "GET /favicon.ico HTTP/1.1" 404 11897
+WARNING 2025-12-17 22:06:42,327 log Not Found: /apple-touch-icon.png
+WARNING 2025-12-17 22:06:42,327 basehttp "GET /apple-touch-icon.png HTTP/1.1" 404 11931
+INFO 2025-12-17 22:06:46,213 basehttp "POST /admin/login/?next=/admin/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:06:46,272 basehttp "GET /admin/ HTTP/1.1" 200 24380
+INFO 2025-12-17 22:06:46,280 basehttp "GET /static/admin/css/dashboard.css HTTP/1.1" 200 441
+INFO 2025-12-17 22:06:46,291 basehttp "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 200 331
+INFO 2025-12-17 22:06:46,291 basehttp "GET /static/admin/img/icon-changelink.svg HTTP/1.1" 200 380
+INFO 2025-12-17 22:06:51,007 basehttp "GET /admin/billing/billingplan/ HTTP/1.1" 200 30037
+INFO 2025-12-17 22:06:51,398 basehttp "GET /static/admin/js/jquery.init.js HTTP/1.1" 200 347
+INFO 2025-12-17 22:06:51,398 basehttp "GET /static/admin/js/core.js HTTP/1.1" 200 5682
+INFO 2025-12-17 22:06:51,399 basehttp "GET /static/admin/css/changelists.css HTTP/1.1" 200 6566
+INFO 2025-12-17 22:06:51,400 basehttp "GET /static/admin/js/admin/RelatedObjectLookups.js HTTP/1.1" 200 8943
+INFO 2025-12-17 22:06:51,405 basehttp "GET /static/admin/js/prepopulate.js HTTP/1.1" 200 1531
+INFO 2025-12-17 22:06:51,409 basehttp "GET /static/admin/js/actions.js HTTP/1.1" 200 7872
+INFO 2025-12-17 22:06:51,409 basehttp "GET /static/admin/js/urlify.js HTTP/1.1" 200 7887
+INFO 2025-12-17 22:06:51,410 basehttp "GET /static/admin/js/filters.js HTTP/1.1" 200 978
+INFO 2025-12-17 22:06:51,417 basehttp "GET /static/admin/js/vendor/jquery/jquery.js HTTP/1.1" 200 292458
+INFO 2025-12-17 22:06:51,418 basehttp "GET /static/admin/js/vendor/xregexp/xregexp.js HTTP/1.1" 200 232381
+INFO 2025-12-17 22:06:51,421 basehttp "GET /static/admin/img/search.svg HTTP/1.1" 200 458
+INFO 2025-12-17 22:06:51,428 basehttp "GET /static/admin/img/icon-yes.svg HTTP/1.1" 200 436
+INFO 2025-12-17 22:06:51,431 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:06:51,453 basehttp "GET /static/admin/img/tooltag-add.svg HTTP/1.1" 200 331
+INFO 2025-12-17 22:06:51,453 basehttp "GET /static/admin/img/sorting-icons.svg HTTP/1.1" 200 1097
+INFO 2025-12-17 22:06:55,380 basehttp "GET /admin/billing/subscription/ HTTP/1.1" 200 25370
+INFO 2025-12-17 22:06:55,763 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:01,837 basehttp "GET /admin/billing/transaction/ HTTP/1.1" 200 25537
+INFO 2025-12-17 22:07:02,294 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:03,771 basehttp "GET /admin/billing/usagerecord/ HTTP/1.1" 200 24628
+INFO 2025-12-17 22:07:04,176 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:05,560 basehttp "GET /admin/billing/billingplan/ HTTP/1.1" 200 30037
+INFO 2025-12-17 22:07:05,579 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:15,916 basehttp "GET /admin/billing/subscription/ HTTP/1.1" 200 25370
+INFO 2025-12-17 22:07:15,935 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:17,932 basehttp "GET /admin/billing/subscription/add/ HTTP/1.1" 200 27854
+INFO 2025-12-17 22:07:18,318 basehttp "GET /static/admin/js/prepopulate_init.js HTTP/1.1" 200 586
+INFO 2025-12-17 22:07:18,319 basehttp "GET /static/admin/css/forms.css HTTP/1.1" 200 9090
+INFO 2025-12-17 22:07:18,319 basehttp "GET /static/admin/js/change_form.js HTTP/1.1" 200 606
+INFO 2025-12-17 22:07:18,320 basehttp "GET /static/admin/js/calendar.js HTTP/1.1" 200 8466
+INFO 2025-12-17 22:07:18,322 basehttp "GET /static/admin/js/admin/DateTimeShortcuts.js HTTP/1.1" 200 19319
+INFO 2025-12-17 22:07:18,326 basehttp "GET /static/admin/css/widgets.css HTTP/1.1" 200 11921
+INFO 2025-12-17 22:07:18,340 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:18,368 basehttp "GET /static/admin/img/icon-calendar.svg HTTP/1.1" 200 1086
+INFO 2025-12-17 22:07:18,369 basehttp "GET /static/admin/img/icon-clock.svg HTTP/1.1" 200 677
+INFO 2025-12-17 22:07:26,066 basehttp "GET /admin/django_celery_results/groupresult/ HTTP/1.1" 200 24739
+INFO 2025-12-17 22:07:26,461 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:27,934 basehttp "GET /admin/django_celery_results/taskresult/ HTTP/1.1" 200 25914
+INFO 2025-12-17 22:07:28,346 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:30,039 basehttp "GET /admin/customers/customer/ HTTP/1.1" 200 28650
+INFO 2025-12-17 22:07:30,420 basehttp "GET /static/admin/img/icon-no.svg HTTP/1.1" 200 560
+INFO 2025-12-17 22:07:30,433 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:39,197 basehttp "GET /admin/network/activesession/ HTTP/1.1" 200 24967
+INFO 2025-12-17 22:07:39,591 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:41,660 basehttp "GET /admin/network/hotspotuser/ HTTP/1.1" 200 24476
+INFO 2025-12-17 22:07:42,066 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:43,630 basehttp "GET /admin/network/pppoesecret/ HTTP/1.1" 200 24476
+INFO 2025-12-17 22:07:44,025 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:45,467 basehttp "GET /admin/network/router/ HTTP/1.1" 200 27013
+INFO 2025-12-17 22:07:45,842 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:07:53,092 basehttp "GET /admin/network/router/add/ HTTP/1.1" 200 29742
+INFO 2025-12-17 22:07:53,486 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:08:00,527 basehttp "GET /admin/network/router/ HTTP/1.1" 200 27013
+INFO 2025-12-17 22:08:00,547 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:08:02,255 basehttp "GET /admin/payments/paymentcallback/ HTTP/1.1" 200 25140
+INFO 2025-12-17 22:08:02,646 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:08:04,049 basehttp "GET /admin/payments/paymentrequest/ HTTP/1.1" 200 25234
+INFO 2025-12-17 22:08:04,434 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:08:07,484 basehttp "GET /admin/django_celery_beat/clockedschedule/ HTTP/1.1" 200 23446
+INFO 2025-12-17 22:08:07,871 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:08:10,218 basehttp "GET /admin/django_celery_beat/solarschedule/ HTTP/1.1" 200 23462
+INFO 2025-12-17 22:08:10,601 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:08:12,386 basehttp "GET /admin/django_celery_beat/intervalschedule/ HTTP/1.1" 200 23456
+INFO 2025-12-17 22:08:12,764 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:08:14,239 basehttp "GET /admin/django_celery_beat/crontabschedule/ HTTP/1.1" 200 25508
+INFO 2025-12-17 22:08:14,617 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:08:52,801 basehttp "OPTIONS /api/customers/login/ HTTP/1.1" 200 0
+INFO 2025-12-17 22:08:53,009 basehttp "POST /api/customers/login/ HTTP/1.1" 200 777
+INFO 2025-12-17 22:08:53,033 basehttp "OPTIONS /api/billing/subscriptions/current/ HTTP/1.1" 200 0
+WARNING 2025-12-17 22:08:53,047 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:08:53,048 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:08:58,848 basehttp "OPTIONS /api/billing/plans/ HTTP/1.1" 200 0
+INFO 2025-12-17 22:08:58,869 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:09:19,372 basehttp "OPTIONS /api/customers/login/ HTTP/1.1" 200 0
+INFO 2025-12-17 22:09:19,578 basehttp "POST /api/customers/login/ HTTP/1.1" 200 777
+INFO 2025-12-17 22:09:19,611 basehttp "OPTIONS /api/billing/subscriptions/current/ HTTP/1.1" 200 0
+WARNING 2025-12-17 22:09:19,622 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:09:19,622 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:09:24,148 basehttp "OPTIONS /api/billing/plans/ HTTP/1.1" 200 0
+INFO 2025-12-17 22:09:24,170 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:09:28,466 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:09:38,749 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:09:38,749 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+WARNING 2025-12-17 22:09:38,827 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:09:38,827 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:09:41,118 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:09:47,539 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:09:47,539 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+WARNING 2025-12-17 22:09:47,913 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:09:47,913 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:09:49,856 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:09:54,545 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:09:54,781 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:09:54,781 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+WARNING 2025-12-17 22:09:55,117 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:09:55,118 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:09:57,108 basehttp "OPTIONS /api/billing/usage/ HTTP/1.1" 200 0
+INFO 2025-12-17 22:09:57,127 basehttp "GET /api/billing/usage/ HTTP/1.1" 200 52
+WARNING 2025-12-17 22:09:59,507 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:09:59,508 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:10:47,017 basehttp "OPTIONS /api/customers/register/ HTTP/1.1" 200 0
+INFO 2025-12-17 22:10:47,252 basehttp "POST /api/customers/register/ HTTP/1.1" 201 843
+WARNING 2025-12-17 22:10:47,288 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:10:47,288 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:10:53,649 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:10:56,602 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:11:04,754 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:11:04,754 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:11:16,218 basehttp "GET /admin/billing/billingplan/ HTTP/1.1" 200 30037
+INFO 2025-12-17 22:11:16,239 basehttp "GET /static/admin/css/dark_mode.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,239 basehttp "GET /static/admin/css/base.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,239 basehttp "GET /static/admin/js/theme.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,239 basehttp "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,239 basehttp "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,241 basehttp "GET /static/admin/css/changelists.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,241 basehttp "GET /static/admin/js/jquery.init.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,242 basehttp "GET /static/admin/js/core.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,244 basehttp "GET /static/admin/js/admin/RelatedObjectLookups.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,244 basehttp "GET /static/admin/js/actions.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,246 basehttp "GET /static/admin/js/vendor/jquery/jquery.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,247 basehttp "GET /static/admin/js/urlify.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,247 basehttp "GET /static/admin/js/prepopulate.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,248 basehttp "GET /static/admin/js/vendor/xregexp/xregexp.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,249 basehttp "GET /static/admin/js/filters.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,250 basehttp "GET /static/debug_toolbar/css/toolbar.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,250 basehttp "GET /static/admin/css/responsive.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,251 basehttp "GET /static/admin/img/search.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,251 basehttp "GET /static/debug_toolbar/js/toolbar.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,252 basehttp "GET /static/admin/img/icon-yes.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,254 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:11:16,271 basehttp "GET /static/debug_toolbar/css/print.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,275 basehttp "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,276 basehttp "GET /static/admin/img/sorting-icons.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,276 basehttp "GET /static/admin/img/tooltag-add.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:16,277 basehttp "GET /static/debug_toolbar/js/utils.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:22,675 basehttp "GET /admin/customers/customer/ HTTP/1.1" 200 29142
+INFO 2025-12-17 22:11:22,677 basehttp "GET /static/admin/img/icon-no.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:22,694 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:11:26,894 basehttp "GET /admin/customers/customer/3/change/ HTTP/1.1" 200 50993
+INFO 2025-12-17 22:11:27,306 basehttp "GET /static/admin/js/change_form.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:27,307 basehttp "GET /static/admin/css/forms.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:27,309 basehttp "GET /static/admin/js/SelectFilter2.js HTTP/1.1" 200 15292
+INFO 2025-12-17 22:11:27,309 basehttp "GET /static/admin/js/admin/DateTimeShortcuts.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:27,310 basehttp "GET /static/admin/js/calendar.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:27,310 basehttp "GET /static/admin/js/SelectBox.js HTTP/1.1" 200 4530
+INFO 2025-12-17 22:11:27,310 basehttp "GET /static/admin/js/prepopulate_init.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:27,312 basehttp "GET /static/admin/css/widgets.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:27,322 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:11:27,349 basehttp "GET /static/admin/img/icon-unknown.svg HTTP/1.1" 200 655
+INFO 2025-12-17 22:11:27,353 basehttp "GET /static/admin/img/selector-icons.svg HTTP/1.1" 200 3291
+INFO 2025-12-17 22:11:27,354 basehttp "GET /static/admin/img/icon-clock.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:27,354 basehttp "GET /static/admin/img/icon-calendar.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:11:27,355 basehttp "GET /static/admin/img/icon-unknown-alt.svg HTTP/1.1" 200 655
+INFO 2025-12-17 22:11:44,318 basehttp "POST /admin/customers/customer/3/change/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:11:44,355 basehttp "GET /admin/customers/customer/ HTTP/1.1" 200 29365
+INFO 2025-12-17 22:11:44,697 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+WARNING 2025-12-17 22:11:48,192 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:11:48,192 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+WARNING 2025-12-17 22:11:51,278 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:11:51,279 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:11:52,728 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:11:56,291 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:12:04,507 basehttp "GET /admin/customers/customer/3/change/ HTTP/1.1" 200 51001
+INFO 2025-12-17 22:12:04,527 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:12:26,671 basehttp "POST /admin/customers/customer/3/change/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:12:26,709 basehttp "GET /admin/customers/customer/ HTTP/1.1" 200 29365
+INFO 2025-12-17 22:12:26,727 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+WARNING 2025-12-17 22:12:36,136 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:12:36,137 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:12:43,591 basehttp "GET /admin/customers/customer/3/change/ HTTP/1.1" 200 51004
+INFO 2025-12-17 22:12:43,604 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:12:59,141 basehttp "POST /admin/customers/customer/3/change/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:12:59,181 basehttp "GET /admin/customers/customer/ HTTP/1.1" 200 29364
+INFO 2025-12-17 22:12:59,199 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+WARNING 2025-12-17 22:13:02,718 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:13:02,718 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+WARNING 2025-12-17 22:13:06,545 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:13:06,546 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+WARNING 2025-12-17 22:13:10,528 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:13:10,528 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:13:12,316 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:13:17,283 basehttp "GET /admin/customers/customer/3/change/ HTTP/1.1" 200 51004
+INFO 2025-12-17 22:13:17,297 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:13:31,270 basehttp "POST /admin/customers/customer/3/change/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:13:31,309 basehttp "GET /admin/customers/customer/ HTTP/1.1" 200 29365
+INFO 2025-12-17 22:13:31,328 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:13:36,681 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:16:07,128 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:16:12,066 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:16:12,066 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:16:17,659 basehttp "GET /admin/auth/group/ HTTP/1.1" 200 23681
+INFO 2025-12-17 22:16:18,041 basehttp "GET /static/admin/js/theme.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,045 basehttp "GET /static/admin/css/dark_mode.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,048 basehttp "GET /static/admin/css/base.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,049 basehttp "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,050 basehttp "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,051 basehttp "GET /static/admin/css/changelists.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,052 basehttp "GET /static/admin/js/vendor/jquery/jquery.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,052 basehttp "GET /static/admin/js/admin/RelatedObjectLookups.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,053 basehttp "GET /static/admin/js/core.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,055 basehttp "GET /static/admin/js/actions.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,055 basehttp "GET /static/admin/js/jquery.init.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,055 basehttp "GET /static/admin/js/urlify.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,058 basehttp "GET /static/admin/js/filters.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,058 basehttp "GET /static/admin/js/prepopulate.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,059 basehttp "GET /static/debug_toolbar/css/toolbar.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,059 basehttp "GET /static/admin/css/responsive.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,060 basehttp "GET /static/admin/img/search.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,061 basehttp "GET /static/debug_toolbar/js/toolbar.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,061 basehttp "GET /static/admin/js/vendor/xregexp/xregexp.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,073 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:16:18,092 basehttp "GET /static/debug_toolbar/css/print.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,095 basehttp "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,097 basehttp "GET /static/admin/img/tooltag-add.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:18,098 basehttp "GET /static/debug_toolbar/js/utils.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:20,186 basehttp "GET /admin/billing/billingplan/ HTTP/1.1" 200 30037
+INFO 2025-12-17 22:16:20,207 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:16:20,548 basehttp "GET /static/admin/img/icon-yes.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:16:20,561 basehttp "GET /static/admin/img/sorting-icons.svg HTTP/1.1" 304 0
+WARNING 2025-12-17 22:16:23,837 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:16:23,837 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:16:25,093 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:17:20,753 log Unauthorized: /api/billing/plans/
+WARNING 2025-12-17 22:17:20,753 basehttp "GET /api/billing/plans/ HTTP/1.1" 401 58
+INFO 2025-12-17 22:17:40,633 autoreload /Users/hassan/Desktop/ISP/backend/apps/billing/views.py changed, reloading.
+INFO 2025-12-17 22:17:41,199 autoreload Watching for file changes with StatReloader
+INFO 2025-12-17 22:17:42,784 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:18:26,293 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:18:26,294 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:18:32,301 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:19:09,122 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:19:19,539 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:19:31,330 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:19:31,330 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:19:33,415 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:19:43,732 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:19:43,733 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:19:47,665 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:20:24,539 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:21:29,968 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:21:50,097 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:22:50,965 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:22:56,148 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:22:56,148 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:22:57,940 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:22:59,577 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:23:53,760 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:23:53,761 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:23:57,867 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:23:59,329 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:24:22,087 basehttp "OPTIONS /api/billing/plans/ HTTP/1.1" 200 0
+INFO 2025-12-17 22:24:22,114 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:24:24,279 basehttp "OPTIONS /api/billing/subscriptions/current/ HTTP/1.1" 200 0
+WARNING 2025-12-17 22:24:24,299 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:24:24,299 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:24:33,832 basehttp "OPTIONS /api/customers/login/ HTTP/1.1" 200 0
+INFO 2025-12-17 22:24:34,049 basehttp "POST /api/customers/login/ HTTP/1.1" 200 845
+WARNING 2025-12-17 22:24:34,072 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:24:34,072 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:24:37,619 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:24:38,627 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:24:52,272 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:24:54,037 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:24:54,037 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:25:04,733 basehttp "POST /api/customers/login/ HTTP/1.1" 200 845
+WARNING 2025-12-17 22:25:04,777 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:25:04,777 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:25:06,677 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:25:08,886 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:26:54,335 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:27:04,060 basehttp "OPTIONS /api/payments/initiate/ HTTP/1.1" 200 0
+INFO 2025-12-17 22:27:04,781 mpesa_service Generated new M-Pesa access token
+INFO 2025-12-17 22:27:04,783 mpesa_service Initiating STK Push for 254726686337, amount: 4000.00
+ERROR 2025-12-17 22:27:05,496 mpesa_service STK Push request failed: 400 Client Error: Bad Request for url: https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest
+ERROR 2025-12-17 22:27:05,496 mpesa_service Error response: {'requestId': '434e-4d64-b394-7ce11ea2216d12731', 'errorCode': '400.002.02', 'errorMessage': 'Bad Request - Invalid CallBackURL'}
+WARNING 2025-12-17 22:27:05,520 log Bad Request: /api/payments/initiate/
+WARNING 2025-12-17 22:27:05,521 basehttp "POST /api/payments/initiate/ HTTP/1.1" 400 61
+WARNING 2025-12-17 22:27:11,240 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:27:11,241 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:27:13,883 basehttp "OPTIONS /api/billing/usage/ HTTP/1.1" 200 0
+INFO 2025-12-17 22:27:13,897 basehttp "GET /api/billing/usage/ HTTP/1.1" 200 52
+WARNING 2025-12-17 22:27:15,539 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:27:15,540 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:27:16,580 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:27:24,386 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:27:24,387 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:27:26,613 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:27:29,914 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:27:29,914 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:27:48,495 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:28:12,045 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:28:15,262 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:28:33,973 log Unauthorized: /api/payments/initiate/
+WARNING 2025-12-17 22:28:33,975 basehttp "POST /api/payments/initiate/ HTTP/1.1" 401 58
+INFO 2025-12-17 22:28:41,592 basehttp "POST /api/customers/login/ HTTP/1.1" 200 845
+WARNING 2025-12-17 22:28:41,617 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:28:41,617 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:28:43,332 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:28:45,942 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+DEBUG 2025-12-17 22:28:53,519 mpesa_service Using cached M-Pesa access token
+INFO 2025-12-17 22:28:53,519 mpesa_service Initiating STK Push for 254726686337, amount: 2500.00
+ERROR 2025-12-17 22:28:54,209 mpesa_service STK Push request failed: 400 Client Error: Bad Request for url: https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest
+ERROR 2025-12-17 22:28:54,210 mpesa_service Error response: {'requestId': 'f4f7-4583-af55-907f52ca002811922', 'errorCode': '400.002.02', 'errorMessage': 'Bad Request - Invalid CallBackURL'}
+WARNING 2025-12-17 22:28:54,244 log Bad Request: /api/payments/initiate/
+WARNING 2025-12-17 22:28:54,245 basehttp "POST /api/payments/initiate/ HTTP/1.1" 400 61
+INFO 2025-12-17 22:29:05,659 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:29:17,364 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:30:00,034 tasks Cleaning up pending payments...
+INFO 2025-12-17 22:30:00,045 tasks Marked 0 payments as timed out
+INFO 2025-12-17 22:30:09,900 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:30:09,914 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:30:43,187 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:33:12,568 basehttp "GET /admin/billing/billingplan/ HTTP/1.1" 200 30037
+INFO 2025-12-17 22:33:12,602 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:33:18,845 basehttp "GET /admin/customers/customer/ HTTP/1.1" 200 29142
+INFO 2025-12-17 22:33:18,850 basehttp "GET /static/admin/img/icon-no.svg HTTP/1.1" 304 0
+WARNING 2025-12-17 22:33:18,881 log Not Found: /
+WARNING 2025-12-17 22:33:18,881 basehttp "GET / HTTP/1.1" 404 11835
+INFO 2025-12-17 22:33:18,888 basehttp "GET /static/admin/css/dark_mode.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,903 basehttp "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,904 basehttp "GET /static/admin/css/base.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,904 basehttp "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,904 basehttp "GET /static/admin/js/theme.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,906 basehttp "GET /static/admin/js/core.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,906 basehttp "GET /static/admin/css/changelists.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,907 basehttp "GET /static/admin/js/jquery.init.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,909 basehttp "GET /static/admin/js/admin/RelatedObjectLookups.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,909 basehttp "GET /static/admin/js/vendor/jquery/jquery.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,910 basehttp "GET /static/admin/js/actions.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,911 basehttp "GET /static/admin/js/filters.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,911 basehttp "GET /static/admin/js/urlify.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,912 basehttp "GET /static/admin/css/responsive.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,913 basehttp "GET /static/admin/js/vendor/xregexp/xregexp.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,913 basehttp "GET /static/admin/js/prepopulate.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,913 basehttp "GET /static/debug_toolbar/js/toolbar.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,916 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:33:18,916 basehttp "GET /static/debug_toolbar/css/toolbar.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,917 basehttp "GET /static/admin/img/search.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,918 basehttp "GET /static/admin/img/icon-yes.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,932 basehttp "GET /static/debug_toolbar/css/print.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:18,962 basehttp "GET /static/debug_toolbar/js/utils.js HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:26,342 basehttp "GET /admin/customers/customer/ HTTP/1.1" 200 29142
+INFO 2025-12-17 22:33:26,392 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:33:26,415 basehttp "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:26,417 basehttp "GET /static/admin/img/tooltag-add.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:33:26,417 basehttp "GET /static/admin/img/sorting-icons.svg HTTP/1.1" 304 0
+WARNING 2025-12-17 22:33:31,863 log Not Found: /api/
+WARNING 2025-12-17 22:33:31,863 basehttp "GET /api/ HTTP/1.1" 404 11869
+WARNING 2025-12-17 22:33:42,087 log Not Found: /api/customers
+WARNING 2025-12-17 22:33:42,088 basehttp "GET /api/customers HTTP/1.1" 404 11905
+WARNING 2025-12-17 22:33:48,922 log Not Found: /api/customers/
+WARNING 2025-12-17 22:33:48,923 basehttp "GET /api/customers/ HTTP/1.1" 404 12547
+INFO 2025-12-17 22:34:01,138 basehttp "GET /admin/customers/customer/ HTTP/1.1" 200 29142
+INFO 2025-12-17 22:34:01,194 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:34:03,057 basehttp "GET /admin/ HTTP/1.1" 200 25653
+INFO 2025-12-17 22:34:03,081 basehttp "GET /static/admin/css/dashboard.css HTTP/1.1" 304 0
+INFO 2025-12-17 22:34:03,091 basehttp "GET /static/admin/img/icon-changelink.svg HTTP/1.1" 304 0
+INFO 2025-12-17 22:34:28,053 autoreload Watching for file changes with StatReloader
+INFO 2025-12-17 22:35:16,949 basehttp "GET /admin HTTP/1.1" 301 0
+INFO 2025-12-17 22:35:16,976 basehttp "GET /admin/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:35:16,995 basehttp "GET /admin/login/?next=/admin/ HTTP/1.1" 200 4185
+INFO 2025-12-17 22:35:17,281 basehttp "GET /static/admin/css/base.css HTTP/1.1" 200 21310
+INFO 2025-12-17 22:35:17,285 basehttp "GET /static/admin/css/dark_mode.css HTTP/1.1" 200 2929
+INFO 2025-12-17 22:35:17,286 basehttp "GET /static/admin/css/login.css HTTP/1.1" 200 958
+INFO 2025-12-17 22:35:17,286 basehttp "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 200 3063
+INFO 2025-12-17 22:35:17,286 basehttp "GET /static/admin/js/theme.js HTTP/1.1" 200 1943
+INFO 2025-12-17 22:35:17,287 basehttp "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 200 2694
+INFO 2025-12-17 22:35:17,287 basehttp "GET /static/admin/css/responsive.css HTTP/1.1" 200 18559
+WARNING 2025-12-17 22:35:17,298 log Not Found: /favicon.ico
+WARNING 2025-12-17 22:35:17,298 basehttp "GET /favicon.ico HTTP/1.1" 404 2564
+INFO 2025-12-17 22:35:21,351 basehttp "POST /admin/login/?next=/admin/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:35:21,370 basehttp "GET /admin/ HTTP/1.1" 200 16302
+INFO 2025-12-17 22:35:21,375 basehttp "GET /static/admin/css/dashboard.css HTTP/1.1" 200 441
+INFO 2025-12-17 22:35:21,387 basehttp "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 200 331
+INFO 2025-12-17 22:35:21,387 basehttp "GET /static/admin/img/icon-changelink.svg HTTP/1.1" 200 380
+INFO 2025-12-17 22:35:46,967 autoreload Watching for file changes with StatReloader
+WARNING 2025-12-17 22:35:51,441 log Not Found: /
+WARNING 2025-12-17 22:35:51,441 basehttp "GET / HTTP/1.1" 404 2518
+WARNING 2025-12-17 22:35:52,352 log Not Found: /favicon.ico
+WARNING 2025-12-17 22:35:52,353 basehttp "GET /favicon.ico HTTP/1.1" 404 2569
+INFO 2025-12-17 22:35:56,355 basehttp "GET /admin HTTP/1.1" 301 0
+INFO 2025-12-17 22:35:56,393 basehttp "GET /admin/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:35:56,409 basehttp "GET /admin/login/?next=/admin/ HTTP/1.1" 200 4185
+INFO 2025-12-17 22:35:56,428 basehttp "GET /static/admin/css/base.css HTTP/1.1" 200 21310
+INFO 2025-12-17 22:35:56,428 basehttp "GET /static/admin/css/dark_mode.css HTTP/1.1" 200 2929
+INFO 2025-12-17 22:35:56,429 basehttp "GET /static/admin/css/login.css HTTP/1.1" 200 958
+INFO 2025-12-17 22:35:56,429 basehttp "GET /static/admin/css/responsive.css HTTP/1.1" 200 18559
+INFO 2025-12-17 22:35:56,430 basehttp "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 200 3063
+INFO 2025-12-17 22:35:56,430 basehttp "GET /static/admin/js/theme.js HTTP/1.1" 200 1943
+INFO 2025-12-17 22:35:56,431 basehttp "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 200 2694
+INFO 2025-12-17 22:35:59,377 basehttp "POST /admin/login/?next=/admin/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:35:59,397 basehttp "GET /admin/ HTTP/1.1" 200 16302
+INFO 2025-12-17 22:35:59,408 basehttp "GET /static/admin/css/dashboard.css HTTP/1.1" 200 441
+INFO 2025-12-17 22:35:59,412 basehttp "GET /static/admin/img/icon-changelink.svg HTTP/1.1" 200 380
+INFO 2025-12-17 22:35:59,412 basehttp "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 200 331
+INFO 2025-12-17 22:36:01,622 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:36:05,601 log Not Found: /api/billing/subscriptions/current/
+WARNING 2025-12-17 22:36:05,601 basehttp "GET /api/billing/subscriptions/current/ HTTP/1.1" 404 36
+INFO 2025-12-17 22:36:07,060 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:36:09,400 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+ERROR 2025-12-17 22:37:24,989 exception Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+WARNING 2025-12-17 22:37:25,016 log Bad Request: /
+WARNING 2025-12-17 22:37:25,016 basehttp "GET / HTTP/1.1" 400 76206
+ERROR 2025-12-17 22:37:25,425 exception Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+WARNING 2025-12-17 22:37:25,449 log Bad Request: /favicon.ico
+WARNING 2025-12-17 22:37:25,450 basehttp "GET /favicon.ico HTTP/1.1" 400 76129
+ERROR 2025-12-17 22:37:48,282 exception Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+WARNING 2025-12-17 22:37:48,303 log Bad Request: /
+WARNING 2025-12-17 22:37:48,304 basehttp "GET / HTTP/1.1" 400 76200
+ERROR 2025-12-17 22:37:48,571 exception Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+WARNING 2025-12-17 22:37:48,585 log Bad Request: /favicon.ico
+WARNING 2025-12-17 22:37:48,586 basehttp "GET /favicon.ico HTTP/1.1" 400 76129
+ERROR 2025-12-17 22:38:06,927 exception Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+WARNING 2025-12-17 22:38:06,952 log Bad Request: /
+WARNING 2025-12-17 22:38:06,952 basehttp "GET / HTTP/1.1" 400 76200
+ERROR 2025-12-17 22:38:07,222 exception Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+WARNING 2025-12-17 22:38:07,245 log Bad Request: /favicon.ico
+WARNING 2025-12-17 22:38:07,246 basehttp "GET /favicon.ico HTTP/1.1" 400 76129
+ERROR 2025-12-17 22:38:17,418 exception Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+WARNING 2025-12-17 22:38:17,473 log Bad Request: /admin
+WARNING 2025-12-17 22:38:17,473 basehttp "GET /admin HTTP/1.1" 400 76255
+ERROR 2025-12-17 22:38:17,744 exception Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'api.hasalioma.xyz'. You may need to add 'api.hasalioma.xyz' to ALLOWED_HOSTS.
+WARNING 2025-12-17 22:38:17,765 log Bad Request: /favicon.ico
+WARNING 2025-12-17 22:38:17,765 basehttp "GET /favicon.ico HTTP/1.1" 400 76134
+INFO 2025-12-17 22:38:30,715 autoreload Watching for file changes with StatReloader
+INFO 2025-12-17 22:38:34,529 basehttp "GET /admin HTTP/1.1" 301 0
+INFO 2025-12-17 22:38:34,709 basehttp "GET /admin/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:38:34,883 basehttp "GET /admin/login/?next=/admin/ HTTP/1.1" 200 4185
+INFO 2025-12-17 22:38:35,059 basehttp "GET /static/admin/js/theme.js HTTP/1.1" 200 1943
+INFO 2025-12-17 22:38:35,068 basehttp "GET /static/admin/css/base.css HTTP/1.1" 200 21310
+INFO 2025-12-17 22:38:35,073 basehttp "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 200 3063
+INFO 2025-12-17 22:38:35,094 basehttp "GET /static/admin/css/dark_mode.css HTTP/1.1" 200 2929
+INFO 2025-12-17 22:38:35,099 basehttp "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 200 2694
+INFO 2025-12-17 22:38:35,100 basehttp "GET /static/admin/css/login.css HTTP/1.1" 200 958
+INFO 2025-12-17 22:38:35,111 basehttp "GET /static/admin/css/responsive.css HTTP/1.1" 200 18559
+WARNING 2025-12-17 22:38:35,306 log Not Found: /favicon.ico
+WARNING 2025-12-17 22:38:35,306 basehttp "GET /favicon.ico HTTP/1.1" 404 2567
+INFO 2025-12-17 22:39:11,164 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+INFO 2025-12-17 22:39:13,306 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2401
+WARNING 2025-12-17 22:39:26,793 log Forbidden (Origin checking failed - https://api.hasalioma.xyz does not match any trusted origins.): /admin/login/
+WARNING 2025-12-17 22:39:26,794 basehttp "POST /admin/login/?next=/admin/ HTTP/1.1" 403 2573
+INFO 2025-12-17 22:40:18,879 basehttp "GET /admin/login/?next=/admin/ HTTP/1.1" 200 4185
+WARNING 2025-12-17 22:40:22,175 log Forbidden (Origin checking failed - https://api.hasalioma.xyz does not match any trusted origins.): /admin/login/
+WARNING 2025-12-17 22:40:22,176 basehttp "POST /admin/login/?next=/admin/ HTTP/1.1" 403 2573
+INFO 2025-12-17 22:40:32,323 autoreload Watching for file changes with StatReloader
+INFO 2025-12-17 22:40:36,411 basehttp "GET /admin/login/?next=/admin/ HTTP/1.1" 200 4185
+WARNING 2025-12-17 22:40:39,138 log Forbidden (Origin checking failed - https://api.hasalioma.xyz does not match any trusted origins.): /admin/login/
+WARNING 2025-12-17 22:40:39,139 basehttp "POST /admin/login/?next=/admin/ HTTP/1.1" 403 2573
+INFO 2025-12-17 22:42:35,152 autoreload /Users/hassan/Desktop/ISP/backend/isp_billing/settings.py changed, reloading.
+INFO 2025-12-17 22:42:35,664 autoreload Watching for file changes with StatReloader
+INFO 2025-12-17 22:43:03,166 basehttp "GET /admin/login/?next=/admin/ HTTP/1.1" 200 4185
+INFO 2025-12-17 22:43:05,871 basehttp "POST /admin/login/?next=/admin/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:43:06,223 basehttp "GET /admin/ HTTP/1.1" 200 16302
+INFO 2025-12-17 22:43:06,573 basehttp "GET /static/admin/css/dashboard.css HTTP/1.1" 200 441
+INFO 2025-12-17 22:43:06,942 basehttp "GET /static/admin/img/icon-changelink.svg HTTP/1.1" 200 380
+INFO 2025-12-17 22:43:06,953 basehttp "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 200 331
+INFO 2025-12-17 22:43:12,173 basehttp "GET /admin/billing/billingplan/ HTTP/1.1" 200 20645
+INFO 2025-12-17 22:43:12,528 basehttp "GET /static/admin/css/changelists.css HTTP/1.1" 200 6566
+INFO 2025-12-17 22:43:12,535 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:43:12,538 basehttp "GET /static/admin/js/actions.js HTTP/1.1" 200 7872
+INFO 2025-12-17 22:43:12,539 basehttp "GET /static/admin/js/prepopulate.js HTTP/1.1" 200 1531
+INFO 2025-12-17 22:43:12,542 basehttp "GET /static/admin/img/icon-yes.svg HTTP/1.1" 200 436
+INFO 2025-12-17 22:43:12,561 basehttp "GET /static/admin/js/vendor/xregexp/xregexp.js HTTP/1.1" 200 232381
+INFO 2025-12-17 22:43:12,900 basehttp "GET /static/admin/js/jquery.init.js HTTP/1.1" 200 347
+INFO 2025-12-17 22:43:12,901 basehttp "GET /static/admin/js/admin/RelatedObjectLookups.js HTTP/1.1" 200 8943
+INFO 2025-12-17 22:43:12,901 basehttp "GET /static/admin/js/core.js HTTP/1.1" 200 5682
+INFO 2025-12-17 22:43:12,903 basehttp "GET /static/admin/js/urlify.js HTTP/1.1" 200 7887
+INFO 2025-12-17 22:43:12,904 basehttp "GET /static/admin/js/vendor/jquery/jquery.js HTTP/1.1" 200 292458
+INFO 2025-12-17 22:43:12,912 basehttp "GET /static/admin/img/search.svg HTTP/1.1" 200 458
+INFO 2025-12-17 22:43:13,393 basehttp "GET /static/admin/js/filters.js HTTP/1.1" 200 978
+INFO 2025-12-17 22:43:13,798 basehttp "GET /static/admin/img/sorting-icons.svg HTTP/1.1" 200 1097
+INFO 2025-12-17 22:43:13,802 basehttp "GET /static/admin/img/tooltag-add.svg HTTP/1.1" 200 331
+INFO 2025-12-17 22:43:16,469 basehttp "GET /admin/billing/billingplan/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:43:17,435 basehttp "GET /admin/login/?next=/admin/billing/billingplan/ HTTP/1.1" 200 4225
+INFO 2025-12-17 22:43:18,048 basehttp "GET /static/admin/css/base.css HTTP/1.1" 200 21310
+INFO 2025-12-17 22:43:18,049 basehttp "GET /static/admin/css/dark_mode.css HTTP/1.1" 200 2929
+INFO 2025-12-17 22:43:18,500 basehttp "GET /static/admin/js/theme.js HTTP/1.1" 200 1943
+INFO 2025-12-17 22:43:18,500 basehttp "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 200 3063
+INFO 2025-12-17 22:43:18,500 basehttp "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 200 2694
+INFO 2025-12-17 22:43:18,502 basehttp "GET /static/admin/css/login.css HTTP/1.1" 200 958
+INFO 2025-12-17 22:43:18,503 basehttp "GET /static/admin/css/responsive.css HTTP/1.1" 200 18559
+WARNING 2025-12-17 22:43:19,269 log Not Found: /favicon.ico
+WARNING 2025-12-17 22:43:19,270 basehttp "GET /favicon.ico HTTP/1.1" 404 2567
+INFO 2025-12-17 22:43:20,965 basehttp "GET /admin/billing/billingplan/5/change/ HTTP/1.1" 200 22601
+INFO 2025-12-17 22:43:21,313 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:43:21,314 basehttp "GET /static/admin/css/forms.css HTTP/1.1" 200 9090
+INFO 2025-12-17 22:43:21,314 basehttp "GET /static/admin/js/prepopulate_init.js HTTP/1.1" 200 586
+INFO 2025-12-17 22:43:21,626 basehttp "GET /static/admin/js/change_form.js HTTP/1.1" 200 606
+INFO 2025-12-17 22:43:21,627 basehttp "GET /static/admin/css/widgets.css HTTP/1.1" 200 11921
+INFO 2025-12-17 22:43:29,150 basehttp "POST /admin/billing/billingplan/5/change/ HTTP/1.1" 302 0
+INFO 2025-12-17 22:43:29,485 basehttp "GET /admin/billing/billingplan/ HTTP/1.1" 200 20881
+INFO 2025-12-17 22:43:29,828 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 22:43:36,089 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2399
+INFO 2025-12-17 22:43:40,979 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2399
+INFO 2025-12-17 22:43:51,177 mpesa_service Generated new M-Pesa access token
+INFO 2025-12-17 22:43:51,179 mpesa_service Initiating STK Push for 254726686337, amount: 1.00
+ERROR 2025-12-17 22:43:51,776 mpesa_service STK Push request failed: 500 Server Error: Internal Server Error for url: https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest
+ERROR 2025-12-17 22:43:51,777 mpesa_service Error response: {'requestId': '7be6-4e78-a16a-cef6b1cd285219852', 'errorCode': '500.001.1001', 'errorMessage': 'Wrong credentials'}
+WARNING 2025-12-17 22:43:51,811 log Bad Request: /api/payments/initiate/
+WARNING 2025-12-17 22:43:51,812 basehttp "POST /api/payments/initiate/ HTTP/1.1" 400 45
+INFO 2025-12-17 22:51:39,695 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2399
+INFO 2025-12-17 23:00:00,027 tasks Checking for expired subscriptions...
+INFO 2025-12-17 23:00:00,036 tasks Cleaning up pending payments...
+INFO 2025-12-17 23:00:00,043 tasks Suspended 0 expired subscriptions
+INFO 2025-12-17 23:00:00,060 tasks Marked 0 payments as timed out
+INFO 2025-12-17 23:00:47,838 basehttp "GET /admin/ HTTP/1.1" 200 16627
+INFO 2025-12-17 23:00:52,236 basehttp "GET /admin/billing/transaction/ HTTP/1.1" 200 16145
+INFO 2025-12-17 23:00:52,559 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 23:00:55,023 basehttp "GET /admin/billing/usagerecord/ HTTP/1.1" 200 15236
+INFO 2025-12-17 23:00:55,344 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 23:00:58,103 basehttp "GET /admin/customers/customer/ HTTP/1.1" 200 19751
+INFO 2025-12-17 23:00:58,418 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 23:00:58,783 basehttp "GET /static/admin/img/icon-no.svg HTTP/1.1" 200 560
+INFO 2025-12-17 23:01:01,099 basehttp "GET /admin/network/activesession/ HTTP/1.1" 200 15573
+INFO 2025-12-17 23:01:01,402 basehttp "GET /admin/jsi18n/ HTTP/1.1" 200 3343
+INFO 2025-12-17 23:03:49,829 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2399
+INFO 2025-12-17 23:03:53,340 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2399
+INFO 2025-12-17 23:08:57,751 basehttp "GET /admin/network/activesession/ HTTP/1.1" 200 15573
+INFO 2025-12-17 23:09:02,159 basehttp "GET /admin/ HTTP/1.1" 200 25978
+INFO 2025-12-17 23:09:02,289 basehttp "GET /static/admin/css/dark_mode.css HTTP/1.1" 200 2929
+INFO 2025-12-17 23:09:02,289 basehttp "GET /static/admin/js/theme.js HTTP/1.1" 200 1943
+INFO 2025-12-17 23:09:02,289 basehttp "GET /static/admin/css/base.css HTTP/1.1" 200 21310
+INFO 2025-12-17 23:09:02,297 basehttp "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 200 2694
+INFO 2025-12-17 23:09:02,299 basehttp "GET /static/admin/css/dashboard.css HTTP/1.1" 200 441
+INFO 2025-12-17 23:09:02,300 basehttp "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 200 3063
+INFO 2025-12-17 23:09:02,300 basehttp "GET /static/debug_toolbar/css/toolbar.css HTTP/1.1" 200 12621
+INFO 2025-12-17 23:09:02,300 basehttp "GET /static/debug_toolbar/js/toolbar.js HTTP/1.1" 200 13404
+INFO 2025-12-17 23:09:02,301 basehttp "GET /static/admin/css/responsive.css HTTP/1.1" 200 18559
+INFO 2025-12-17 23:09:02,302 basehttp "GET /static/debug_toolbar/css/print.css HTTP/1.1" 200 43
+INFO 2025-12-17 23:09:02,303 basehttp "GET /static/debug_toolbar/js/utils.js HTTP/1.1" 200 4527
+INFO 2025-12-17 23:09:02,313 basehttp "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 200 331
+INFO 2025-12-17 23:09:02,313 basehttp "GET /static/admin/img/icon-changelink.svg HTTP/1.1" 200 380
+INFO 2025-12-17 23:09:25,533 basehttp "OPTIONS /api/billing/plans/ HTTP/1.1" 200 0
+INFO 2025-12-17 23:09:25,551 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2399
+INFO 2025-12-17 23:10:05,885 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2399
+INFO 2025-12-17 23:10:20,923 basehttp "OPTIONS /api/payments/initiate/ HTTP/1.1" 200 0
+DEBUG 2025-12-17 23:10:20,932 mpesa_service Using cached M-Pesa access token
+INFO 2025-12-17 23:10:20,932 mpesa_service Initiating STK Push for 254726686337, amount: 1.00
+ERROR 2025-12-17 23:10:21,771 mpesa_service STK Push request failed: 500 Server Error: Internal Server Error for url: https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest
+ERROR 2025-12-17 23:10:21,774 mpesa_service Error response: {'requestId': '434e-4d64-b394-7ce11ea2216d13107', 'errorCode': '500.001.1001', 'errorMessage': 'Wrong credentials'}
+WARNING 2025-12-17 23:10:21,804 log Bad Request: /api/payments/initiate/
+WARNING 2025-12-17 23:10:21,804 basehttp "POST /api/payments/initiate/ HTTP/1.1" 400 45
+INFO 2025-12-17 23:12:20,482 autoreload Watching for file changes with StatReloader
+INFO 2025-12-17 23:13:47,417 basehttp "GET /api/billing/plans/ HTTP/1.1" 200 2399
+INFO 2025-12-17 23:15:58,097 autoreload /Users/hassan/Desktop/ISP/backend/isp_billing/settings.py changed, reloading.
+INFO 2025-12-17 23:19:28,210 autoreload Watching for file changes with StatReloader
+ERROR 2025-12-17 23:19:35,508 exception Invalid HTTP_HOST header: '0.0.0.0:8000'. You may need to add '0.0.0.0' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '0.0.0.0:8000'. You may need to add '0.0.0.0' to ALLOWED_HOSTS.
+WARNING 2025-12-17 23:19:35,571 log Bad Request: /
+WARNING 2025-12-17 23:19:35,571 basehttp "GET / HTTP/1.1" 400 80911
+INFO 2025-12-17 23:19:35,582 basehttp "GET /static/debug_toolbar/css/toolbar.css HTTP/1.1" 200 12621
+INFO 2025-12-17 23:19:35,582 basehttp "GET /static/debug_toolbar/js/toolbar.js HTTP/1.1" 200 13404
+INFO 2025-12-17 23:19:35,583 basehttp "GET /static/debug_toolbar/css/print.css HTTP/1.1" 200 43
+INFO 2025-12-17 23:19:35,585 basehttp "GET /static/debug_toolbar/js/utils.js HTTP/1.1" 200 4527
+ERROR 2025-12-17 23:19:35,617 exception Invalid HTTP_HOST header: '0.0.0.0:8000'. You may need to add '0.0.0.0' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/Users/hassan/Desktop/ISP/backend/venv/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '0.0.0.0:8000'. You may need to add '0.0.0.0' to ALLOWED_HOSTS.
+WARNING 2025-12-17 23:19:35,644 log Bad Request: /favicon.ico
+WARNING 2025-12-17 23:19:35,645 basehttp "GET /favicon.ico HTTP/1.1" 400 80973
+WARNING 2025-12-17 23:19:53,514 log Not Found: /
+WARNING 2025-12-17 23:19:53,515 basehttp "GET / HTTP/1.1" 404 2516
+WARNING 2025-12-17 23:19:54,733 log Not Found: /favicon.ico
+WARNING 2025-12-17 23:19:54,734 basehttp "GET /favicon.ico HTTP/1.1" 404 2567
+INFO 2025-12-17 23:19:58,185 basehttp "GET /admin HTTP/1.1" 301 0
+INFO 2025-12-17 23:19:58,512 basehttp "GET /admin/ HTTP/1.1" 302 0
+INFO 2025-12-17 23:19:58,819 basehttp "GET /admin/login/?next=/admin/ HTTP/1.1" 200 4185
+INFO 2025-12-17 23:19:59,125 basehttp "GET /static/admin/css/base.css HTTP/1.1" 200 21310
+INFO 2025-12-17 23:19:59,127 basehttp "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 200 3063
+INFO 2025-12-17 23:19:59,139 basehttp "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 200 2694
+INFO 2025-12-17 23:19:59,488 basehttp "GET /static/admin/css/login.css HTTP/1.1" 200 958
+INFO 2025-12-17 23:19:59,488 basehttp "GET /static/admin/js/theme.js HTTP/1.1" 200 1943
+INFO 2025-12-17 23:19:59,488 basehttp "GET /static/admin/css/dark_mode.css HTTP/1.1" 200 2929
+INFO 2025-12-17 23:19:59,500 basehttp "GET /static/admin/css/responsive.css HTTP/1.1" 200 18559
+INFO 2025-12-17 23:20:04,030 basehttp "POST /admin/login/?next=/admin/ HTTP/1.1" 302 0
+INFO 2025-12-17 23:20:04,361 basehttp "GET /admin/ HTTP/1.1" 200 16627
+INFO 2025-12-17 23:20:04,679 basehttp "GET /static/admin/css/dashboard.css HTTP/1.1" 200 441
+INFO 2025-12-17 23:20:04,974 basehttp "GET /static/admin/img/icon-changelink.svg HTTP/1.1" 200 380
+INFO 2025-12-17 23:20:04,976 basehttp "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 200 331
+INFO 2025-12-17 23:22:25,867 autoreload /Users/hassan/Desktop/ISP/backend/isp_billing/settings.py changed, reloading.
+INFO 2025-12-17 23:22:26,383 autoreload Watching for file changes with StatReloader
+INFO 2025-12-17 23:30:00,059 tasks Cleaning up pending payments...
+INFO 2025-12-17 23:30:00,069 tasks Marked 0 payments as timed out
+INFO 2025-12-18 00:00:00,059 tasks Checking for expired subscriptions...
+INFO 2025-12-18 00:00:00,059 tasks Cleaning up pending payments...
+INFO 2025-12-18 00:00:00,069 tasks Suspended 0 expired subscriptions
+INFO 2025-12-18 00:00:00,076 tasks Marked 0 payments as timed out
+INFO 2025-12-18 00:40:45,510 tasks Cleaning up pending payments...
+INFO 2025-12-18 00:40:45,512 tasks Marked 0 payments as timed out
+INFO 2025-12-18 01:13:10,989 tasks Checking for expired subscriptions...
+INFO 2025-12-18 01:13:10,992 tasks Suspended 0 expired subscriptions
+INFO 2025-12-18 01:13:10,992 tasks Cleaning up pending payments...
+INFO 2025-12-18 01:13:10,995 tasks Marked 0 payments as timed out
+INFO 2025-12-18 01:30:00,019 tasks Cleaning up pending payments...
+INFO 2025-12-18 01:30:00,022 tasks Marked 0 payments as timed out
+INFO 2025-12-18 09:58:47,141 autoreload Watching for file changes with StatReloader
+INFO 2025-12-18 09:58:48,474 autoreload /Users/hassan/Desktop/ISP/backend/isp_billing/settings.py changed, reloading.
+INFO 2025-12-18 09:58:48,819 autoreload Watching for file changes with StatReloader
