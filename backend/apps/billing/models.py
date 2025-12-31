@@ -226,3 +226,79 @@ class UsageRecord(models.Model):
     @property
     def total_gb(self):
         return round(self.total_bytes / (1024 ** 3), 2)
+
+
+class VoucherBatch(models.Model):
+    """
+    Groups of generated vouchers
+    """
+    created_at = models.DateTimeField(auto_now_add=True)
+    quantity = models.IntegerField()
+    value = models.DecimalField(max_digits=10, decimal_places=2)
+    generated_by = models.ForeignKey(
+        Customer,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='generated_batches'
+    )
+    note = models.CharField(max_length=255, blank=True)
+    
+    class Meta:
+        db_table = 'voucher_batches'
+        ordering = ['-created_at']
+        verbose_name = _('Voucher Batch')
+        verbose_name_plural = _('Voucher Batches')
+    
+    def __str__(self):
+        return f"Batch #{self.id} - {self.quantity} x {self.value}"
+
+
+class Voucher(models.Model):
+    """
+    Prepaid vouchers for account top-up
+    """
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('used', 'Used'),
+        ('expired', 'Expired'),
+    ]
+    
+    batch = models.ForeignKey(
+        VoucherBatch,
+        on_delete=models.CASCADE,
+        related_name='vouchers'
+    )
+    code = models.CharField(max_length=20, unique=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    status = models.CharField(
+        max_length=10, 
+        choices=STATUS_CHOICES, 
+        default='active'
+    )
+    
+    # Redemption Details
+    used_by = models.ForeignKey(
+        Customer,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='used_vouchers'
+    )
+    used_at = models.DateTimeField(null=True, blank=True)
+    
+    expiry_date = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'vouchers'
+        ordering = ['-created_at']
+        verbose_name = _('Voucher')
+        verbose_name_plural = _('Vouchers')
+        indexes = [
+            models.Index(fields=['code']),
+            models.Index(fields=['status']),
+        ]
+    
+    def __str__(self):
+        return f"{self.code} - {self.amount}"

@@ -16,15 +16,23 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-key-change-in-pro
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = [h.strip() for h in config('ALLOWED_HOSTS', default='localhost,127.0.0.1,192.168.1.151,isp.hasalioma.online').split(',')]
+ALLOWED_HOSTS = [h.strip() for h in config('ALLOWED_HOSTS', default='localhost,127.0.0.1,192.168.1.151,isp.hasalioma.online,192.168.88.13').split(',')]
 if 'isp.hasalioma.online' not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append('isp.hasalioma.online')
+if '192.168.88.13' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('192.168.88.13')
 print(f"DEBUG: ALLOWED_HOSTS={ALLOWED_HOSTS}")
 
 # Security settings for HTTP deployment
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+# Security settings (Enable only in production)
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+else:
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 
@@ -173,7 +181,7 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
     default='http://localhost:5173,http://127.0.0.1:5173'
-).split(',') + ['http://192.168.1.151', 'https://isp.hasalioma.online']
+).split(',') + ['http://192.168.1.151', 'http://192.168.88.11', 'https://isp.hasalioma.online', 'http://192.168.88.13', 'http://192.168.88.13:5173']
 
 CORS_ALLOW_CREDENTIALS = True
 

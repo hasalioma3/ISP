@@ -20,11 +20,20 @@ class RouterAdmin(admin.ModelAdmin):
                 else:
                     success_count = len(result.get('success', []))
                     failed_count = len(result.get('failed', []))
-                    self.message_user(
-                        request, 
-                        f"Synced {router.name}: {success_count} success, {failed_count} failed.",
-                        messages.SUCCESS
-                    )
+                    if failed_count > 0:
+                        # Show first few errors to help debug
+                        errors = "; ".join(result['failed'][:2])
+                        self.message_user(
+                            request, 
+                            f"Synced {router.name}: {success_count} success, {failed_count} failed. Errors: {errors}",
+                            messages.WARNING
+                        )
+                    else:
+                        self.message_user(
+                            request, 
+                            f"Synced {router.name}: {success_count} success.",
+                            messages.SUCCESS
+                        )
             except Exception as e:
                 self.message_user(request, f"Critical error syncing {router.name}: {str(e)}", messages.ERROR)
 
@@ -38,11 +47,19 @@ class RouterAdmin(admin.ModelAdmin):
                 else:
                     success_count = len(result.get('success', []))
                     failed_count = len(result.get('failed', []))
-                    self.message_user(
-                        request, 
-                        f"Synced {router.name}: {success_count} success, {failed_count} failed.",
-                        messages.SUCCESS
-                    )
+                    if failed_count > 0:
+                        errors = "; ".join(result['failed'][:2])
+                        self.message_user(
+                            request, 
+                            f"Synced {router.name}: {success_count} success, {failed_count} failed. Errors: {errors}",
+                            messages.WARNING
+                        )
+                    else:
+                        self.message_user(
+                            request, 
+                            f"Synced {router.name}: {success_count} success.",
+                            messages.SUCCESS
+                        )
             except Exception as e:
                 self.message_user(request, f"Critical error syncing {router.name}: {str(e)}", messages.ERROR)
 

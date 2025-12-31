@@ -1,6 +1,6 @@
 from django.urls import path
-from apps.network.views import SyncMikroTikView
+from apps.network.api.views import HotspotStatusView
 
 urlpatterns = [
-    # No manual sync endpoint needed as it moved to Django Admin
+    path('hotspot/status/', HotspotStatusView.as_view(), name='hotspot-status'),
 ]

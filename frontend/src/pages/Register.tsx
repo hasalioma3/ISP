@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
@@ -19,6 +19,15 @@ export default function Register() {
         service_type: 'pppoe',
     });
     const [loading, setLoading] = useState(false);
+
+    // Capture MAC from URL if present (from Captive Portal)
+    const [searchParams] = useSearchParams();
+    useEffect(() => {
+        const mac = searchParams.get('mac');
+        if (mac) {
+            localStorage.setItem('hotspot_mac', mac);
+        }
+    }, [searchParams]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

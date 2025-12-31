@@ -5,6 +5,7 @@ services:
     build: ./backend
     command: gunicorn isp_billing.wsgi:application --bind 0.0.0.0:8000
     volumes:
+      - ./backend:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/mediafiles
     env_file:
@@ -13,11 +14,17 @@ services:
       - db
       - redis
     restart: always
+    ports:
+      - "8000:8000"
+    networks:
+      - isp_network
 
   frontend:
     build:
       context: .
       dockerfile: ./frontend/Dockerfile
+      args:
+        VITE_API_URL: /api
     ports:
       - "80:80"
       - "443:443"
@@ -28,6 +35,8 @@ services:
     depends_on:
       - backend
     restart: always
+    networks:
+      - isp_network
 
   db:
     image: postgres:15-alpine
@@ -36,15 +45,20 @@ services:
     env_file:
       - .env.prod
     restart: always
+    networks:
+      - isp_network
 
   redis:
     image: redis:alpine
     restart: always
+    networks:
+      - isp_network
 
   celery_worker:
     build: ./backend
     command: celery -A isp_billing worker -l info
     volumes:
+      - ./backend:/app
       - media_volume:/app/mediafiles
     env_file:
       - .env.prod
@@ -52,6 +66,8 @@ services:
       - backend
       - redis
     restart: always
+    networks:
+      - isp_network
 
   celery_beat:
     build: ./backend
@@ -62,6 +78,12 @@ services:
       - backend
       - redis
     restart: always
+    networks:
+      - isp_network
+
+networks:
+  isp_network:
+    driver: bridge
 
 volumes:
   postgres_data:

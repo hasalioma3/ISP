@@ -13,6 +13,7 @@ class PaymentRequestSerializer(serializers.ModelSerializer):
 class InitiatePaymentSerializer(serializers.Serializer):
     plan_id = serializers.IntegerField()
     phone_number = serializers.CharField(max_length=15)
+    mac_address = serializers.CharField(required=False, allow_blank=True, max_length=17)
     
     def validate_phone_number(self, value):
         # Basic phone number validation

@@ -17,7 +17,7 @@ class CustomerAdmin(UserAdmin):
             'fields': ('pppoe_username', 'pppoe_password')
         }),
         ('Hotspot Credentials', {
-            'fields': ('hotspot_username', 'hotspot_password')
+            'fields': ('hotspot_username', 'hotspot_password', 'hotspot_mac_address')
         }),
         ('Account Information', {
             'fields': ('account_balance', 'is_verified', 'notes')

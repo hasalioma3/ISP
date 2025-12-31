@@ -9,6 +9,29 @@ from django.conf import settings
 
 logger = logging.getLogger('mikrotik')
 
+# --- MONKEY PATCH FOR ROUTEROS v7 ---
+# Checks for !empty response and converts to !re to prevent library crash
+import routeros_api.sentence
+
+# Save original functionality
+_original_parse = routeros_api.sentence.ResponseSentence.parse
+
+def patched_parse(cls, serialized):
+    if isinstance(serialized, list):
+        new_serialized = []
+        for item in serialized:
+            if item == b'!empty':
+                new_serialized.append(b'!re')
+            else:
+                new_serialized.append(item)
+        serialized = new_serialized
+        
+    return _original_parse(serialized)
+
+# Apply patch
+routeros_api.sentence.ResponseSentence.parse = classmethod(patched_parse)
+# --- END MONKEY PATCH ---
+
 class MikroTikService:
     """
     MikroTik RouterOS API integration
@@ -120,6 +143,11 @@ class MikroTikService:
             if not users:
                 connection.disconnect()
                 return {'success': False, 'error': 'User not found'}
+            
+            # Handle potential param mapping
+            if 'mac_address' in kwargs:
+                kwargs['mac-address'] = kwargs.pop('mac_address')
+                
             hotspot_user.set(id=users[0]['id'], **kwargs)
             connection.disconnect()
             return {'success': True}
@@ -164,13 +192,14 @@ class MikroTikService:
             connection = self._get_connection()
             api = connection.get_api()
             ppp_profile = api.get_resource('/ppp/profile')
-            profiles = ppp_profile.get(name=name)
-            if not profiles:
+            profiles = ppp_profile.get()
+            profile = next((p for p in profiles if p.get('name') == name), None)
+            if not profile:
                 connection.disconnect()
                 return {'success': False, 'error': 'Profile not found'}
             params = {}
             if rate_limit: params['rate-limit'] = rate_limit
-            if params: ppp_profile.set(id=profiles[0]['id'], **params)
+            if params: ppp_profile.set(id=profile['id'], **params)
             connection.disconnect()
             return {'success': True}
         except Exception as e:
@@ -194,13 +223,14 @@ class MikroTikService:
             connection = self._get_connection()
             api = connection.get_api()
             hotspot_profile = api.get_resource('/ip/hotspot/user/profile')
-            profiles = hotspot_profile.get(name=name)
-            if not profiles:
+            profiles = hotspot_profile.get()
+            profile = next((p for p in profiles if p.get('name') == name), None)
+            if not profile:
                 connection.disconnect()
                 return {'success': False, 'error': 'Profile not found'}
             params = {}
             if rate_limit: params['rate-limit'] = rate_limit
-            if params: hotspot_profile.set(id=profiles[0]['id'], **params)
+            if params: hotspot_profile.set(id=profile['id'], **params)
             connection.disconnect()
             return {'success': True}
         except Exception as e:
@@ -227,6 +257,67 @@ class MikroTikService:
             entries = address_list.get(list=list_name, address=address)
             for entry in entries:
                 address_list.remove(id=entry['id'])
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    # Walled Garden Management
+
+    def add_walled_garden_ip(self, dst_address, comment='', action='accept'):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            walled_garden = api.get_resource('/ip/hotspot/walled-garden/ip')
+            # Check if exists
+            params = {'dst-address': dst_address, 'action': action}
+            existing = walled_garden.get(**params)
+            if not existing:
+                params['comment'] = comment
+                walled_garden.add(**params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def remove_walled_garden_ip(self, dst_address):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            walled_garden = api.get_resource('/ip/hotspot/walled-garden/ip')
+            entries = walled_garden.get(**{'dst-address': dst_address})
+            for entry in entries:
+                walled_garden.remove(id=entry['id'])
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_walled_garden_host(self, dst_host, comment=''):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            walled_garden = api.get_resource('/ip/hotspot/walled-garden')
+            params = {'dst-host': dst_host}
+            existing = walled_garden.get(**params)
+            if not existing:
+                params['comment'] = comment
+                walled_garden.add(**params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_dns_static(self, name, address, comment=''):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            dns_static = api.get_resource('/ip/dns/static')
+            params = {'name': name, 'address': address}
+            existing = dns_static.get(**params)
+            if not existing:
+                params['comment'] = comment
+                dns_static.add(**params)
             connection.disconnect()
             return {'success': True}
         except Exception as e:

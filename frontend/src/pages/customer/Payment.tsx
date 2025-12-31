@@ -65,9 +65,12 @@ export default function Payment() {
         setLoading(true);
 
         try {
+            const macAddress = localStorage.getItem('hotspot_mac');
+
             const response = await paymentAPI.initiatePayment({
                 plan_id: parseInt(selectedPlanId),
                 phone_number: phoneNumber,
+                mac_address: macAddress || undefined
             });
 
             if (response.data.success) {

@@ -119,6 +119,7 @@ MIKROTIK_PASSWORD=your_password
 MIKROTIK_PORT=8728
 ```
 
+
 ## 📊 System Flow
 
 ### Payment → Network Activation Flow
@@ -239,3 +240,14 @@ This project is proprietary software for ISP network management.
 ✅ **Network Automation**: MikroTik API integration  
 ✅ **Scalable**: Handles high-volume payment processing  
 ✅ **Secure**: JWT auth, payment validation, audit logging
+
+## 🔧 Troubleshooting
+
+### Hotspot Redirect Not Working
+If users are not redirected to the external portal (e.g. running on your laptop `192.168.88.13`), you must whitelist your laptop in the MikroTik Walled Garden so unauthenticated users can reach it.
+
+1. Run the helper script:
+```bash
+./backend/venv/bin/python add_walled_garden.py
+```
+2. Verify in MikroTik WinBox: IP -> Hotspot -> Walled Garden -> IP List.

@@ -21,7 +21,7 @@ class Customer(AbstractUser):
     ]
     
     # Personal Information
-    phone_number = models.CharField(max_length=15, unique=True)
+    phone_number = models.CharField(max_length=15, unique=False, db_index=True)
     id_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True)
     
@@ -44,6 +44,7 @@ class Customer(AbstractUser):
     # Hotspot Credentials
     hotspot_username = models.CharField(max_length=100, unique=True, blank=True, null=True)
     hotspot_password = models.CharField(max_length=100, blank=True, null=True)
+    hotspot_mac_address = models.CharField(max_length=17, blank=True, null=True)
     
     # Account Information
     account_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)

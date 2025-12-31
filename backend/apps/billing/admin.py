@@ -31,3 +31,21 @@ class UsageRecordAdmin(admin.ModelAdmin):
     list_filter = ['start_time']
     search_fields = ['customer__username', 'session_id']
     raw_id_fields = ['customer', 'subscription']
+
+
+from .models import Voucher, VoucherBatch
+
+
+@admin.register(VoucherBatch)
+class VoucherBatchAdmin(admin.ModelAdmin):
+    list_display = ['id', 'quantity', 'value', 'generated_by', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['note']
+
+
+@admin.register(Voucher)
+class VoucherAdmin(admin.ModelAdmin):
+    list_display = ['code', 'amount', 'status', 'batch', 'used_by', 'used_at', 'expiry_date']
+    list_filter = ['status', 'created_at', 'amount']
+    search_fields = ['code', 'batch__id']
+    raw_id_fields = ['batch', 'used_by']

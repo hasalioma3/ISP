@@ -65,18 +65,31 @@ class NetworkAutomation:
                 'username': customer.hotspot_username or customer.username,
                 'password': customer.hotspot_password or customer.username,
                 'profile': plan.mikrotik_profile,
+                'mac_address': customer.hotspot_mac_address,
                 'status': 'enabled'
             }
         )
         if created:
             mikrotik.add_hotspot_user(
-                username=hotspot_user.username, password=hotspot_user.password, profile=plan.mikrotik_profile
+                username=hotspot_user.username, 
+                password=hotspot_user.password, 
+                profile=plan.mikrotik_profile,
+                mac_address=hotspot_user.mac_address
             )
         else:
             hotspot_user.profile = plan.mikrotik_profile
             hotspot_user.status = 'enabled'
+            # Sync MAC if available and different
+            if customer.hotspot_mac_address:
+                hotspot_user.mac_address = customer.hotspot_mac_address
+            
             hotspot_user.save()
-            mikrotik.update_hotspot_user(username=hotspot_user.username, profile=plan.mikrotik_profile, disabled='no')
+            mikrotik.update_hotspot_user(
+                username=hotspot_user.username, 
+                profile=plan.mikrotik_profile, 
+                disabled='no',
+                mac_address=hotspot_user.mac_address
+            )
             mikrotik.disconnect_hotspot_session(hotspot_user.username)
         hotspot_user.synced_to_router = True
         hotspot_user.save()

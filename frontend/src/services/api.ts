@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+// Use relative path by default to leverage Nginx proxy
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Create axios instance
 const api = axios.create({
@@ -54,11 +55,20 @@ export const billingAPI = {
 
 // Payment API
 export const paymentAPI = {
-    initiatePayment: (data: { plan_id: number; phone_number: string }) =>
+    initiatePayment: (data: { plan_id: number; phone_number: string; mac_address?: string }) =>
         api.post('/payments/initiate/', data),
     getPaymentStatus: (paymentRequestId: number) =>
         api.get(`/payments/status/${paymentRequestId}/`),
     getPaymentRequests: () => api.get('/payments/requests/'),
+};
+
+// Voucher API
+export const voucherAPI = {
+    getBatches: () => api.get('/billing/batches/'),
+    generate: (data: { quantity: number; value: number; note?: string }) =>
+        api.post('/billing/vouchers/generate/', data),
+    redeem: (code: string) =>
+        api.post('/billing/vouchers/redeem/', { code }),
 };
 
 export default api;

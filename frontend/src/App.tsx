@@ -10,6 +10,8 @@ import CustomerDashboard from './pages/customer/Dashboard';
 import Plans from './pages/customer/Plans';
 import Payment from './pages/customer/Payment';
 import Usage from './pages/customer/Usage';
+import CaptivePortal from './pages/portal/CaptivePortal';
+import VoucherManager from './pages/admin/VoucherManager';
 // MikroTikSync page moved to Django Admin
 
 const queryClient = new QueryClient();
@@ -25,6 +27,7 @@ function App() {
       <BrowserRouter>
         <Toaster position="top-right" />
         <Routes>
+          <Route path="/portal" element={<CaptivePortal />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
@@ -48,6 +51,14 @@ function App() {
           />
 
           {/* Admin Routes - Migrated to Django Admin */}
+          <Route
+            path="/admin/vouchers"
+            element={
+              <PrivateRoute>
+                <VoucherManager />
+              </PrivateRoute>
+            }
+          />
 
           <Route path="/" element={<Navigate to="/dashboard" />} />
         </Routes>
