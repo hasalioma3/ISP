@@ -15,4 +15,5 @@ urlpatterns = [
     path('', include(router.urls)),
     path('vouchers/generate/', views.VoucherGenerationView.as_view(), name='voucher-generate'),
     path('vouchers/redeem/', views.VoucherRedeemView.as_view(), name='voucher-redeem'),
+    path('manual-subscribe/', views.ManualSubscriptionView.as_view(), name='manual-subscribe'),
 ]

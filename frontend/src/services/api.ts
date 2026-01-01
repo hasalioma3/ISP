@@ -71,4 +71,32 @@ export const voucherAPI = {
         api.post('/billing/vouchers/redeem/', { code }),
 };
 
+// Analytics API
+export const analyticsAPI = {
+    getDashboardStats: () => api.get('/analytics/dashboard/'),
+    getIncomeReport: (params?: any) => api.get('/analytics/income/', { params }),
+    getUsageReport: () => api.get('/analytics/usage/'),
+};
+
+// Admin Management API
+export const adminAPI = {
+    // Subscribers
+    getSubscribers: (search?: string) => api.get('/customers/subscribers/', { params: { search } }),
+
+    // Staff
+    getStaff: () => api.get('/customers/staff/'),
+    createStaff: (data: any) => api.post('/customers/staff/', data),
+    updateStaff: (id: number, data: any) => api.put(`/customers/staff/${id}/`, data),
+    deleteStaff: (id: number) => api.delete(`/customers/staff/${id}/`),
+
+    // Routers
+    getRouters: () => api.get('/network/routers/'),
+    createRouter: (data: any) => api.post('/network/routers/', data),
+    updateRouter: (id: number, data: any) => api.put(`/network/routers/${id}/`, data),
+    deleteRouter: (id: number) => api.delete(`/network/routers/${id}/`),
+
+    // Manual Actions
+    manualSubscribe: (data: any) => api.post('/billing/manual-subscribe/', data),
+};
+
 export default api;

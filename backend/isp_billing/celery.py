@@ -19,8 +19,8 @@ app.autodiscover_tasks()
 # Celery Beat Schedule
 app.conf.beat_schedule = {
     'check-expired-subscriptions': {
-        'task': 'apps.billing.tasks.check_expired_subscriptions',
-        'schedule': crontab(minute='0'),  # Run every hour
+        'task': 'apps.network.tasks.check_expired_subscriptions',
+        'schedule': crontab(minute='*'),  # Run every minute
     },
     'cleanup-pending-payments': {
         'task': 'apps.payments.tasks.cleanup_pending_payments',

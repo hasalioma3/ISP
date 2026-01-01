@@ -70,7 +70,7 @@ export default function Plans() {
                                 <div className="mb-6">
                                     <div className="flex items-baseline gap-2 mb-2">
                                         <span className="text-4xl font-bold text-gray-900">KES {plan.price}</span>
-                                        <span className="text-gray-600">/ {plan.duration_days} days</span>
+                                        <span className="text-gray-600">/ {plan.duration_value} {plan.duration_unit}</span>
                                     </div>
                                 </div>
 

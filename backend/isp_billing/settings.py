@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'apps.billing',
     'apps.payments',
     'apps.network',
+    'apps.analytics',
 ]
 
 if DEBUG:

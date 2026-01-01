@@ -5,4 +5,14 @@ from apps.network.services.network_automation import network_automation
 
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-# SyncMikroTikView removed - migrated to Django Admin Router actions
+from rest_framework import viewsets
+from apps.network.models import Router
+from apps.network.serializers.router import RouterSerializer
+
+class RouterViewSet(viewsets.ModelViewSet):
+    """
+    Manage routers
+    """
+    queryset = Router.objects.all()
+    serializer_class = RouterSerializer
+    permission_classes = [IsAdminUser]

@@ -81,3 +81,27 @@ def update_profile(request):
         return Response(serializer.data)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+from rest_framework import filters
+from rest_framework.permissions import IsAdminUser
+from apps.customers.serializers import StaffSerializer
+
+class StaffViewSet(viewsets.ModelViewSet):
+    """
+    Manage staff members
+    """
+    queryset = Customer.objects.filter(is_staff=True)
+    serializer_class = StaffSerializer
+    permission_classes = [IsAdminUser]
+
+
+class SubscriberViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    View all subscribers (Admin only)
+    """
+    queryset = Customer.objects.all()
+    serializer_class = CustomerSerializer
+    permission_classes = [IsAdminUser]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['username', 'phone_number', 'first_name', 'last_name', 'pppoe_username']

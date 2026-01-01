@@ -11,14 +11,28 @@ import Plans from './pages/customer/Plans';
 import Payment from './pages/customer/Payment';
 import Usage from './pages/customer/Usage';
 import CaptivePortal from './pages/portal/CaptivePortal';
+import AdminLayout from './components/AdminLayout';
+import AdminDashboard from './pages/admin/Dashboard';
+import Subscribers from './pages/admin/Subscribers';
+import Reports from './pages/admin/Reports';
+import Settings from './pages/admin/Settings';
 import VoucherManager from './pages/admin/VoucherManager';
-// MikroTikSync page moved to Django Admin
 
 const queryClient = new QueryClient();
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  if (!isAuthenticated) return <Navigate to="/login" />;
+  if (!user?.is_staff && !user?.is_superuser) return <Navigate to="/dashboard" />;
+
+  return <>{children}</>;
 }
 
 function App() {
@@ -50,15 +64,22 @@ function App() {
             }
           />
 
-          {/* Admin Routes - Migrated to Django Admin */}
+          {/* Admin Routes */}
           <Route
-            path="/admin/vouchers"
+            path="/admin"
             element={
-              <PrivateRoute>
-                <VoucherManager />
-              </PrivateRoute>
+              <AdminRoute>
+                <AdminLayout />
+              </AdminRoute>
             }
-          />
+          >
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="subscribers" element={<Subscribers />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="vouchers" element={<VoucherManager />} />
+            <Route index element={<Navigate to="dashboard" />} />
+          </Route>
 
           <Route path="/" element={<Navigate to="/dashboard" />} />
         </Routes>

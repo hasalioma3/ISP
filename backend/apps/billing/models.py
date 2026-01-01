@@ -25,7 +25,23 @@ class BillingPlan(models.Model):
     currency = models.CharField(max_length=3, default='KES')
     
     # Duration
-    duration_days = models.IntegerField(default=30, help_text="Subscription duration in days")
+    # Duration
+    duration_value = models.IntegerField(default=30, help_text="Duration value (e.g., 30 for 30 days)")
+    DURATION_UNIT_CHOICES = [
+        ('minutes', 'Minutes'),
+        ('hours', 'Hours'),
+        ('days', 'Days'),
+        ('months', 'Months'),
+    ]
+    duration_unit = models.CharField(
+        max_length=10, 
+        choices=DURATION_UNIT_CHOICES, 
+        default='days',
+        help_text="Unit of time for the duration"
+    )
+    
+    # Legacy field - keeping for backward compatibility in codebase until fully migrated
+    duration_days = models.IntegerField(default=30, help_text="Legacy: Subscription duration in days")
     
     # Data Limits (Optional)
     data_limit_gb = models.IntegerField(
@@ -38,6 +54,14 @@ class BillingPlan(models.Model):
     mikrotik_profile = models.CharField(
         max_length=100,
         help_text="MikroTik profile name for this plan"
+    )
+    
+    # Associated Routers
+    routers = models.ManyToManyField(
+        'network.Router', 
+        blank=True,
+        related_name='billing_plans',
+        help_text="Routers where this plan should be provisioned"
     )
     
     # Status
@@ -234,7 +258,14 @@ class VoucherBatch(models.Model):
     """
     created_at = models.DateTimeField(auto_now_add=True)
     quantity = models.IntegerField()
-    value = models.DecimalField(max_digits=10, decimal_places=2)
+    value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    plan = models.ForeignKey(
+        'billing.BillingPlan',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='voucher_batches'
+    )
     generated_by = models.ForeignKey(
         Customer,
         on_delete=models.SET_NULL,
@@ -268,8 +299,15 @@ class Voucher(models.Model):
         on_delete=models.CASCADE,
         related_name='vouchers'
     )
+    plan = models.ForeignKey(
+        'billing.BillingPlan',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vouchers'
+    )
     code = models.CharField(max_length=20, unique=True)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
     status = models.CharField(
         max_length=10, 

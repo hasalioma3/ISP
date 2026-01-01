@@ -129,25 +129,55 @@ class PaymentProcessor:
                 plan=plan
             ).latest('created_at')
             
+            # Calculate duration delta
+            duration_value = plan.duration_value
+            duration_unit = plan.duration_unit
+            
+            if duration_unit == 'minutes':
+                expiry_delta = timedelta(minutes=duration_value)
+            elif duration_unit == 'hours':
+                expiry_delta = timedelta(hours=duration_value)
+            elif duration_unit == 'days':
+                expiry_delta = timedelta(days=duration_value)
+            elif duration_unit == 'months':
+                expiry_delta = timedelta(days=duration_value * 30) # Approx
+            else:
+                expiry_delta = timedelta(days=plan.duration_days) # Fallback
+
             # Check if subscription is expired or about to expire
             if subscription.is_expired or subscription.days_remaining <= 0:
                 # Renew from now
                 subscription.start_date = timezone.now()
-                subscription.expiry_date = timezone.now() + timedelta(days=plan.duration_days)
+                subscription.expiry_date = timezone.now() + expiry_delta
             else:
                 # Extend existing subscription
-                subscription.expiry_date += timedelta(days=plan.duration_days)
+                subscription.expiry_date += expiry_delta
             
             subscription.status = 'active'
             subscription.save()
             
         except Subscription.DoesNotExist:
+            # Calculate duration delta for new subscription
+            duration_value = plan.duration_value
+            duration_unit = plan.duration_unit
+            
+            if duration_unit == 'minutes':
+                expiry_delta = timedelta(minutes=duration_value)
+            elif duration_unit == 'hours':
+                expiry_delta = timedelta(hours=duration_value)
+            elif duration_unit == 'days':
+                expiry_delta = timedelta(days=duration_value)
+            elif duration_unit == 'months':
+                expiry_delta = timedelta(days=duration_value * 30)
+            else:
+                expiry_delta = timedelta(days=plan.duration_days)
+
             # Create new subscription
             subscription = Subscription.objects.create(
                 customer=customer,
                 plan=plan,
                 start_date=timezone.now(),
-                expiry_date=timezone.now() + timedelta(days=plan.duration_days),
+                expiry_date=timezone.now() + expiry_delta,
                 status='active'
             )
         

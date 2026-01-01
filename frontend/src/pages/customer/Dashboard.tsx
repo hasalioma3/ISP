@@ -154,8 +154,8 @@ export default function CustomerDashboard() {
                     <div className="mt-8 pt-8 border-t border-gray-200">
                         <h3 className="text-lg font-bold text-gray-900 mb-4">Administration</h3>
                         <div className="grid md:grid-cols-3 gap-6">
-                            <a
-                                href="/admin/network/router/"
+                            <Link
+                                to="/admin"
                                 className="bg-gray-800 text-white rounded-xl shadow-lg p-6 hover:bg-gray-700 transition group"
                             >
                                 <div className="flex items-center gap-4">
@@ -163,11 +163,11 @@ export default function CustomerDashboard() {
                                         <Activity className="w-6 h-6 text-blue-400" />
                                     </div>
                                     <div>
-                                        <h4 className="font-semibold">MikroTik Sync</h4>
-                                        <p className="text-sm text-gray-400">Manage Router</p>
+                                        <h4 className="font-semibold">Admin Dashboard</h4>
+                                        <p className="text-sm text-gray-400">Manage ISP System</p>
                                     </div>
                                 </div>
-                            </a>
+                            </Link>
                         </div>
                     </div>
                 )}

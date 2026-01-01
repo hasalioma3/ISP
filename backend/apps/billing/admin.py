@@ -4,9 +4,22 @@ from .models import BillingPlan, Subscription, Transaction, UsageRecord
 
 @admin.register(BillingPlan)
 class BillingPlanAdmin(admin.ModelAdmin):
-    list_display = ['name', 'service_type', 'download_speed', 'upload_speed', 'price', 'duration_days', 'is_active']
-    list_filter = ['service_type', 'is_active']
+    list_display = ['name', 'service_type', 'download_speed', 'upload_speed', 'price', 'duration_value', 'duration_unit', 'is_active']
+    list_filter = ['service_type', 'is_active', 'duration_unit']
     search_fields = ['name', 'description']
+    
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'description', 'is_active', 'routers')
+        }),
+        ('Service Details', {
+            'fields': ('service_type', 'mikrotik_profile', 'download_speed', 'upload_speed', 'data_limit_gb')
+        }),
+        ('Pricing & Duration', {
+            'fields': ('price', 'currency', 'duration_value', 'duration_unit')
+        }),
+    )
+    filter_horizontal = ('routers',)
 
 
 @admin.register(Subscription)

@@ -12,7 +12,8 @@ interface Plan {
     description: string;
     download_speed: number;
     upload_speed: number;
-    duration_days: number;
+    duration_value: number;
+    duration_unit: 'minutes' | 'hours' | 'days' | 'months';
 }
 
 const CaptivePortal: React.FC = () => {
@@ -83,6 +84,11 @@ const CaptivePortal: React.FC = () => {
                 setStatus('inactive');
                 setMessage('No active subscription found.');
                 setLoading(false);
+
+                // Clear any stale tokens so we don't accidentally send them with payment requests
+                // This ensures "guest" mode for payments and new user creation if needed
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
             }
         } catch (error) {
             console.error('Status check failed:', error);
@@ -133,11 +139,28 @@ const CaptivePortal: React.FC = () => {
         try {
             const response = await voucherAPI.redeem(voucherCode);
             toast.success(response.data.message);
-            setVoucherCode('');
-            if (mac) {
+
+            // Auto Login if tokens are present
+            if (response.data.tokens) {
+                localStorage.setItem('access_token', response.data.tokens.access);
+                localStorage.setItem('refresh_token', response.data.tokens.refresh);
+
+                // Use the returned customer username/password (which defaults to voucher code) to authorize in Mikrotik
+                // The doLogin function submits a form to the Mikrotik router
+                const customer = response.data.customer;
+                // Note: Security-wise, we might want to change how doLogin works, 
+                // but for now we follow the existing pattern if password is available or assumed.
+
+                // If we don't have the password explicitly in the response (serialized customer usually hides it), 
+                // we can assume password = voucherCode based on our backend logic for auto-created users.
+                doLogin(customer.username || voucherCode, voucherCode);
+            } else if (mac) {
                 checkStatus();
             }
+
+            setVoucherCode('');
         } catch (error: any) {
+            console.error('Redeem error:', error);
             toast.error(error.response?.data?.error || 'Failed to redeem voucher');
         } finally {
             setRedeeming(false);
@@ -198,7 +221,7 @@ const CaptivePortal: React.FC = () => {
                             <div className="text-3xl font-bold text-green-400 mb-4">
                                 <span className="text-sm text-gray-400 font-normal">KES</span> {Math.floor(parseFloat(plan.price))}
                             </div>
-                            <p className="text-gray-400 text-sm mb-6 flex-1">{plan.description || `${plan.duration_days} Days Unlimited Internet`}</p>
+                            <p className="text-gray-400 text-sm mb-6 flex-1">{plan.description || `${plan.duration_value} ${plan.duration_unit} Unlimited Internet`}</p>
                             <button
                                 onClick={() => setSelectedPlan(plan)}
                                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2 group-hover:scale-105 active:scale-95 transform duration-200"

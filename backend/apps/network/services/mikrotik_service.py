@@ -18,13 +18,47 @@ _original_parse = routeros_api.sentence.ResponseSentence.parse
 
 def patched_parse(cls, serialized):
     if isinstance(serialized, list):
-        new_serialized = []
+        clean_serialized = []
+        tag_value = None
+        
         for item in serialized:
             if item == b'!empty':
-                new_serialized.append(b'!re')
+                # Convert !empty to !re so the parser receives a valid 'Result' frame
+                # This will create an empty dict {} in the results, which we must handle downstream.
+                clean_serialized.append(b'!re')
+                continue
+            
+            if item.startswith(b'.tag='):
+                # Extract tag manually to bypass parser validation
+                try:
+                    tag_value = item.split(b'=', 1)[1]
+                except:
+                    pass
             else:
-                new_serialized.append(item)
-        serialized = new_serialized
+                clean_serialized.append(item)
+                
+        # Parse the clean list using original method
+        try:
+            parsed = _original_parse(clean_serialized)
+        except IndexError:
+             # If clean_serialized is empty (shouldn't happen if !empty->!re), fallback
+             return _original_parse([b'!re'])
+
+        # Inject tag back if found
+        if tag_value is not None:
+             # Set both attribute and the tag property usually used by the library
+            if hasattr(parsed, 'attributes') and isinstance(parsed.attributes, dict):
+                # Library expects keys to be bytes (it decodes them later)
+                # Value should also be bytes
+                try:
+                    parsed.attributes[b'.tag'] = tag_value
+                except:
+                    pass
+            
+            # Critical: Update the tag property.
+            parsed.tag = tag_value
+            
+        return parsed
         
     return _original_parse(serialized)
 
@@ -89,7 +123,7 @@ class MikroTikService:
             api = connection.get_api()
             ppp_secret = api.get_resource('/ppp/secret')
             secrets = ppp_secret.get(name=username)
-            if not secrets:
+            if not secrets or (secrets and not secrets[0].get('id')):
                 connection.disconnect()
                 return {'success': False, 'error': 'Secret not found'}
             ppp_secret.set(id=secrets[0]['id'], **kwargs)
@@ -108,6 +142,8 @@ class MikroTikService:
             api = connection.get_api()
             ppp_active = api.get_resource('/ppp/active')
             sessions = ppp_active.get(name=username)
+            # Filter out empty results (ghost records)
+            sessions = [s for s in sessions if s.get('id')]
             for session in sessions:
                 ppp_active.remove(id=session['id'])
             connection.disconnect()
@@ -140,7 +176,7 @@ class MikroTikService:
             api = connection.get_api()
             hotspot_user = api.get_resource('/ip/hotspot/user')
             users = hotspot_user.get(name=username)
-            if not users:
+            if not users or (users and not users[0].get('id')):
                 connection.disconnect()
                 return {'success': False, 'error': 'User not found'}
             
@@ -164,7 +200,11 @@ class MikroTikService:
             api = connection.get_api()
             hotspot_active = api.get_resource('/ip/hotspot/active')
             sessions = hotspot_active.get(user=username)
+            logger.info(f"Disconnect Hotspot: Found {len(sessions)} sessions for {username}")
+            # Filter out empty results
+            sessions = [s for s in sessions if s.get('id')]
             for session in sessions:
+                logger.info(f"Removing Hotspot session: {session['id']}")
                 hotspot_active.remove(id=session['id'])
             connection.disconnect()
             return {'success': True}
@@ -172,22 +212,57 @@ class MikroTikService:
             logger.error(f"Failed to disconnect Hotspot session {username}: {str(e)}")
             return {'success': False, 'error': str(e)}
 
+    def remove_hotspot_cookie(self, username):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            hotspot_cookie = api.get_resource('/ip/hotspot/cookie')
+            cookies = hotspot_cookie.get(user=username)
+            logger.info(f"Suspend Cookie: Found {len(cookies)} cookies for {username}")
+            # Filter out empty results
+            cookies = [c for c in cookies if c.get('id')]
+            for cookie in cookies:
+                hotspot_cookie.remove(id=cookie['id'])
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to remove Hotspot cookie {username}: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def disconnect_hotspot_by_mac(self, mac_address):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            hotspot_active = api.get_resource('/ip/hotspot/active')
+            sessions = hotspot_active.get(**{'mac-address': mac_address})
+            # Filter out empty results
+            sessions = [s for s in sessions if s.get('id')]
+            for session in sessions:
+                hotspot_active.remove(id=session['id'])
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to disconnect Hotspot session for MAC {mac_address}: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
     # Profile Management
     
-    def add_pppoe_profile(self, name, rate_limit=None):
+    def add_pppoe_profile(self, name, rate_limit=None, on_up=None, on_down=None):
         try:
             connection = self._get_connection()
             api = connection.get_api()
             ppp_profile = api.get_resource('/ppp/profile')
             params = {'name': name, 'local-address': '10.0.0.1', 'dns-server': '8.8.8.8,8.8.4.4'}
             if rate_limit: params['rate-limit'] = rate_limit
+            if on_up: params['on-up'] = on_up
+            if on_down: params['on-down'] = on_down
             ppp_profile.add(**params)
             connection.disconnect()
             return {'success': True}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def update_pppoe_profile(self, name, rate_limit=None):
+    def update_pppoe_profile(self, name, rate_limit=None, on_up=None, on_down=None):
         try:
             connection = self._get_connection()
             api = connection.get_api()
@@ -199,6 +274,8 @@ class MikroTikService:
                 return {'success': False, 'error': 'Profile not found'}
             params = {}
             if rate_limit: params['rate-limit'] = rate_limit
+            if on_up: params['on-up'] = on_up
+            if on_down: params['on-down'] = on_down
             if params: ppp_profile.set(id=profile['id'], **params)
             connection.disconnect()
             return {'success': True}
@@ -255,6 +332,8 @@ class MikroTikService:
             api = connection.get_api()
             address_list = api.get_resource('/ip/firewall/address-list')
             entries = address_list.get(list=list_name, address=address)
+            # Filter out empty results
+            entries = [e for e in entries if e.get('id')]
             for entry in entries:
                 address_list.remove(id=entry['id'])
             connection.disconnect()
@@ -272,7 +351,9 @@ class MikroTikService:
             # Check if exists
             params = {'dst-address': dst_address, 'action': action}
             existing = walled_garden.get(**params)
-            if not existing:
+            # Check if truly exists (ignore ghost records)
+            exists = existing and existing[0].get('id')
+            if not exists:
                 params['comment'] = comment
                 walled_garden.add(**params)
             connection.disconnect()
@@ -286,6 +367,8 @@ class MikroTikService:
             api = connection.get_api()
             walled_garden = api.get_resource('/ip/hotspot/walled-garden/ip')
             entries = walled_garden.get(**{'dst-address': dst_address})
+            # Filter out empty results
+            entries = [e for e in entries if e.get('id')]
             for entry in entries:
                 walled_garden.remove(id=entry['id'])
             connection.disconnect()
@@ -300,7 +383,9 @@ class MikroTikService:
             walled_garden = api.get_resource('/ip/hotspot/walled-garden')
             params = {'dst-host': dst_host}
             existing = walled_garden.get(**params)
-            if not existing:
+            # Check if truly exists
+            exists = existing and existing[0].get('id')
+            if not exists:
                 params['comment'] = comment
                 walled_garden.add(**params)
             connection.disconnect()
@@ -315,7 +400,9 @@ class MikroTikService:
             dns_static = api.get_resource('/ip/dns/static')
             params = {'name': name, 'address': address}
             existing = dns_static.get(**params)
-            if not existing:
+            # Check if truly exists
+            exists = existing and existing[0].get('id')
+            if not exists:
                 params['comment'] = comment
                 dns_static.add(**params)
             connection.disconnect()

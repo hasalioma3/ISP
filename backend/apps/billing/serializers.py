@@ -49,17 +49,19 @@ class VoucherSerializer(serializers.ModelSerializer):
 class VoucherBatchSerializer(serializers.ModelSerializer):
     vouchers = VoucherSerializer(many=True, read_only=True)
     generated_by_username = serializers.CharField(source='generated_by.username', read_only=True)
+    plan_name = serializers.CharField(source='plan.name', read_only=True, allow_null=True)
     
     class Meta:
         model = VoucherBatch
-        fields = ['id', 'created_at', 'quantity', 'value', 'note', 'generated_by_username', 'vouchers']
+        fields = ['id', 'created_at', 'quantity', 'value', 'plan', 'plan_name', 'note', 'generated_by_username', 'vouchers']
 
 
 class VoucherGenerationSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1, max_value=1000)
-    value = serializers.DecimalField(max_digits=10, decimal_places=2)
+    value = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    plan_id = serializers.IntegerField(required=False, allow_null=True)
     note = serializers.CharField(required=False, allow_blank=True)
 
 
 class VoucherRedeemSerializer(serializers.Serializer):
-    code = serializers.CharField(min_length=12, max_length=20)
+    code = serializers.CharField(min_length=6, max_length=20)
