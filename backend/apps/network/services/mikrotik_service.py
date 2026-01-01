@@ -410,5 +410,83 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    # System Configuration
+
+    def configure_radius_client(self, address, secret, comment='ISP Billing'):
+        """
+        Configure Radius Client for Hotspot and PPP
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            radius = api.get_resource('/radius')
+            
+            # Check for existing config for this server
+            existing = radius.get(address=address)
+            
+            # Prepare params
+            params = {
+                'address': address,
+                'secret': secret,
+                'service': 'hotspot,ppp',
+                'timeout': '3000ms',
+                'comment': comment
+            }
+            
+            if existing:
+                # Update existing
+                radius.set(id=existing[0]['id'], **params)
+            else:
+                # Create new
+                radius.add(**params)
+                
+            # Enable incoming Radius if needed (for CoA)
+            radius_incoming = api.get_resource('/radius/incoming')
+            radius_incoming.set(accept='yes', port='3799')
+            
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to configure Radius: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def enable_service_radius(self):
+        """
+        Enable use-radius for Hotspot and PPPoE Server Profiles
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            
+            # 1. Update Hotspot Server Profiles
+            hs_profile = api.get_resource('/ip/hotspot/profile') 
+            profiles = hs_profile.get()
+            for profile in profiles:
+                try:
+                    hs_profile.set(id=profile['id'], **{'use-radius': 'yes', 'login-by': 'http-chap,cookie'})
+                except Exception as e:
+                    logger.warning(f"Failed to update HS profile {profile.get('name')}: {e}")
+
+            # 2. Update PPP Secrets/Profiles? 
+            # Actually PPP usage of Radius is enabled in PPP Secrets -> PPP Authentication / PPP Server
+            # Usually for PPPoE Servers, we set 'authentication=pap,chap,mschap1,mschap2' and 'one-session-per-host=yes'
+            # And crucially, checking "Use Radius" in PPP -> Secrets -> PPP Authentication is not a thing on RouterOS v6/v7 directly
+            # It's usually the PPPoE Server service that is told to use Radius.
+            
+            pppoe_server = api.get_resource('/interface/pppoe-server/server')
+            servers = pppoe_server.get()
+            for server in servers:
+                try:
+                    pppoe_server.set(id=server['id'], **{'authentication': 'pap,chap,mschap1,mschap2', 'one-session-per-host': 'yes', 'use-radius': 'yes'})
+                except Exception as e:
+                    logger.warning(f"Failed to update PPPoE server {server.get('service-name')}: {e}")
+
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+             logger.error(f"Failed to enable service Radius: {str(e)}")
+             return {'success': False, 'error': str(e)}
+
+
 # Default instance
 mikrotik_service = MikroTikService()

@@ -190,3 +190,30 @@ class ActiveSession(models.Model):
     @property
     def total_gb(self):
         return round(self.total_bytes / (1024 ** 3), 2)
+
+
+class RouterInterfaceStat(models.Model):
+    """
+    Real-time interface statistics (e.g., bridge counters)
+    """
+    router = models.ForeignKey(
+        Router,
+        on_delete=models.CASCADE,
+        related_name='interface_stats'
+    )
+    interface_name = models.CharField(max_length=100)
+    
+    # Real-time Rates (bps)
+    tx_bps = models.BigIntegerField(default=0)  # Transmit (Download for clients mostly)
+    rx_bps = models.BigIntegerField(default=0)  # Receive (Upload for clients mostly)
+    
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'router_interface_stats'
+        unique_together = ['router', 'interface_name']
+        verbose_name = _('Router Interface Stat')
+        verbose_name_plural = _('Router Interface Stats')
+
+    def __str__(self):
+        return f"{self.router.name} - {self.interface_name}"

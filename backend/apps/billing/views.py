@@ -67,7 +67,11 @@ class UsageRecordViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        return UsageRecord.objects.filter(customer=self.request.user)
+        import logging
+        logger = logging.getLogger('apps.billing')
+        qs = UsageRecord.objects.filter(customer=self.request.user)
+        logger.info(f"Usage Request by {self.request.user.username}: Found {qs.count()} records.")
+        return qs
 
 
 from rest_framework.views import APIView
@@ -89,6 +93,16 @@ class VoucherBatchViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = VoucherBatch.objects.all()
     serializer_class = VoucherBatchSerializer
     permission_classes = [IsAdminUser]
+
+    @action(detail=True, methods=['get'])
+    def vouchers(self, request, pk=None):
+        batch = self.get_object()
+        vouchers = batch.vouchers.all()
+        
+        # Use serializer for consistency
+        from apps.billing.serializers import VoucherSerializer
+        serializer = VoucherSerializer(vouchers, many=True)
+        return Response(serializer.data)
 
 
 class VoucherGenerationView(APIView):

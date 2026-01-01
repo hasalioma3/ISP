@@ -41,9 +41,11 @@ from apps.billing.models import Voucher, VoucherBatch
 class VoucherSerializer(serializers.ModelSerializer):
     batch_id = serializers.ReadOnlyField(source='batch.id')
     
+    used_by_username = serializers.CharField(source='used_by.username', read_only=True)
+    
     class Meta:
         model = Voucher
-        fields = ['id', 'code', 'amount', 'status', 'batch_id', 'expiry_date', 'created_at']
+        fields = ['id', 'code', 'amount', 'status', 'batch_id', 'expiry_date', 'created_at', 'used_by_username', 'used_at']
 
 
 class VoucherBatchSerializer(serializers.ModelSerializer):

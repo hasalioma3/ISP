@@ -189,42 +189,42 @@ const CaptivePortal: React.FC = () => {
 
     if (loading || status === 'active') {
         return (
-            <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4 text-white">
+            <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center p-4">
                 <div className="text-center">
-                    <Loader className="h-12 w-12 animate-spin mx-auto text-blue-500 mb-4" />
-                    <h2 className="text-xl font-bold">{message}</h2>
+                    <Loader className="h-12 w-12 animate-spin mx-auto text-primary-600" />
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">{message}</h2>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-900 p-4 font-sans">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 font-sans transition-colors duration-200">
             <div className="max-w-4xl mx-auto space-y-6">
                 {/* Header */}
-                <div className="text-center text-white pt-8 pb-4">
-                    <div className="mx-auto bg-blue-600 rounded-full w-16 h-16 flex items-center justify-center mb-4 shadow-lg shadow-blue-500/50">
-                        <Wifi className="h-8 w-8 text-white" />
+                <div className="text-center pt-8 pb-4">
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-full inline-block mb-4 shadow-sm dark:shadow-none">
+                        <img src="/hasanet_logo.png" alt="Hasanet" className="h-16 w-auto" />
                     </div>
-                    <h1 className="text-3xl font-bold mb-2">Connect to ISP Wi-Fi</h1>
-                    <p className="text-gray-400">Choose a package to get started instantly.</p>
+                    <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-white">Connect to Hasanet Wi-Fi</h1>
+                    <p className="text-gray-600 dark:text-gray-400">Choose a package to get started instantly.</p>
                 </div>
 
                 {/* Plans Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {plans.map((plan) => (
-                        <div key={plan.id} className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-blue-500 transition-all shadow-lg flex flex-col relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                        <div key={plan.id} className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all shadow-sm hover:shadow-lg flex flex-col relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 bg-primary-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
                                 {plan.download_speed} Mbps
                             </div>
-                            <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
-                            <div className="text-3xl font-bold text-green-400 mb-4">
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{plan.name}</h3>
+                            <div className="text-3xl font-bold text-primary-600 dark:text-primary-400 mb-4">
                                 <span className="text-sm text-gray-400 font-normal">KES</span> {Math.floor(parseFloat(plan.price))}
                             </div>
-                            <p className="text-gray-400 text-sm mb-6 flex-1">{plan.description || `${plan.duration_value} ${plan.duration_unit} Unlimited Internet`}</p>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 flex-1">{plan.description || `${plan.duration_value} ${plan.duration_unit} Unlimited Internet`}</p>
                             <button
                                 onClick={() => setSelectedPlan(plan)}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2 group-hover:scale-105 active:scale-95 transform duration-200"
+                                className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2 group-hover:scale-105 active:scale-95 transform duration-200 shadow-lg shadow-primary-500/20"
                             >
                                 <CreditCard className="h-4 w-4" />
                                 Buy Now
@@ -235,15 +235,15 @@ const CaptivePortal: React.FC = () => {
 
                 {/* Voucher & Login Section */}
                 <div className="max-w-md mx-auto space-y-4">
-                    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                        <h3 className="text-white font-medium mb-3 text-sm uppercase tracking-wider text-gray-400">Have a Voucher?</h3>
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                        <h3 className="text-gray-900 dark:text-white font-bold mb-3 text-sm uppercase tracking-wider">Have a Voucher?</h3>
                         <form onSubmit={handleRedeemVoucher} className="flex gap-2">
                             <input
                                 type="text"
                                 placeholder="Enter Voucher Code"
                                 value={voucherCode}
                                 onChange={(e) => setVoucherCode(e.target.value)}
-                                className="flex-1 bg-gray-900 border border-gray-600 rounded-lg p-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+                                className="flex-1 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-3 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:border-primary-500 transition"
                             />
                             <button
                                 type="submit"
@@ -257,49 +257,49 @@ const CaptivePortal: React.FC = () => {
 
                     <button
                         onClick={() => navigate('/login')}
-                        className="w-full text-gray-400 hover:text-white text-sm py-2 transition"
+                        className="w-full text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 text-sm py-2 transition font-medium"
                     >
                         Already have an account? Login here
                     </button>
                 </div>
 
-                <div className="text-center text-xs text-gray-600 pb-8">
+                <div className="text-center text-xs text-gray-400 dark:text-gray-500 pb-8">
                     MAC: {mac || 'Unknown'} • Secure Connection <Lock className="h-3 w-3 inline ml-1" />
                 </div>
             </div>
 
             {/* Payment Modal */}
             {selectedPlan && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-gray-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-700 relative animate-in fade-in zoom-in duration-200">
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 dark:border-gray-700 relative animate-in fade-in zoom-in duration-200">
                         <button
                             onClick={() => { setSelectedPlan(null); setPaymentSuccess(false); }}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-white"
+                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                         >
                             <X className="h-6 w-6" />
                         </button>
 
                         {!paymentSuccess ? (
                             <>
-                                <h2 className="text-2xl font-bold text-white mb-1">Confirm Purchase</h2>
-                                <p className="text-gray-400 mb-6">You are buying <span className="text-blue-400 font-bold">{selectedPlan.name}</span> for <span className="text-green-400 font-bold">KES {Math.floor(parseFloat(selectedPlan.price))}</span></p>
+                                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Confirm Purchase</h2>
+                                <p className="text-gray-500 dark:text-gray-400 mb-6">You are buying <span className="text-primary-600 dark:text-primary-400 font-bold">{selectedPlan.name}</span> for <span className="text-green-600 dark:text-green-400 font-bold">KES {Math.floor(parseFloat(selectedPlan.price))}</span></p>
 
                                 <form onSubmit={handleBuyPlan} className="space-y-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-1">M-Pesa Phone Number</label>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">M-Pesa Phone Number</label>
                                         <input
                                             type="tel"
                                             placeholder="07XXXXXXXX"
                                             value={phoneNumber}
                                             onChange={(e) => setPhoneNumber(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white text-lg placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+                                            className="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-3 text-gray-900 dark:text-white text-lg placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary-500 transition"
                                             required
                                         />
                                     </div>
                                     <button
                                         type="submit"
                                         disabled={processingPayment}
-                                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl transition flex items-center justify-center gap-2 text-lg disabled:opacity-50"
+                                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl transition flex items-center justify-center gap-2 text-lg disabled:opacity-50 shadow-lg shadow-green-500/30"
                                     >
                                         {processingPayment ? <Loader className="animate-spin h-6 w-6" /> : 'Pay with M-Pesa'}
                                     </button>
@@ -307,15 +307,15 @@ const CaptivePortal: React.FC = () => {
                             </>
                         ) : (
                             <div className="text-center py-8">
-                                <div className="bg-green-600/20 text-green-500 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
+                                <div className="bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
                                     <Check className="h-10 w-10" />
                                 </div>
-                                <h2 className="text-2xl font-bold text-white mb-2">Check your phone!</h2>
-                                <p className="text-gray-400 mb-6">Enter your M-Pesa PIN to complete the payment.</p>
-                                <p className="text-sm text-gray-500">Your internet will activate automatically once received.</p>
+                                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Check your phone!</h2>
+                                <p className="text-gray-500 dark:text-gray-400 mb-6">Enter your M-Pesa PIN to complete the payment.</p>
+                                <p className="text-sm text-gray-400 dark:text-gray-500">Your internet will activate automatically once received.</p>
                                 <button
                                     onClick={() => { setSelectedPlan(null); setPaymentSuccess(false); checkStatus(); }}
-                                    className="mt-6 w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-lg transition"
+                                    className="mt-6 w-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold py-3 rounded-lg transition"
                                 >
                                     Close & Wait for Connection
                                 </button>

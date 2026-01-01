@@ -75,6 +75,21 @@ function RoutersTab() {
         }
     });
 
+    const configureMutation = useMutation({
+        mutationFn: adminAPI.configureRouter,
+        onSuccess: (data) => {
+            if (data.data.success) {
+                toast.success(`Router ${data.data.router} configured successfully!`);
+            } else {
+                toast.error('Configuration finished with errors. Check console.');
+                console.error(data.data.results);
+            }
+        },
+        onError: (error: any) => {
+            toast.error(`Failed to configure router: ${error.response?.data?.error || error.message}`);
+        }
+    });
+
     if (isLoading) return <div className="p-4">Loading routers...</div>;
     if (isError) return <div className="p-4 text-red-600">Error loading routers: {(error as Error).message}</div>;
 
@@ -102,6 +117,13 @@ function RoutersTab() {
                                 className="p-2 text-red-600 hover:bg-red-50 rounded"
                             >
                                 <Trash2 className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={() => configureMutation.mutate(router.id)}
+                                disabled={configureMutation.isPending}
+                                className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm hover:bg-green-200 disabled:opacity-50"
+                            >
+                                {configureMutation.isPending ? 'Configuring...' : 'Configure'}
                             </button>
                         </div>
                     </div>

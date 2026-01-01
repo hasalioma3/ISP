@@ -5,7 +5,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from apps.customers.models import Customer
-from apps.customers.serializers import CustomerRegistrationSerializer, CustomerSerializer
+from apps.customers.serializers import CustomerRegistrationSerializer, CustomerSerializer, CustomerDetailSerializer
 
 
 @api_view(['POST'])
@@ -101,7 +101,33 @@ class SubscriberViewSet(viewsets.ReadOnlyModelViewSet):
     View all subscribers (Admin only)
     """
     queryset = Customer.objects.all()
-    serializer_class = CustomerSerializer
+    queryset = Customer.objects.all()
+    # serializer_class = CustomerSerializer # Removed in favor of get_serializer_class
+    
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return CustomerDetailSerializer
+        return CustomerSerializer
+
     permission_classes = [IsAdminUser]
     filter_backends = [filters.SearchFilter]
     search_fields = ['username', 'phone_number', 'first_name', 'last_name', 'pppoe_username']
+
+    @action(detail=True, methods=['post'])
+    def toggle_status(self, request, pk=None):
+        customer = self.get_object()
+        # Find latest subscription
+        subscription = customer.subscriptions.order_by('-created_at').first()
+        
+        if not subscription:
+            return Response({'error': 'No subscription found'}, status=status.HTTP_404_NOT_FOUND)
+            
+        if subscription.status == 'active':
+            subscription.status = 'suspended'
+            action = "deactivated"
+        else:
+            subscription.status = 'active'
+            action = "activated"
+            
+        subscription.save()
+        return Response({'status': 'success', 'message': f'Subscriber {action} successfully', 'new_status': subscription.status})

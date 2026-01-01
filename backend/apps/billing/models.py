@@ -223,6 +223,10 @@ class UsageRecord(models.Model):
     download_bytes = models.BigIntegerField(default=0)
     session_time_seconds = models.IntegerField(default=0)
     
+    # Real-time Speed (Snapshot)
+    upload_speed_mbps = models.FloatField(default=0.0)
+    download_speed_mbps = models.FloatField(default=0.0)
+    
     # Session Information
     session_id = models.CharField(max_length=100, blank=True)
     start_time = models.DateTimeField()
@@ -233,6 +237,7 @@ class UsageRecord(models.Model):
     framed_ip_address = models.GenericIPAddressField(blank=True, null=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'usage_records'

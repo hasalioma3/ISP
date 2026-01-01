@@ -14,5 +14,11 @@ export default defineConfig({
         secure: false,
       },
     },
+    allowedHosts: [
+      'admin.hasalioma.online',
+      'isp.hasalioma.online',
+      'hasalioma.xyz',
+      'api.hasalioma.xyz'
+    ],
   },
 })

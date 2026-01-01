@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useTheme } from '../context/ThemeContext';
 import {
     LayoutDashboard,
     Users,
@@ -8,6 +9,8 @@ import {
     Ticket,
     LogOut,
     Menu,
+    Moon,
+    Sun,
     X
 } from 'lucide-react';
 import { useState } from 'react';
@@ -18,6 +21,7 @@ export default function AdminLayout() {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
     const user = useAuthStore((state) => state.user);
+    const { theme, toggleTheme } = useTheme();
 
     const navigation = [
         { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
@@ -33,7 +37,7 @@ export default function AdminLayout() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 flex">
+        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex transition-colors duration-200">
             {/* Mobile Sidebar Overlay */}
             {isSidebarOpen && (
                 <div
@@ -44,13 +48,19 @@ export default function AdminLayout() {
 
             {/* Sidebar */}
             <div className={`
-        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white shadow-xl transform transition-transform duration-200 ease-in-out
+        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-xl transform transition-transform duration-200 ease-in-out
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
                 <div className="h-full flex flex-col">
-                    <div className="p-6 border-b">
-                        <h1 className="text-2xl font-bold text-blue-600">ISP Admin</h1>
-                        <p className="text-sm text-gray-500">Welcome, {user?.first_name}</p>
+                    <div className="p-6 border-b dark:border-gray-700 flex flex-col items-center">
+                        <Link to="/admin/dashboard" className="flex flex-col items-center group">
+                            <img src="/hasanet_logo.png" alt="Hasanet" className="h-16 mb-2 group-hover:opacity-90 transition-opacity" />
+                            <h1 className="text-xl font-bold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">Hasanet</h1>
+                        </Link>
+                        <p className="text-xs text-primary-600 dark:text-primary-400 font-medium tracking-wider">TECHNOLOGIES</p>
+                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+                            Welcome, {user?.first_name}
+                        </div>
                     </div>
 
                     <nav className="flex-1 p-4 space-y-1">
@@ -64,8 +74,8 @@ export default function AdminLayout() {
                                     className={`
                     flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors
                     ${isActive
-                                            ? 'bg-blue-50 text-blue-700'
-                                            : 'text-gray-700 hover:bg-gray-50'
+                                            ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400'
+                                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                                         }
                   `}
                                 >
@@ -76,10 +86,26 @@ export default function AdminLayout() {
                         })}
                     </nav>
 
-                    <div className="p-4 border-t">
+                    <div className="p-4 border-t dark:border-gray-700 space-y-2">
+                        <button
+                            onClick={toggleTheme}
+                            className="flex items-center w-full px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        >
+                            {theme === 'light' ? (
+                                <>
+                                    <Moon className="h-5 w-5 mr-3" />
+                                    Dark Mode
+                                </>
+                            ) : (
+                                <>
+                                    <Sun className="h-5 w-5 mr-3" />
+                                    Light Mode
+                                </>
+                            )}
+                        </button>
                         <button
                             onClick={handleLogout}
-                            className="flex items-center w-full px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            className="flex items-center w-full px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                         >
                             <LogOut className="h-5 w-5 mr-3" />
                             Sign Out
@@ -91,11 +117,14 @@ export default function AdminLayout() {
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 {/* Mobile Header */}
-                <div className="lg:hidden bg-white shadow-sm p-4 flex items-center justify-between">
-                    <h1 className="text-xl font-bold text-gray-800">ISP Admin</h1>
+                <div className="lg:hidden bg-white dark:bg-gray-800 shadow-sm p-4 flex items-center justify-between transition-colors duration-200">
+                    <Link to="/admin/dashboard" className="flex items-center gap-2">
+                        <img src="/hasanet_logo.png" alt="Logo" className="h-8" />
+                        <span className="text-xl font-bold text-gray-800 dark:text-white">Hasanet</span>
+                    </Link>
                     <button
                         onClick={() => setIsSidebarOpen(true)}
-                        className="p-2 -mr-2 text-gray-600 hover:text-gray-900"
+                        className="p-2 -mr-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                     >
                         <Menu className="h-6 w-6" />
                     </button>

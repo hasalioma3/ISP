@@ -121,3 +121,60 @@ class UsageReportView(APIView):
             })
             
         return Response(data)
+
+class MonthlyAnalyticsView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        now = timezone.now()
+        year = now.year
+        
+        # Filter for current year
+        records = UsageRecord.objects.filter(
+            start_time__year=year
+        ).annotate(
+            month=TruncDate('start_time') # Actually TruncMonth is better but TruncDate works if we process in python for accuracy or TruncMonth
+        )
+        # Wait, TruncDate gives day. I need TruncMonth.
+        
+        from django.db.models.functions import TruncMonth
+        
+        stats = UsageRecord.objects.filter(
+            start_time__year=year
+        ).annotate(
+            month=TruncMonth('start_time')
+        ).values('month').annotate(
+            total_up=Sum('upload_bytes'),
+            total_down=Sum('download_bytes'),
+            active_users=Count('customer', distinct=True)
+        ).order_by('month')
+        
+        # Convert to dict for easy lookup
+        data_map = {}
+        for s in stats:
+            m = s['month'].month
+            up_gb = round((s['total_up'] or 0) / (1024**3), 2)
+            down_gb = round((s['total_down'] or 0) / (1024**3), 2)
+            
+            data_map[m] = {
+                'active_users': s['active_users'],
+                'upload_gb': up_gb,
+                'download_gb': down_gb,
+                'total_gb': round(up_gb + down_gb, 2)
+            }
+            
+        # Ensure 12 months
+        result = []
+        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        
+        for i in range(1, 13):
+            entry = data_map.get(i, {'active_users': 0, 'upload_gb': 0.0, 'download_gb': 0.0, 'total_gb': 0.0})
+            result.append({
+                'month': months[i-1],
+                'active_users': entry['active_users'],
+                'upload_gb': entry['upload_gb'],
+                'download_gb': entry['download_gb'],
+                'total_gb': entry['total_gb']
+            })
+            
+        return Response(result)

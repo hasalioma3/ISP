@@ -1,7 +1,8 @@
+import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { adminAPI } from '../../services/api';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function Subscribers() {
@@ -49,12 +50,13 @@ export default function Subscribers() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Calculated Expiry</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                                         <div className="flex justify-center items-center">
                                             <Loader2 className="h-6 w-6 animate-spin mr-2" />
                                             Loading subscribers...
@@ -63,23 +65,29 @@ export default function Subscribers() {
                                 </tr>
                             ) : isError ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-red-500">
+                                    <td colSpan={6} className="px-6 py-8 text-center text-red-500">
                                         Error loading subscribers: {(error as Error).message}
                                     </td>
                                 </tr>
                             ) : subscribers?.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                                         No subscribers found.
                                     </td>
                                 </tr>
                             ) : (
                                 subscribers?.map((user: any) => (
-                                    <tr key={user.id} className="hover:bg-gray-50 transition">
+                                    <tr key={user.id} className="hover:bg-gray-50 transition group">
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-gray-900">{user.username}</div>
-                                            <div className="text-sm text-gray-500">{user.full_name}</div>
-                                            <div className="text-xs text-gray-400">{user.phone_number}</div>
+                                            <div className="flex items-center gap-2">
+                                                <div>
+                                                    <Link to={`/admin/subscribers/${user.id}`} className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline">
+                                                        {user.username}
+                                                    </Link>
+                                                    <div className="text-sm text-gray-500">{user.full_name}</div>
+                                                    <div className="text-xs text-gray-400">{user.phone_number}</div>
+                                                </div>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 uppercase">
@@ -90,10 +98,6 @@ export default function Subscribers() {
                                             )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {/* Note: Customer model doesn't have expiry, Subscription does. 
-                                                If we want expiry here, we need to fetch it or include in CustomerSerializer 
-                                                For now showing created_at or Account Status
-                                            */}
                                             {format(new Date(user.created_at), 'MMM d, yyyy')}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -106,6 +110,15 @@ export default function Subscribers() {
                                             `}>
                                                 {user.status}
                                             </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                                            <Link
+                                                to={`/admin/subscribers/${user.id}`}
+                                                className="text-gray-400 hover:text-blue-600 transition"
+                                                title="View Details"
+                                            >
+                                                <ExternalLink className="w-5 h-5" />
+                                            </Link>
                                         </td>
                                     </tr>
                                 ))

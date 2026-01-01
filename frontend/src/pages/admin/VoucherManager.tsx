@@ -8,6 +8,17 @@ import { format } from 'date-fns';
 export default function VoucherManager() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [genParams, setGenParams] = useState({ quantity: 10, plan_id: '' });
+    const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
+
+    const { data: vouchers, isLoading: isLoadingVouchers } = useQuery({
+        queryKey: ['batch-vouchers', selectedBatchId],
+        queryFn: async () => {
+            if (!selectedBatchId) return [];
+            const res = await voucherAPI.getBatchVouchers(selectedBatchId);
+            return res.data;
+        },
+        enabled: !!selectedBatchId
+    });
 
     const queryClient = useQueryClient();
 
@@ -47,35 +58,52 @@ export default function VoucherManager() {
         generateMutation.mutate(genParams);
     };
 
-    const handleExport = (batch: any) => {
-        if (!batch.vouchers || batch.vouchers.length === 0) {
-            toast.error('No vouchers found in this batch');
-            return;
+    const handleExport = async (batch: any) => {
+        try {
+            toast.loading('Preparing export...', { id: 'export-loading' });
+            // Always fetch fresh voucher data for export to ensure we have all fields
+            const res = await voucherAPI.getBatchVouchers(batch.id);
+            const vouchers = res.data;
+
+            if (!vouchers || vouchers.length === 0) {
+                toast.dismiss('export-loading');
+                toast.error('No vouchers found in this batch');
+                return;
+            }
+
+            const csvContent = [
+                ['Code', 'Plan', 'Amount', 'Status', 'Expiry', 'Used By', 'Used At'],
+                ...vouchers.map((v: any) => [
+                    v.code,
+                    batch.plan_name || 'N/A',
+                    v.amount,
+                    v.status,
+                    v.expiry_date || 'Never',
+                    v.used_by_username || v.used_by || '',
+                    v.used_at || ''
+                ])
+            ].map(e => e.join(',')).join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `vouchers_batch_${batch.id}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            toast.dismiss('export-loading');
+            toast.success('Export started');
+        } catch (err) {
+            toast.dismiss('export-loading');
+            toast.error('Failed to export batch');
+            console.error(err);
         }
-
-        const csvContent = [
-            ['Code', 'Plan', 'Amount', 'Status', 'Expiry'],
-            ...batch.vouchers.map((v: any) => [
-                v.code,
-                batch.plan_name || 'N/A',
-                v.amount,
-                v.status,
-                v.expiry_date || 'Never'
-            ])
-        ].map(e => e.join(',')).join('\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', `vouchers_batch_${batch.id}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
     };
 
     return (
         <div>
+            {/* Header ... */}
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold">Voucher Management</h1>
                 <button
@@ -87,6 +115,7 @@ export default function VoucherManager() {
                 </button>
             </div>
 
+            {/* Generator Form ... */}
             {isGenerating && (
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6 max-w-lg">
                     <h3 className="text-lg font-bold mb-4">Generate New Batch</h3>
@@ -139,6 +168,7 @@ export default function VoucherManager() {
                 </div>
             )}
 
+            {/* Batch Table */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -169,10 +199,16 @@ export default function VoucherManager() {
                                         <span className="text-green-600">KES {batch.value}</span>
                                     )}
                                 </td>
-                                <td className="px-6 py-4 text-right text-sm font-medium">
+                                <td className="px-6 py-4 text-right text-sm font-medium flex justify-end gap-3">
+                                    <button
+                                        onClick={() => setSelectedBatchId(batch.id)}
+                                        className="text-indigo-600 hover:text-indigo-900"
+                                    >
+                                        View
+                                    </button>
                                     <button
                                         onClick={() => handleExport(batch)}
-                                        className="text-blue-600 hover:text-blue-900 flex items-center justify-end w-full"
+                                        className="text-blue-600 hover:text-blue-900 flex items-center"
                                     >
                                         <Download className="h-4 w-4 mr-1" /> Export
                                     </button>
@@ -182,6 +218,58 @@ export default function VoucherManager() {
                     </tbody>
                 </table>
             </div>
+
+            {/* Vouchers Modal */}
+            {selectedBatchId && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col rounded-lg">
+                        <div className="p-6 border-b flex justify-between items-center">
+                            <h3 className="text-xl font-bold">Batch #{selectedBatchId} Vouchers</h3>
+                            <button
+                                onClick={() => setSelectedBatchId(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <div className="p-0 overflow-auto flex-1">
+                            {isLoadingVouchers ? (
+                                <div className="p-8 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-500" /></div>
+                            ) : (
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50 sticky top-0">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Used By</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Used At</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {vouchers?.map((v: any) => (
+                                            <tr key={v.id}>
+                                                <td className="px-6 py-4 font-mono font-medium">{v.code}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2 text-xs rounded-full font-semibold ${v.status === 'active' ? 'bg-green-100 text-green-800' :
+                                                        v.status === 'used' ? 'bg-gray-100 text-gray-800' :
+                                                            'bg-red-100 text-red-800'
+                                                        }`}>
+                                                        {v.status.toUpperCase()}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-gray-600">{v.used_by_username || v.used_by || '-'}</td>
+                                                <td className="px-6 py-4 text-sm text-gray-600">
+                                                    {v.used_at ? format(new Date(v.used_at), 'MMM d, HH:mm') : '-'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -14,9 +14,12 @@ import CaptivePortal from './pages/portal/CaptivePortal';
 import AdminLayout from './components/AdminLayout';
 import AdminDashboard from './pages/admin/Dashboard';
 import Subscribers from './pages/admin/Subscribers';
+import SubscriberDetails from './pages/admin/SubscriberDetails';
 import Reports from './pages/admin/Reports';
 import Settings from './pages/admin/Settings';
 import VoucherManager from './pages/admin/VoucherManager';
+import CustomerLayout from './components/CustomerLayout';
+import { ThemeProvider } from './context/ThemeContext';
 
 const queryClient = new QueryClient();
 
@@ -38,52 +41,48 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Toaster position="top-right" />
-        <Routes>
-          <Route path="/portal" element={<CaptivePortal />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+      <ThemeProvider>
+        <BrowserRouter>
+          <Toaster position="top-right" />
+          <Routes>
+            <Route path="/portal" element={<CaptivePortal />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
 
-          <Route
-            path="/dashboard"
-            element={
+            {/* Customer Routes inside Layout */}
+            <Route element={
               <PrivateRoute>
-                <CustomerDashboard />
+                <CustomerLayout />
               </PrivateRoute>
-            }
-          />
-          <Route path="/plans" element={<Plans />} />
-          <Route path="/payment" element={<Payment />} />
-          <Route
-            path="/usage"
-            element={
-              <PrivateRoute>
-                <Usage />
-              </PrivateRoute>
-            }
-          />
+            }>
+              <Route path="/dashboard" element={<CustomerDashboard />} />
+              <Route path="/plans" element={<Plans />} />
+              <Route path="/payment" element={<Payment />} />
+              <Route path="/usage" element={<Usage />} />
+            </Route>
 
-          {/* Admin Routes */}
-          <Route
-            path="/admin"
-            element={
-              <AdminRoute>
-                <AdminLayout />
-              </AdminRoute>
-            }
-          >
-            <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="subscribers" element={<Subscribers />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="vouchers" element={<VoucherManager />} />
-            <Route index element={<Navigate to="dashboard" />} />
-          </Route>
+            {/* Admin Routes */}
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <AdminLayout />
+                </AdminRoute>
+              }
+            >
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="subscribers" element={<Subscribers />} />
+              <Route path="subscribers/:id" element={<SubscriberDetails />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="vouchers" element={<VoucherManager />} />
+              <Route index element={<Navigate to="dashboard" />} />
+            </Route>
 
-          <Route path="/" element={<Navigate to="/dashboard" />} />
-        </Routes>
-      </BrowserRouter>
+            <Route path="/" element={<Navigate to="/dashboard" />} />
+          </Routes>
+        </BrowserRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

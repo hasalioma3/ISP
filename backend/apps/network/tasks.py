@@ -8,12 +8,39 @@ import logging
 
 logger = logging.getLogger('apps.network')
 
+
+def parse_mikrotik_uptime(uptime_str):
+    """
+    Parse MikroTik uptime string (e.g. '2w1d', '1h30m', '50s') to seconds.
+    """
+    if not uptime_str:
+        return 0
+    
+    total_seconds = 0
+    current_num = ""
+    
+    for char in str(uptime_str):
+        if char.isdigit():
+            current_num += char
+        else:
+            if not current_num: continue
+            val = int(current_num)
+            if char == 'w': total_seconds += val * 604800
+            elif char == 'd': total_seconds += val * 86400
+            elif char == 'h': total_seconds += val * 3600
+            elif char == 'm': total_seconds += val * 60
+            elif char == 's': total_seconds += val
+            current_num = ""
+            
+    return total_seconds
+
 @shared_task
 def collect_usage_statistics():
     """
     Collect usage statistics from MikroTik Router(s)
     Runs periodically (e.g. every 5-10 minutes)
     """
+
     logger.info("Starting usage statistics collection...")
     from apps.network.models import Router
     
@@ -34,55 +61,131 @@ def collect_usage_statistics():
             )
             conn = mikrotik._get_connection()
             api = conn.get_api()
-            
-            # 1. Fetch Hotspot Active Users
+        
+            # 1. Collect Interface Stats (ether1 - WAN)
+            try:
+                # Monitor 'ether1' (WAN) traffic
+                # WAN RX = Internet Download -> Client Download
+                # WAN TX = Internet Upload <- Client Upload
+                if_stats_list = api.get_resource('/interface').call('monitor-traffic', {
+                    'interface': 'ether1', 
+                    'once': 'true'
+                })
+                
+                if if_stats_list:
+                    s = if_stats_list[0]
+                    wan_rx = int(s.get('rx-bits-per-second', 0)) # Download from Net
+                    wan_tx = int(s.get('tx-bits-per-second', 0)) # Upload to Net
+                    
+                    # Import Model here to avoid circular imports if any
+                    from apps.network.models import RouterInterfaceStat
+                    
+                    # We map:
+                    # DB tx_bps (Client Download) = WAN RX
+                    # DB rx_bps (Client Upload) = WAN TX
+                    RouterInterfaceStat.objects.update_or_create(
+                        router=router,
+                        interface_name='ether1',
+                        defaults={
+                            'rx_bps': wan_tx, # Client Upload
+                            'tx_bps': wan_rx  # Client Download
+                        }
+                    )
+                    logger.debug(f"Router {router.name}: ether1 (WAN) rate Download={wan_rx}, Upload={wan_tx}")
+            except Exception as e:
+                # Interface might not exist or other error
+                pass
+
+            # 2. Fetch Hotspot Active Users
             try:
                 hotspot_active = api.get_resource('/ip/hotspot/active').get()
+                
+                # Fetch Queues for Realtime Rate
+                try:
+                    queues = api.get_resource('/queue/simple').get()
+                    # Create map: name -> queue_data
+                    # Hotspot queues are usually "<hotspot-user>"
+                    queue_map = {q.get('name'): q for q in queues}
+                except:
+                    queue_map = {}
+                
+                logger.info(f"Router {router.name}: Found {len(hotspot_active)} active hotspot users.")
                 for session in hotspot_active:
                     username = session.get('user')
-                    # Convert to integer, handle missing values
+                    # ... (rest of parsing)
+                    
+                    # Try to find queue rate
+                    real_up_mbps = None
+                    real_down_mbps = None
+                    
+                    queue_data = None
+                    q_name = f"<hotspot-{username}>" 
+                    
+                    if q_name in queue_map:
+                        queue_data = queue_map[q_name]
+                    elif username in queue_map:
+                        queue_data = queue_map[username]
+                        
+                    if queue_data:
+                        queue_rate = queue_data.get('rate', "0/0")
+                        logger.debug(f"User {username} Queue Rate: {queue_rate}")
+                        # Parse Rate
+                        try:
+                            rate_parts = queue_rate.split('/')
+                            if len(rate_parts) == 2:
+                                # MikroTik rate: rx/tx (upload/download from router perspective = user up/down?)
+                                # Verify direction: 24624/1755768 (24k/1.7M). User is downloading.
+                                # So 1.7M is TX from Router -> User (Download).
+                                # 24k is RX to Router <- User (Upload).
+                                # Correct.
+                                real_up_mbps = int(rate_parts[0]) / 1000000.0
+                                real_down_mbps = int(rate_parts[1]) / 1000000.0
+                        except:
+                            pass
+
+
                     try:
-                        bytes_in = int(session.get('bytes-in', 0))   # Upload
-                        bytes_out = int(session.get('bytes-out', 0)) # Download
+                        bytes_in = int(session.get('bytes-in', 0))
+                        bytes_out = int(session.get('bytes-out', 0))
                     except:
                         continue
                         
-                    session_id = session.get('.id', '') # Internal ID, might change. prefer 'id' or user+uptime
+                    session_id = session.get('.id', '')
                     mac = session.get('mac-address', '')
                     ip = session.get('address', '')
+                    uptime_str = session.get('uptime', '')
                     
-                    update_usage_record(username, bytes_in, bytes_out, mac, ip, session_id, 'hotspot')
+                    uptime_seconds = parse_mikrotik_uptime(uptime_str)
+                    
+                    update_usage_record(
+                        username, bytes_in, bytes_out, mac, ip, session_id, 'hotspot', 
+                        uptime_seconds=uptime_seconds,
+                        real_up_mbps=real_up_mbps,
+                        real_down_mbps=real_down_mbps
+                    )
             except Exception as e:
                 logger.error(f"Error fetching hotspot stats from {router.name}: {e}")
-            
+
             # 2. Fetch PPPoE Active Connections (via Interfaces)
-            # PPPoE active sessions are best tracked via Interface stats for bytes
             try:
-                # Get all dynamic interfaces (usually PPPoE ones are dynamic)
-                # Or filter by type=pppoe-in if library supports it, otherwise get all and filter in python
                 interfaces = api.get_resource('/interface').get()
                 pppoe_interfaces = [i for i in interfaces if i.get('type') == 'pppoe-in']
                 
+                if pppoe_interfaces:
+                    logger.info(f"Router {router.name}: Found {len(pppoe_interfaces)} active PPPoE sessions.")
+
                 for iface in pppoe_interfaces:
-                    # Interface name is usually the username for PPPoE Server bindings
-                    # Assuming <pppoe-username> naming convention
                     username = iface.get('name')
-                    # Typically names are like "<pppoe-user>", sometimes "pppoe-<user>"
-                    # But standard Mikrotik use username as interface name
-                    
                     try:
-                        # RX = Upload (from client), TX = Download (to client)
                         bytes_in = int(iface.get('rx-byte', 0))
                         bytes_out = int(iface.get('tx-byte', 0))
                     except:
                         continue
                         
                     session_id = iface.get('.id', '')
-                    
-                    # Try to find IP (optional, might need /ip/address lookup)
                     ip = '' 
                     
-                    update_usage_record(username, bytes_in, bytes_out, '', ip, session_id, 'pppoe')
+                    update_usage_record(username, bytes_in, bytes_out, '', ip, session_id, 'pppoe', 0)
 
             except Exception as e:
                 logger.error(f"Error fetching PPPoE stats from {router.name}: {e}")
@@ -94,15 +197,16 @@ def collect_usage_statistics():
             
     logger.info("Usage statistics collection completed.")
 
-def update_usage_record(username, upload, download, mac, ip, session_id, service_type):
+def update_usage_record(username, upload, download, mac, ip, session_id, service_type, uptime_seconds=0, real_up_mbps=None, real_down_mbps=None):
     try:
         from apps.customers.models import Customer
+        from django.utils import timezone
+        from django.utils import timezone
         
         # 1. Find Customer
-        # Handle "Phone_MAC" or "Phone" usernames
         customer = Customer.objects.filter(username=username).first()
         if not customer:
-            # Maybe username is different?
+            logger.debug(f"Usage Update: Customer '{username}' not found.")
             return
 
         # 2. Find Active Subscription
@@ -112,30 +216,10 @@ def update_usage_record(username, upload, download, mac, ip, session_id, service
         ).last()
         
         if not subscription:
+            logger.debug(f"Usage Update: No active subscription for '{username}'.")
             return
 
-        # 3. Create or Update Usage Record
-        # We want to track PER SESSION if possible, or minimally per day.
-        # User asked for "database for each subscriber session".
-        # Session ID from Mikrotik (*123) changes on reconnect. 
-        # Using it is good for distinct sessions.
-        
-        today = timezone.now()
-        
-        # Check if we have an open record for this session_id?
-        # But 'session_id' (*A1) is ephemeral and reused.
-        # Better key: User + StartTime? Or just User + Date + InterfaceID (if stable during session)?
-        # For now, let's update a record for Today + User.
-        # If we really want "Session" granularity, we need to detect Session Start/Stop (via Accounting/RADIUS).
-        # With just polling, we only see "Current Totals".
-        # If we just overwrite "Current Totals" into a record, we track the *current* session.
-        # When session drops, the record remains. 
-        # When new session starts, bytes reset to 0. We need to detect this reset.
-        
-        # LOGIC:
-        # Find latest record for user.
-        # If (new_bytes < latest_record.bytes) -> Session reset! -> Create NEW record.
-        # Else -> Update existing record.
+        # ... (rest of logic) ...
         
         latest_record = UsageRecord.objects.filter(
             customer=customer,
@@ -145,18 +229,15 @@ def update_usage_record(username, upload, download, mac, ip, session_id, service
         create_new = False
         if not latest_record:
             create_new = True
+            logger.info(f"Usage Update: Creating FIRST record for {username}")
         else:
             # Check if counters reset (new session)
-            # Threshold: if current bytes are significantly less than stored, it's a reset.
             prev_total = latest_record.upload_bytes + latest_record.download_bytes
             curr_total = upload + download
             
-            # If current < prev, likely a reset (new session started)
             if curr_total < prev_total:
                 create_new = True
-            
-            # Also, if getting old (e.g., > 24h), maybe force new record? 
-            # Let's stick to session reset logic for now.
+                logger.info(f"Usage Update: Session reset detected for {username}. Creating NEW record.")
             
         if create_new:
             UsageRecord.objects.create(
@@ -164,18 +245,52 @@ def update_usage_record(username, upload, download, mac, ip, session_id, service
                 subscription=subscription,
                 upload_bytes=upload,
                 download_bytes=download,
-                session_time_seconds=0, # Hard to track via poll without uptime
+                session_time_seconds=uptime_seconds,
                 start_time=timezone.now(),
                 nas_ip_address='',
                 framed_ip_address=ip,
-                session_id=session_id # Store mikrotik ID for ref
+                session_id=session_id,
+                upload_speed_mbps=real_up_mbps if real_up_mbps is not None else 0.0,
+                download_speed_mbps=real_down_mbps if real_down_mbps is not None else 0.0
             )
+            logger.info(f"Created UsageRecord for {username} (Up: {upload}, Down: {download})")
         else:
+            # Calculate Speed Dynamically OR Use Realtime
+            if real_up_mbps is not None and real_down_mbps is not None:
+                # Use provided realtime speed (Better accuracy)
+                up_speed_mbps = real_up_mbps
+                down_speed_mbps = real_down_mbps
+            else:
+                # Fallback to Delta Calculation
+                now = timezone.now()
+                # ...
+                
+                delta_up_bytes = max(0, upload - latest_record.upload_bytes)
+                delta_down_bytes = max(0, download - latest_record.download_bytes)
+                
+                # Calculate time difference
+                if latest_record.updated_at:
+                    time_delta = (now - latest_record.updated_at).total_seconds()
+                else:
+                    time_delta = 1.0 # Fallback
+                
+                # Prevent division by zero or extremely small delta
+                if time_delta < 0.1: time_delta = 1.0
+                
+                up_speed_mbps = (delta_up_bytes * 8) / (time_delta * 1000000)
+                down_speed_mbps = (delta_down_bytes * 8) / (time_delta * 1000000)
+            
             latest_record.upload_bytes = upload
             latest_record.download_bytes = download
             # Update framed IP if it changed/appeared
             if ip: latest_record.framed_ip_address = ip
+            if uptime_seconds > 0: latest_record.session_time_seconds = uptime_seconds
+            
+            latest_record.upload_speed_mbps = round(up_speed_mbps, 2)
+            latest_record.download_speed_mbps = round(down_speed_mbps, 2)
+            
             latest_record.save()
+            logger.info(f"Updated UsageRecord for {username} (Speed: {down_speed_mbps:.2f} Mbps)")
             
     except Exception as e:
         logger.error(f"Error updating usage for {username}: {e}")

@@ -63,25 +63,21 @@ export const paymentAPI = {
 };
 
 // Voucher API
-export const voucherAPI = {
-    getBatches: () => api.get('/billing/batches/'),
-    generate: (data: { quantity: number; value: number; note?: string }) =>
-        api.post('/billing/vouchers/generate/', data),
-    redeem: (code: string) =>
-        api.post('/billing/vouchers/redeem/', { code }),
-};
+// Voucher API definition moved below to include batch details extension
 
 // Analytics API
 export const analyticsAPI = {
     getDashboardStats: () => api.get('/analytics/dashboard/'),
     getIncomeReport: (params?: any) => api.get('/analytics/income/', { params }),
-    getUsageReport: () => api.get('/analytics/usage/'),
+    getUsageReport: (limit?: number) => api.get('/analytics/usage/', { params: { limit } }),
+    getMonthlyAnalytics: () => api.get('/analytics/monthly/'),
 };
 
 // Admin Management API
 export const adminAPI = {
     // Subscribers
     getSubscribers: (search?: string) => api.get('/customers/subscribers/', { params: { search } }),
+    getSubscriber: (id: string | number) => api.get(`/customers/subscribers/${id}/`),
 
     // Staff
     getStaff: () => api.get('/customers/staff/'),
@@ -91,12 +87,25 @@ export const adminAPI = {
 
     // Routers
     getRouters: () => api.get('/network/routers/'),
+    getNetworkActivity: () => api.get('/network/routers/total_activity/'),
     createRouter: (data: any) => api.post('/network/routers/', data),
     updateRouter: (id: number, data: any) => api.put(`/network/routers/${id}/`, data),
     deleteRouter: (id: number) => api.delete(`/network/routers/${id}/`),
+    configureRouter: (id: number) => api.post(`/network/routers/${id}/configure/`),
 
     // Manual Actions
     manualSubscribe: (data: any) => api.post('/billing/manual-subscribe/', data),
+    toggleStatus: (id: number) => api.post(`/customers/subscribers/${id}/toggle_status/`),
+};
+
+// Update Voucher API to include batch details
+export const voucherAPI = {
+    getBatches: () => api.get('/billing/batches/'),
+    getBatchVouchers: (id: number) => api.get(`/billing/batches/${id}/vouchers/`),
+    generate: (data: { quantity: number; value: number; note?: string }) =>
+        api.post('/billing/vouchers/generate/', data),
+    redeem: (code: string) =>
+        api.post('/billing/vouchers/redeem/', { code }),
 };
 
 export default api;

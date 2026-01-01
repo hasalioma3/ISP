@@ -88,10 +88,10 @@ export default function Payment() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <div className="bg-white shadow">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+            <div className="bg-white dark:bg-gray-800 shadow transition-colors">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <Link to="/dashboard" className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
+                    <Link to="/dashboard" className="flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors">
                         <ArrowLeft className="w-5 h-5" />
                         Back to Dashboard
                     </Link>
@@ -103,20 +103,20 @@ export default function Payment() {
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
                         <CreditCard className="w-8 h-8 text-green-600" />
                     </div>
-                    <h1 className="text-3xl font-bold text-gray-900">Make Payment</h1>
-                    <p className="text-gray-600 mt-2">Pay via M-Pesa STK Push</p>
+                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Make Payment</h1>
+                    <p className="text-gray-600 dark:text-gray-400 mt-2">Pay via M-Pesa STK Push</p>
                 </div>
 
                 {paymentStatus === 'idle' && (
-                    <div className="bg-white rounded-2xl shadow-lg p-8">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 transition-colors">
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                     Select Plan
                                 </label>
                                 <select
                                     required
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-colors"
                                     value={selectedPlanId}
                                     onChange={(e) => setSelectedPlanId(e.target.value)}
                                 >
@@ -130,17 +130,17 @@ export default function Payment() {
                             </div>
 
                             {selectedPlan && (
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                    <h3 className="font-semibold text-gray-900 mb-2">{selectedPlan.name}</h3>
-                                    <p className="text-sm text-gray-600 mb-2">
+                                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 transition-colors">
+                                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2">{selectedPlan.name}</h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
                                         Speed: {selectedPlan.download_speed}/{selectedPlan.upload_speed} Mbps
                                     </p>
-                                    <p className="text-2xl font-bold text-blue-600">KES {selectedPlan.price}</p>
+                                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">KES {selectedPlan.price}</p>
                                 </div>
                             )}
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                     M-Pesa Phone Number
                                 </label>
                                 <div className="relative">
@@ -151,12 +151,12 @@ export default function Payment() {
                                         type="tel"
                                         required
                                         placeholder="0712345678"
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-colors"
                                         value={phoneNumber}
                                         onChange={(e) => setPhoneNumber(e.target.value)}
                                     />
                                 </div>
-                                <p className="text-sm text-gray-500 mt-1">
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                                     Enter the phone number to receive the STK Push prompt
                                 </p>
                             </div>
@@ -198,10 +198,10 @@ export default function Payment() {
                 )}
 
                 {paymentStatus === 'success' && (
-                    <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-                        <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h3>
-                        <p className="text-gray-600 mb-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 text-center transition-colors">
+                        <CheckCircle className="w-16 h-16 text-green-600 dark:text-green-500 mx-auto mb-4" />
+                        <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Payment Successful!</h3>
+                        <p className="text-gray-600 dark:text-gray-400 mb-4">
                             Your internet access has been activated. Redirecting to dashboard...
                         </p>
                     </div>

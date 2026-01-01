@@ -42,38 +42,36 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4 transition-colors duration-200">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 w-full max-w-md border border-gray-100 dark:border-gray-700">
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                        <LogIn className="w-8 h-8 text-blue-600" />
-                    </div>
-                    <h1 className="text-3xl font-bold text-gray-900">ISP Billing</h1>
-                    <p className="text-gray-600 mt-2">Login to your account</p>
+                    <img src="/hasanet_logo.png" alt="Hasanet" className="w-32 h-auto mx-auto mb-4" />
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hasanet Portal</h1>
+                    <p className="text-gray-600 dark:text-gray-400 mt-2">Login to your account</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Username
                         </label>
                         <input
                             type="text"
                             required
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none"
                             value={formData.username}
                             onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Password
                         </label>
                         <input
                             type="password"
                             required
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none"
                             value={formData.password}
                             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                         />
@@ -82,15 +80,15 @@ export default function Login() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
+                        className="w-full bg-primary-600 text-white py-3 rounded-lg font-semibold hover:bg-primary-700 transition disabled:opacity-50 shadow-lg shadow-primary-500/30"
                     >
                         {loading ? 'Logging in...' : 'Login'}
                     </button>
                 </form>
 
-                <p className="text-center text-gray-600 mt-6">
+                <p className="text-center text-gray-600 dark:text-gray-400 mt-6">
                     Don't have an account?{' '}
-                    <Link to="/register" className="text-blue-600 font-semibold hover:underline">
+                    <Link to="/register" className="text-primary-600 dark:text-primary-400 font-semibold hover:underline">
                         Register
                     </Link>
                 </p>
