@@ -11,63 +11,101 @@ logger = logging.getLogger('apps.network')
 @shared_task
 def collect_usage_statistics():
     """
-    Collect usage statistics from MikroTik Router
-    Runs periodically (e.g. every 10-30 minutes)
+    Collect usage statistics from MikroTik Router(s)
+    Runs periodically (e.g. every 5-10 minutes)
     """
     logger.info("Starting usage statistics collection...")
+    from apps.network.models import Router
     
-    try:
-        conn = mikrotik_service._get_connection()
-        api = conn.get_api()
-        
-        # 1. Fetch Hotspot Active Users
-        hotspot_active = api.get_resource('/ip/hotspot/active').get()
-        
-        # 2. Fetch PPPoE Active Connections
-        ppp_active = api.get_resource('/ppp/active').get()
-        
-        # Process Hotspot Users
-        for session in hotspot_active:
-            username = session.get('user')
-            bytes_in = int(session.get('bytes-in', 0)) # Upload from client perspective
-            bytes_out = int(session.get('bytes-out', 0)) # Download
-            uptime = session.get('uptime', '')
-            mac = session.get('mac-address', '')
-            ip = session.get('address', '')
+    # Iterate all active routers
+    routers = Router.objects.filter(is_active=True)
+    if not routers.exists():
+        logger.warning("No active routers found for usage stats.")
+        return
+
+    for router in routers:
+        try:
+            mikrotik = MikroTikService(
+                host=router.ip_address,
+                username=router.username, 
+                password=router.password,
+                port=router.port,
+                use_ssl=router.use_ssl
+            )
+            conn = mikrotik._get_connection()
+            api = conn.get_api()
             
-            # Find active subscription
-            update_usage_record(username, bytes_in, bytes_out, mac, ip)
+            # 1. Fetch Hotspot Active Users
+            try:
+                hotspot_active = api.get_resource('/ip/hotspot/active').get()
+                for session in hotspot_active:
+                    username = session.get('user')
+                    # Convert to integer, handle missing values
+                    try:
+                        bytes_in = int(session.get('bytes-in', 0))   # Upload
+                        bytes_out = int(session.get('bytes-out', 0)) # Download
+                    except:
+                        continue
+                        
+                    session_id = session.get('.id', '') # Internal ID, might change. prefer 'id' or user+uptime
+                    mac = session.get('mac-address', '')
+                    ip = session.get('address', '')
+                    
+                    update_usage_record(username, bytes_in, bytes_out, mac, ip, session_id, 'hotspot')
+            except Exception as e:
+                logger.error(f"Error fetching hotspot stats from {router.name}: {e}")
+            
+            # 2. Fetch PPPoE Active Connections (via Interfaces)
+            # PPPoE active sessions are best tracked via Interface stats for bytes
+            try:
+                # Get all dynamic interfaces (usually PPPoE ones are dynamic)
+                # Or filter by type=pppoe-in if library supports it, otherwise get all and filter in python
+                interfaces = api.get_resource('/interface').get()
+                pppoe_interfaces = [i for i in interfaces if i.get('type') == 'pppoe-in']
+                
+                for iface in pppoe_interfaces:
+                    # Interface name is usually the username for PPPoE Server bindings
+                    # Assuming <pppoe-username> naming convention
+                    username = iface.get('name')
+                    # Typically names are like "<pppoe-user>", sometimes "pppoe-<user>"
+                    # But standard Mikrotik use username as interface name
+                    
+                    try:
+                        # RX = Upload (from client), TX = Download (to client)
+                        bytes_in = int(iface.get('rx-byte', 0))
+                        bytes_out = int(iface.get('tx-byte', 0))
+                    except:
+                        continue
+                        
+                    session_id = iface.get('.id', '')
+                    
+                    # Try to find IP (optional, might need /ip/address lookup)
+                    ip = '' 
+                    
+                    update_usage_record(username, bytes_in, bytes_out, '', ip, session_id, 'pppoe')
 
-        # Process PPPoE Users
-        for session in ppp_active:
-            username = session.get('name')
-            # PPPoE stats might need different handling depending on MikroTik version/accounting
-            # Standard /ppp/active often lacks byte counters, might need /interface
-            # But let's check simple params first.
-            # If not in active, we might need Interim-Updates via RADIUS, but for API:
-            # We can check specific interface stats if needed.
-            # For now, let's assume standard byte counters if available or skip.
-            pass
+            except Exception as e:
+                logger.error(f"Error fetching PPPoE stats from {router.name}: {e}")
 
-        conn.disconnect()
-        logger.info("Usage statistics collection completed.")
-        
-    except Exception as e:
-        logger.error(f"Failed to collect usage stats: {e}")
+            conn.disconnect()
+            
+        except Exception as e:
+            logger.error(f"Failed to collect usage stats from router {router.name}: {e}")
+            
+    logger.info("Usage statistics collection completed.")
 
-def update_usage_record(username, upload, download, mac, ip):
+def update_usage_record(username, upload, download, mac, ip, session_id, service_type):
     try:
-        # Find active subscription for this user
-        # Note: username in MikroTik might be phone number or "Phone_MAC"
-        
-        # Try finding customer by username (which handles the Phone_MAC case too if stored as username)
         from apps.customers.models import Customer
-        customer = Customer.objects.filter(username=username).first()
         
+        # 1. Find Customer
+        # Handle "Phone_MAC" or "Phone" usernames
+        customer = Customer.objects.filter(username=username).first()
         if not customer:
-            logger.warning(f"Usage collection: Customer not found for {username}")
+            # Maybe username is different?
             return
 
+        # 2. Find Active Subscription
         subscription = Subscription.objects.filter(
             customer=customer, 
             status='active'
@@ -76,40 +114,69 @@ def update_usage_record(username, upload, download, mac, ip):
         if not subscription:
             return
 
-        # Use MAC + IP as a pseudo-session key if true session ID isn't available
-        # Ideally, MikroTik 'id' field changes on reconnect.
-        # Let's try to match a record created recently (within last hour) for this user/subscription
+        # 3. Create or Update Usage Record
+        # We want to track PER SESSION if possible, or minimally per day.
+        # User asked for "database for each subscriber session".
+        # Session ID from Mikrotik (*123) changes on reconnect. 
+        # Using it is good for distinct sessions.
         
-        # Calculate duration from uptime? 
-        # For now, let's just create/update a daily record to keep it simple and aggregatable.
-        today = timezone.now().date()
+        today = timezone.now()
         
-        # Check for existing record for today
-        usage_record = UsageRecord.objects.filter(
+        # Check if we have an open record for this session_id?
+        # But 'session_id' (*A1) is ephemeral and reused.
+        # Better key: User + StartTime? Or just User + Date + InterfaceID (if stable during session)?
+        # For now, let's update a record for Today + User.
+        # If we really want "Session" granularity, we need to detect Session Start/Stop (via Accounting/RADIUS).
+        # With just polling, we only see "Current Totals".
+        # If we just overwrite "Current Totals" into a record, we track the *current* session.
+        # When session drops, the record remains. 
+        # When new session starts, bytes reset to 0. We need to detect this reset.
+        
+        # LOGIC:
+        # Find latest record for user.
+        # If (new_bytes < latest_record.bytes) -> Session reset! -> Create NEW record.
+        # Else -> Update existing record.
+        
+        latest_record = UsageRecord.objects.filter(
             customer=customer,
-            subscription=subscription,
-            created_at__date=today,
-            framed_ip_address=ip
-        ).first()
+            subscription=subscription
+        ).order_by('-created_at').first()
         
-        if usage_record:
-            # Update existing record
-            usage_record.upload_bytes = upload
-            usage_record.download_bytes = download
-            usage_record.save()
+        create_new = False
+        if not latest_record:
+            create_new = True
         else:
-           # Create new record for today
-           UsageRecord.objects.create(
+            # Check if counters reset (new session)
+            # Threshold: if current bytes are significantly less than stored, it's a reset.
+            prev_total = latest_record.upload_bytes + latest_record.download_bytes
+            curr_total = upload + download
+            
+            # If current < prev, likely a reset (new session started)
+            if curr_total < prev_total:
+                create_new = True
+            
+            # Also, if getting old (e.g., > 24h), maybe force new record? 
+            # Let's stick to session reset logic for now.
+            
+        if create_new:
+            UsageRecord.objects.create(
                 customer=customer,
                 subscription=subscription,
                 upload_bytes=upload,
                 download_bytes=download,
-                session_time_seconds=0,
+                session_time_seconds=0, # Hard to track via poll without uptime
                 start_time=timezone.now(),
-                nas_ip_address='192.168.88.1',
-                framed_ip_address=ip
-           )
-        
+                nas_ip_address='',
+                framed_ip_address=ip,
+                session_id=session_id # Store mikrotik ID for ref
+            )
+        else:
+            latest_record.upload_bytes = upload
+            latest_record.download_bytes = download
+            # Update framed IP if it changed/appeared
+            if ip: latest_record.framed_ip_address = ip
+            latest_record.save()
+            
     except Exception as e:
         logger.error(f"Error updating usage for {username}: {e}")
 
