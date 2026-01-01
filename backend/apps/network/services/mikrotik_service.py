@@ -484,8 +484,137 @@ class MikroTikService:
             connection.disconnect()
             return {'success': True}
         except Exception as e:
-             logger.error(f"Failed to enable service Radius: {str(e)}")
+            logger.error(f"Failed to enable service Radius: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    # Network Setup Helpers
+
+    def create_bridge(self, name):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            bridge = api.get_resource('/interface/bridge')
+            existing = bridge.get(name=name)
+            if not existing:
+                bridge.add(name=name)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_port_to_bridge(self, bridge, interface):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            port = api.get_resource('/interface/bridge/port')
+            # Check if port is already in ANY bridge (might be in a different one)
+            # Or specifically in this one.
+            # Best effort: remove from others? No, that's dangerous.
+            # Just check if 'interface' exists in port list.
+            existing = port.get(interface=interface)
+            if existing:
+                # Already a port, check if bridge matches
+                if existing[0].get('bridge') != bridge:
+                    # Move it? Or error? Let's move it for auto-fix.
+                    port.set(id=existing[0]['id'], bridge=bridge)
+            else:
+                port.add(bridge=bridge, interface=interface)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_ip_address(self, address, interface, comment=''):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            ip_addr = api.get_resource('/ip/address')
+            # Check overlap generally?
+            # Or just check if exact address exists on interface
+            # 'address' is like '10.5.50.1/24'
+            # API returns 'address' like '10.5.50.1/24'
+            
+            # Search by interface first to reduce load
+            existing = ip_addr.get(interface=interface)
+            
+            # Simple check: is this subnet already there?
+            # If we try to add 10.5.50.1/24 but 10.5.50.2/24 exists, RouterOS usually allows multiple IPs.
+            # But for gateway, we usually want one.
+            
+            # Let's just try to add if exact match not found.
+            found = False
+            for entry in existing:
+                if entry.get('address') == address:
+                    found = True
+                    break
+            
+            if not found:
+                ip_addr.add(address=address, interface=interface, comment=comment)
+
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
              return {'success': False, 'error': str(e)}
+
+    def add_ip_pool(self, name, ranges):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            pool = api.get_resource('/ip/pool')
+            existing = pool.get(name=name)
+            if existing:
+                if existing[0].get('ranges') != ranges:
+                    pool.set(id=existing[0]['id'], ranges=ranges)
+            else:
+                pool.add(name=name, ranges=ranges)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_hotspot_server_profile(self, name, dns_name, html_directory='hotspot'):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            hs_profile = api.get_resource('/ip/hotspot/profile')
+            existing = hs_profile.get(name=name)
+            params = {
+                'name': name,
+                'dns-name': dns_name,
+                'html-directory': html_directory,
+                'use-radius': 'yes',
+                'login-by': 'http-chap,cookie,mac-cookie'
+            }
+            if existing:
+                hs_profile.set(id=existing[0]['id'], **params)
+            else:
+                hs_profile.add(**params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_hotspot_server(self, name, interface, profile, address_pool):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            hs_server = api.get_resource('/ip/hotspot')
+            existing = hs_server.get(name=name)
+            params = {
+                'name': name,
+                'interface': interface,
+                'profile': profile,
+                'address-pool': address_pool,
+                'disabled': 'no'
+            }
+            if existing:
+                hs_server.set(id=existing[0]['id'], **params)
+            else:
+                hs_server.add(**params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
 
 
 # Default instance

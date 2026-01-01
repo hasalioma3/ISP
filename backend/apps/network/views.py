@@ -86,11 +86,75 @@ class RouterViewSet(viewsets.ModelViewSet):
         except Exception as e:
              results['steps'].append({'name': 'Service Radius', 'status': 'failed', 'error': str(e)})
 
-        # 3. Walled Garden (Optional default entries?)
-        # For now, we skip detailed walled garden setup as it depends on payment providers.
-        
-        # Check overall success
-        failed = any(s['status'] == 'failed' for s in results['steps'])
+        except Exception as e:
+            results['steps'].append({'name': 'Service Radius', 'status': 'failed', 'error': str(e)})
+
+        # 3. Interface Setup (Bridge)
+        try:
+            # Create bridge
+            res = mikrotik.create_bridge(name='hotspot-bridge')
+            if res['success']:
+                results['steps'].append({'name': 'Bridge: hotspot-bridge', 'status': 'success'})
+            else:
+                results['steps'].append({'name': 'Bridge: hotspot-bridge', 'status': 'failed', 'error': res.get('error')})
+            
+            # Add port (assuming ether3 as per request/plan)
+            # CAUTION: This might cut off access if connected via ether3!
+            # Assuming backend is not connected via ether3 or is via VLAN.
+            res = mikrotik.add_port_to_bridge(bridge='hotspot-bridge', interface='ether3')
+            if res['success']:
+                results['steps'].append({'name': 'Port: ether3 -> bridge', 'status': 'success'})
+            else:
+                results['steps'].append({'name': 'Port: ether3 -> bridge', 'status': 'failed', 'error': res.get('error')})
+        except Exception as e:
+             results['steps'].append({'name': 'Interface Setup', 'status': 'failed', 'error': str(e)})
+
+        # 4. IP & Network Setup
+        try:
+            # Add Gateway IP
+            res = mikrotik.add_ip_address(address='10.5.50.1/24', interface='hotspot-bridge', comment='Hotspot Gateway')
+            if res['success']:
+                results['steps'].append({'name': 'IP: 10.5.50.1/24', 'status': 'success'})
+            else:
+                results['steps'].append({'name': 'IP: 10.5.50.1/24', 'status': 'failed', 'error': res.get('error')})
+            
+            # Add IP Pool
+            res = mikrotik.add_ip_pool(name='hs-pool-1', ranges='10.5.50.10-10.5.50.254')
+            if res['success']:
+                results['steps'].append({'name': 'Pool: hs-pool-1', 'status': 'success'})
+            else:
+                results['steps'].append({'name': 'Pool: hs-pool-1', 'status': 'failed', 'error': res.get('error')})
+        except Exception as e:
+            results['steps'].append({'name': 'Network Setup', 'status': 'failed', 'error': str(e)})
+
+        # 5. Hotspot Setup
+        try:
+            # Server Profile
+            res = mikrotik.add_hotspot_server_profile(name='hsprof1', dns_name='login.isp.local', html_directory='hotspot')
+            if res['success']:
+                results['steps'].append({'name': 'HS Profile: hsprof1', 'status': 'success'})
+            else:
+                results['steps'].append({'name': 'HS Profile: hsprof1', 'status': 'failed', 'error': res.get('error')})
+            
+            # Hotspot Server
+            res = mikrotik.add_hotspot_server(name='hotspot1', interface='hotspot-bridge', profile='hsprof1', address_pool='hs-pool-1')
+            if res['success']:
+                results['steps'].append({'name': 'HS Server: hotspot1', 'status': 'success'})
+            else:
+                results['steps'].append({'name': 'HS Server: hotspot1', 'status': 'failed', 'error': res.get('error')})
+        except Exception as e:
+            results['steps'].append({'name': 'Hotspot Setup', 'status': 'failed', 'error': str(e)})
+
+        # 6. Walled Garden
+        try:
+            # Generic rules
+            mikrotik.add_walled_garden_host(dst_host='*.hasalioma.online', comment='ISP Billing')
+            mikrotik.add_walled_garden_host(dst_host='*.safaricom.co.ke', comment='MPesa')
+            # M-Pesa IPs (Examples, normally detailed list)
+            mikrotik.add_walled_garden_ip(dst_address='196.201.230.0/24', comment='MPesa IP')
+            results['steps'].append({'name': 'Walled Garden', 'status': 'success'})
+        except Exception as e:
+            results['steps'].append({'name': 'Walled Garden', 'status': 'failed', 'error': str(e)})
         
         return Response({
             'success': not failed,

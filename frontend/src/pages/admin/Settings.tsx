@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, billingAPI } from '../../services/api';
-import { Plus, Trash2, Edit2, UserPlus, Server, Users as UsersIcon, CreditCard } from 'lucide-react';
+import { Plus, Trash2, Edit2, UserPlus, Server, Users as UsersIcon, CreditCard, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Settings() {
@@ -75,6 +75,41 @@ function RoutersTab() {
         }
     });
 
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [newRouter, setNewRouter] = useState({
+        name: '',
+        ip_address: '',
+        username: '',
+        password: '',
+        port: 8728,
+        use_ssl: false
+    });
+
+    const createMutation = useMutation({
+        mutationFn: adminAPI.createRouter,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['routers'] });
+            toast.success('Router added successfully');
+            setIsModalOpen(false);
+            setNewRouter({
+                name: '',
+                ip_address: '',
+                username: '',
+                password: '',
+                port: 8728,
+                use_ssl: false
+            });
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.error || 'Failed to add router');
+        }
+    });
+
+    const handleCreate = (e: React.FormEvent) => {
+        e.preventDefault();
+        createMutation.mutate(newRouter);
+    };
+
     const configureMutation = useMutation({
         mutationFn: adminAPI.configureRouter,
         onSuccess: (data) => {
@@ -97,10 +132,108 @@ function RoutersTab() {
         <div>
             <div className="flex justify-between mb-4">
                 <h3 className="text-lg font-bold">Network Routers</h3>
-                <button className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+                <button
+                    onClick={() => setIsModalOpen(true)}
+                    className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                >
                     <Plus className="h-4 w-4 mr-2" /> Add Router
                 </button>
             </div>
+
+            {/* Add Router Modal */}
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center index-50 z-50">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold">Add Router</h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreate} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Name</label>
+                                <input
+                                    type="text"
+                                    required
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 border p-2"
+                                    value={newRouter.name}
+                                    onChange={e => setNewRouter({ ...newRouter, name: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">IP Address</label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="192.168.88.1"
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 border p-2"
+                                    value={newRouter.ip_address}
+                                    onChange={e => setNewRouter({ ...newRouter, ip_address: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Username</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 border p-2"
+                                        value={newRouter.username}
+                                        onChange={e => setNewRouter({ ...newRouter, username: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Password</label>
+                                    <input
+                                        type="password"
+                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 border p-2"
+                                        value={newRouter.password}
+                                        onChange={e => setNewRouter({ ...newRouter, password: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Port (API)</label>
+                                    <input
+                                        type="number"
+                                        required
+                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 border p-2"
+                                        value={newRouter.port}
+                                        onChange={e => setNewRouter({ ...newRouter, port: parseInt(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="flex items-center pt-6">
+                                    <input
+                                        type="checkbox"
+                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        checked={newRouter.use_ssl}
+                                        onChange={e => setNewRouter({ ...newRouter, use_ssl: e.target.checked })}
+                                    />
+                                    <label className="ml-2 block text-sm text-gray-900">Use SSL</label>
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-3 mt-6">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsModalOpen(false)}
+                                    className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={createMutation.isPending}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                    {createMutation.isPending ? 'Adding...' : 'Add Router'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* Minimal Router List */}
             <div className="space-y-4">
