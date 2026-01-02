@@ -34,11 +34,16 @@ def check_expired_subscriptions():
             # Suspend network access
             result = network_automation.suspend_customer(subscription.customer)
             
+            # Update Customer status to 'expired'
+            customer = subscription.customer
+            customer.status = 'expired'
+            customer.save()
+            
             if result['success']:
-                logger.info(f"Suspended customer: {subscription.customer.username}")
+                logger.info(f"Suspended customer: {customer.username}")
                 count += 1
             else:
-                logger.error(f"Failed to suspend {subscription.customer.username}: {result.get('error')}")
+                logger.error(f"Failed to suspend {customer.username} (Network): {result.get('error')}")
         
         except Exception as e:
             logger.error(f"Error processing subscription {subscription.id}: {str(e)}", exc_info=True)

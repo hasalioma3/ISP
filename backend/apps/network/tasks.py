@@ -190,6 +190,93 @@ def collect_usage_statistics():
             except Exception as e:
                 logger.error(f"Error fetching PPPoE stats from {router.name}: {e}")
 
+            # 3. Sync Active Sessions to DB
+            # We collected 'hotspot_active' and 'pppoe_interfaces'
+            # Let's update the ActiveSession table
+            
+            # Get list of current session IDs to track stale ones
+            current_session_ids = []
+            
+            from apps.network.models import ActiveSession
+            from apps.customers.models import Customer
+            
+            # HOTSPOT SESSIONS
+            for session in hotspot_active: # We fetched this earlier
+                 username = session.get('user')
+                 ip = session.get('address')
+                 mac = session.get('mac-address')
+                 session_id = session.get('.id')
+                 uptime_str = session.get('uptime')
+                 bytes_in = int(session.get('bytes-in', 0))
+                 bytes_out = int(session.get('bytes-out', 0))
+                 
+                 customer = Customer.objects.filter(username=username).first()
+                 if customer:
+                     obj, created = ActiveSession.objects.update_or_create(
+                         router=router,
+                         session_id=session_id,
+                         defaults={
+                             'customer': customer,
+                             'username': username,
+                             'session_type': 'hotspot',
+                             'ip_address': ip,
+                             'mac_address': mac,
+                             'upload_bytes': bytes_in, # In from Client = Upload
+                             'download_bytes': bytes_out, # Out to Client = Download
+                             'uptime_seconds': parse_mikrotik_uptime(uptime_str),
+                             'start_time': timezone.now() # Approximate if created, or keep existing?
+                             # ideally start_time should be calculated from uptime but we can accept now() for new
+                         }
+                     )
+                     if not created:
+                         # Don't overwrite start_time on update
+                         pass
+                     current_session_ids.append(session_id)
+
+            # PPPoE SESSIONS
+            # Re-fetch or use cached 'pppoe_interfaces'
+            # Note: PPPoE interfaces ID is internal ID, but session ID usually refers to the PPP Active ID.
+            # Let's fetch /ppp/active for better session data than /interface
+            try:
+                ppp_active = api.get_resource('/ppp/active').get()
+                for session in ppp_active:
+                    username = session.get('name')
+                    ip = session.get('address')
+                    mac = session.get('caller-id') # MAC
+                    session_id = session.get('.id')
+                    uptime_str = session.get('uptime')
+                    # Stats are usually on the dynamic interface
+                    # We might need to match via name if stats not in /ppp/active
+                    # But verifying presence is enough for Active list. 
+                    # For stats we can try to find interface with name <username> but sometimes it differs.
+                    
+                    customer = Customer.objects.filter(username=username).first()
+                    if customer:
+                         obj, created = ActiveSession.objects.update_or_create(
+                             router=router,
+                             session_id=session_id,
+                             defaults={
+                                 'customer': customer,
+                                 'username': username,
+                                 'session_type': 'pppoe',
+                                 'ip_address': ip,
+                                 'mac_address': mac,
+                                 # We might miss byte counters here if not in ppp/active
+                                 # checking if we can get them from interface list
+                                 'uptime_seconds': parse_mikrotik_uptime(uptime_str),
+                                 'start_time': timezone.now()
+                             }
+                         )
+                         current_session_ids.append(session_id)
+            except Exception as e:
+                logger.error(f"Error fetching PPP active: {e}")
+
+            # CLEANUP STALE SESSIONS
+            # Delete sessions for this router that are NOT in current_session_ids
+            stale_count, _ = ActiveSession.objects.filter(router=router).exclude(session_id__in=current_session_ids).delete()
+            if stale_count > 0:
+                logger.info(f"Router {router.name}: Removed {stale_count} stale sessions.")
+
             conn.disconnect()
             
         except Exception as e:
@@ -396,39 +483,4 @@ def sync_pppoe_secrets():
     except Exception as e:
         logger.error(f"Error in sync_pppoe_secrets: {e}")
 
-@shared_task
-def check_expired_subscriptions():
-    """
-    Check for expired subscriptions and suspend them
-    """
-    logger.info("Checking for expired subscriptions...")
-    try:
-        expired_subs = Subscription.objects.filter(
-            status='active',
-            expiry_date__lte=timezone.now()
-        )
-        
-        count = 0
-        for sub in expired_subs:
-            logger.info(f"Suspending expired subscription for {sub.customer.username}")
-            
-            # 1. Update DB Status
-            sub.status = 'expired'
-            sub.save()
-            
-            # 2. Trigger Network Suspension
-            # Handled by the Subscription signal we just added? 
-            # SIGNAL CHECK: We added a signal that calls suspend_customer if status is 'expired'.
-            # So sub.save() above should trigger the signal.
-            
-            # Use manual trigger just in case signal fails or to be explicit?
-            # Signal is cleaner, but let's trust the signal for now since we just verified/added it.
-            # Wait, signals run synchronously in save(). So it will run.
-            
-            count += 1
-            
-        logger.info(f"Expiration check completed. Suspended {count} subscriptions.")
-        return count
-        
-    except Exception as e:
-        logger.error(f"Error checking expired subscriptions: {e}")
+

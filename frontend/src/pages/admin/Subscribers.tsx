@@ -98,17 +98,25 @@ export default function Subscribers() {
                                             )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {format(new Date(user.created_at), 'MMM d, yyyy')}
+                                            {user.current_subscription?.expiry_date ? (
+                                                <div className="flex flex-col">
+                                                    <span>{format(new Date(user.current_subscription.expiry_date), 'MMM d, yyyy')}</span>
+                                                    <span className="text-xs text-gray-400">{format(new Date(user.current_subscription.expiry_date), 'HH:mm')}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-gray-400">-</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             KES {Number(user.account_balance).toLocaleString()}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize
-                                                ${user.status === 'active' ? 'bg-green-100 text-green-800' :
-                                                    user.status === 'expired' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}
+                                                ${(user.current_subscription?.status === 'expired' || new Date(user.current_subscription?.expiry_date) < new Date()) ? 'bg-red-100 text-red-800' :
+                                                    user.status === 'active' ? 'bg-green-100 text-green-800' :
+                                                        user.status === 'expired' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}
                                             `}>
-                                                {user.status}
+                                                {(user.current_subscription?.status === 'expired' || new Date(user.current_subscription?.expiry_date) < new Date()) ? 'expired' : user.status}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
