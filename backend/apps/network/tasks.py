@@ -150,7 +150,7 @@ def collect_usage_statistics():
                     except:
                         continue
                         
-                    session_id = session.get('.id', '')
+                    session_id = session.get('id', '')
                     mac = session.get('mac-address', '')
                     ip = session.get('address', '')
                     uptime_str = session.get('uptime', '')
@@ -182,7 +182,7 @@ def collect_usage_statistics():
                     except:
                         continue
                         
-                    session_id = iface.get('.id', '')
+                    session_id = iface.get('id', '')
                     ip = '' 
                     
                     update_usage_record(username, bytes_in, bytes_out, '', ip, session_id, 'pppoe', 0)
@@ -205,7 +205,7 @@ def collect_usage_statistics():
                  username = session.get('user')
                  ip = session.get('address')
                  mac = session.get('mac-address')
-                 session_id = session.get('.id')
+                 session_id = session.get('id')
                  uptime_str = session.get('uptime')
                  bytes_in = int(session.get('bytes-in', 0))
                  bytes_out = int(session.get('bytes-out', 0))
@@ -243,7 +243,7 @@ def collect_usage_statistics():
                     username = session.get('name')
                     ip = session.get('address')
                     mac = session.get('caller-id') # MAC
-                    session_id = session.get('.id')
+                    session_id = session.get('id')
                     uptime_str = session.get('uptime')
                     # Stats are usually on the dynamic interface
                     # We might need to match via name if stats not in /ppp/active

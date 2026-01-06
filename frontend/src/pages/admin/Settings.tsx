@@ -110,20 +110,7 @@ function RoutersTab() {
         createMutation.mutate(newRouter);
     };
 
-    const configureMutation = useMutation({
-        mutationFn: adminAPI.configureRouter,
-        onSuccess: (data) => {
-            if (data.data.success) {
-                toast.success(`Router ${data.data.router} configured successfully!`);
-            } else {
-                toast.error('Configuration finished with errors. Check console.');
-                console.error(data.data.results);
-            }
-        },
-        onError: (error: any) => {
-            toast.error(`Failed to configure router: ${error.response?.data?.error || error.message}`);
-        }
-    });
+
 
     if (isLoading) return <div className="p-4">Loading routers...</div>;
     if (isError) return <div className="p-4 text-red-600">Error loading routers: {(error as Error).message}</div>;
@@ -239,32 +226,54 @@ function RoutersTab() {
             <div className="space-y-4">
                 {routers?.length === 0 && <p className="text-gray-500 text-center py-4">No routers found.</p>}
                 {routers?.map((router: any) => (
-                    <div key={router.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
-                        <div>
-                            <p className="font-bold">{router.name}</p>
-                            <p className="text-sm text-gray-500">{router.ip_address} ({router.username})</p>
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => deleteMutation.mutate(router.id)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded"
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </button>
-                            <button
-                                onClick={() => configureMutation.mutate(router.id)}
-                                disabled={configureMutation.isPending}
-                                className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm hover:bg-green-200 disabled:opacity-50"
-                            >
-                                {configureMutation.isPending ? 'Configuring...' : 'Configure'}
-                            </button>
-                        </div>
-                    </div>
+                    <RouterRow key={router.id} router={router} onDelete={() => deleteMutation.mutate(router.id)} />
                 ))}
             </div>
         </div>
     );
 }
+
+function RouterRow({ router, onDelete }: { router: any; onDelete: () => void }) {
+    const configureMutation = useMutation({
+        mutationFn: adminAPI.configureRouter,
+        onSuccess: (data) => {
+            if (data.data.success) {
+                toast.success(`Router ${data.data.router} configured successfully!`);
+            } else {
+                toast.error('Configuration finished with errors. Check console.');
+                console.error(data.data.results);
+            }
+        },
+        onError: (error: any) => {
+            toast.error(`Failed to configure router: ${error.response?.data?.error || error.message}`);
+        }
+    });
+
+    return (
+        <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+            <div>
+                <p className="font-bold">{router.name}</p>
+                <p className="text-sm text-gray-500">{router.ip_address} ({router.username})</p>
+            </div>
+            <div className="flex gap-2">
+                <button
+                    onClick={onDelete}
+                    className="p-2 text-red-600 hover:bg-red-50 rounded"
+                >
+                    <Trash2 className="h-4 w-4" />
+                </button>
+                <button
+                    onClick={() => configureMutation.mutate(router.id)}
+                    disabled={configureMutation.isPending}
+                    className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm hover:bg-green-200 disabled:opacity-50"
+                >
+                    {configureMutation.isPending ? 'Configuring...' : 'Configure'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 
 function StaffTab() {
     const queryClient = useQueryClient();

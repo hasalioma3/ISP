@@ -249,7 +249,7 @@ class VoucherRedeemView(APIView):
                 from apps.billing.models import Subscription
                 
                 # Calculate expiry
-                expiry_date = timezone.now() + timezone.timedelta(days=voucher.plan.duration_days)
+                expiry_date = voucher.plan.calculate_expiry_date()
                 
                 Subscription.objects.create(
                     customer=customer,
@@ -313,7 +313,7 @@ class ManualSubscriptionView(APIView):
             return Response({'error': 'Invalid plan ID'}, status=status.HTTP_400_BAD_REQUEST)
             
         # Create Subscription
-        expiry_date = timezone.now() + timezone.timedelta(days=plan.duration_days) # Simplified duration logic
+        expiry_date = plan.calculate_expiry_date()
         
         subscription = Subscription.objects.create(
             customer=customer,

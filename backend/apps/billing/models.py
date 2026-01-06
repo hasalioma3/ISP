@@ -78,6 +78,20 @@ class BillingPlan(models.Model):
     def __str__(self):
         return f"{self.name} - {self.download_speed}/{self.upload_speed} Mbps - KES {self.price}"
 
+    def calculate_expiry_date(self):
+        from django.utils import timezone
+        now = timezone.now()
+        
+        if self.duration_unit == 'minutes':
+            return now + timezone.timedelta(minutes=self.duration_value)
+        elif self.duration_unit == 'hours':
+            return now + timezone.timedelta(hours=self.duration_value)
+        elif self.duration_unit == 'months':
+            # Approximation: 30 days * value
+            return now + timezone.timedelta(days=30 * self.duration_value)
+        else: # days
+            return now + timezone.timedelta(days=self.duration_value)
+
 
 class Subscription(models.Model):
     """

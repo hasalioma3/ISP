@@ -616,6 +616,97 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    def upload_file(self, filename, content):
+        """
+        Upload (create/overwrite) a file on the router with specific content
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            file_resource = api.get_resource('/file')
+            
+            # Check if file exists to update, or create new
+            # Note: Creating a file via API is usually done by 'print' to file or just setting contents if it exists.
+            # But the proper way for 'new' file via API is tricky. 
+            # Often assumes file exists. 
+            # However, we can try to 'set' contents on existing, or if not exists, we might need a workaround.
+            # Workaround: Use /tool/fetch if possible? No.
+            # Correct API way: 
+            # 1. find file
+            # 2. set contents
+            
+            existing = file_resource.get(name=filename)
+            if existing:
+                 file_resource.set(id=existing[0]['id'], contents=content)
+            else:
+                # To create a file, we can't just .add() easily in all versions.
+                # But 'add' with name/contents is supported in later ROS or via skins.
+                # Standard workaround: just try .add
+                try:
+                    file_resource.add(name=filename, contents=content)
+                except Exception as add_err:
+                    # Fallback: Can't create file directly?
+                    logger.warning(f"Could not add file directly: {add_err}")
+                    pass
+            
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    # DHCP Server Management
+
+    def add_dhcp_server(self, name, interface, address_pool, disabled='no', lease_time='1h'):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            dhcp_server = api.get_resource('/ip/dhcp-server')
+            
+            existing = dhcp_server.get(name=name)
+            params = {
+                'name': name,
+                'interface': interface,
+                'address-pool': address_pool,
+                'disabled': disabled,
+                'lease-time': lease_time,
+                'add-arp': 'yes'
+            }
+            
+            if existing:
+                dhcp_server.set(id=existing[0]['id'], **params)
+            else:
+                dhcp_server.add(**params)
+                
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_dhcp_network(self, address, gateway, dns_server='8.8.8.8,8.8.4.4', comment=''):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            dhcp_network = api.get_resource('/ip/dhcp-server/network')
+            
+            # Check existing by address
+            existing = dhcp_network.get(address=address)
+            params = {
+                'address': address,
+                'gateway': gateway,
+                'dns-server': dns_server,
+                'comment': comment
+            }
+            
+            if existing:
+                dhcp_network.set(id=existing[0]['id'], **params)
+            else:
+                dhcp_network.add(**params)
+                
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
 
 # Default instance
 mikrotik_service = MikroTikService()

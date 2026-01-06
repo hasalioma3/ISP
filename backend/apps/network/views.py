@@ -145,16 +145,67 @@ class RouterViewSet(viewsets.ModelViewSet):
         except Exception as e:
             results['steps'].append({'name': 'Hotspot Setup', 'status': 'failed', 'error': str(e)})
 
+        # 6. DHCP Server Setup
+        try:
+            # DHCP Network
+            res = mikrotik.add_dhcp_network(address='10.5.50.0/24', gateway='10.5.50.1', comment='Hotspot Network')
+            if res['success']:
+                results['steps'].append({'name': 'DHCP Network: 10.5.50.0/24', 'status': 'success'})
+            else:
+                results['steps'].append({'name': 'DHCP Network', 'status': 'failed', 'error': res.get('error')})
+
+            # DHCP Server
+            res = mikrotik.add_dhcp_server(name='hs-dhcp-1', interface='hotspot-bridge', address_pool='hs-pool-1')
+            if res['success']:
+                results['steps'].append({'name': 'DHCP Server: hs-dhcp-1', 'status': 'success'})
+            else:
+                results['steps'].append({'name': 'DHCP Server', 'status': 'failed', 'error': res.get('error')})
+        except Exception as e:
+            results['steps'].append({'name': 'DHCP Setup', 'status': 'failed', 'error': str(e)})
+
         # 6. Walled Garden
         try:
             # Generic rules
             mikrotik.add_walled_garden_host(dst_host='*.hasalioma.online', comment='ISP Billing')
+            mikrotik.add_walled_garden_host(dst_host='hotspot.hasalioma.online', comment='ISP Portal')
             mikrotik.add_walled_garden_host(dst_host='*.safaricom.co.ke', comment='MPesa')
             # M-Pesa IPs (Examples, normally detailed list)
             mikrotik.add_walled_garden_ip(dst_address='196.201.230.0/24', comment='MPesa IP')
             results['steps'].append({'name': 'Walled Garden', 'status': 'success'})
         except Exception as e:
             results['steps'].append({'name': 'Walled Garden', 'status': 'failed', 'error': str(e)})
+
+        # 7. Customize Hotspot Files (Login Page)
+        try:
+            # Wait for file system to populate default files from profile creation
+            import time
+            time.sleep(2)
+            
+            # Read local login.html content
+            import os
+            login_file_path = settings.BASE_DIR.parent / 'login.html' 
+            
+            if not os.path.exists(login_file_path):
+                login_file_path = settings.BASE_DIR / '../login.html'
+            
+            if os.path.exists(login_file_path):
+                with open(login_file_path, 'r') as f:
+                    content = f.read()
+                
+                # Upload to router
+                # Ensure we target the file inside the hotspot directory explicitly
+                res = mikrotik.upload_file(filename='hotspot/login.html', content=content)
+                if res['success']:
+                    results['steps'].append({'name': 'Upload login.html', 'status': 'success'})
+                else:
+                    results['steps'].append({'name': 'Upload login.html', 'status': 'failed', 'error': res.get('error')})
+            else:
+                results['steps'].append({'name': 'Upload login.html', 'status': 'failed', 'error': 'Local login.html not found'})
+        except Exception as e:
+            results['steps'].append({'name': 'Upload login.html', 'status': 'failed', 'error': str(e)})
+        
+        # Calculate success based on steps
+        failed = any(step['status'] == 'failed' for step in results['steps'])
         
         return Response({
             'success': not failed,

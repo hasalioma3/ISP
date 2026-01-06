@@ -81,6 +81,17 @@ celery -A isp_billing worker -l info
 celery -A isp_billing beat -l info
 ```
 
+### 🏃 Quick Start (All-in-One)
+
+After completing the installation steps above (creating venv, installing python/node dependencies), you can run the entire stack (Backend, Frontend, Celery Worker & Beat) with a single script:
+
+```bash
+chmod +x start_dev.sh  # (First time only)
+./start_dev.sh
+```
+
+This will launch all services in parallel in a single terminal. Press `Ctrl+C` to stop all of them.
+
 ## ⚙️ Configuration
 
 ### M-Pesa Configuration
