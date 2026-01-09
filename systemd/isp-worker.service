@@ -1,0 +1,14 @@
+[Unit]
+Description=Celery Worker for ISP Billing
+After=network.target
+
+[Service]
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/isp_billing/backend
+ExecStart=/home/pi/isp_billing/backend/venv/bin/celery -A isp_billing worker -l info
+Environment="SERVER_IP=192.168.88.11"
+Environment="DEBUG=False"
+
+[Install]
+WantedBy=multi-user.target

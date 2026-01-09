@@ -90,6 +90,11 @@ chmod +x start_dev.sh  # (First time only)
 ./start_dev.sh
 ```
 
+**For Windows:**
+```cmd
+start_dev.bat
+```
+
 This will launch all services in parallel in a single terminal. Press `Ctrl+C` to stop all of them.
 
 ## ⚙️ Configuration
@@ -255,7 +260,7 @@ This project is proprietary software for ISP network management.
 ## 🔧 Troubleshooting
 
 ### Hotspot Redirect Not Working
-If users are not redirected to the external portal (e.g. running on your laptop `192.168.88.13`), you must whitelist your laptop in the MikroTik Walled Garden so unauthenticated users can reach it.
+If users are not redirected to the external portal (e.g. running on your laptop `192.168.88.10`), you must whitelist your laptop in the MikroTik Walled Garden so unauthenticated users can reach it.
 
 1. Run the helper script:
 ```bash

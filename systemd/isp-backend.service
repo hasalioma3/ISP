@@ -1,0 +1,15 @@
+[Unit]
+Description=gunicorn daemon for ISP Billing
+After=network.target
+
+[Service]
+User=pi
+Group=www-data
+WorkingDirectory=/home/pi/isp_billing/backend
+ExecStart=/home/pi/isp_billing/backend/venv/bin/gunicorn --access-logfile - --workers 3 --bind unix:/run/isp-backend.sock isp_billing.wsgi:application
+Environment="SERVER_IP=192.168.88.11"
+Environment="MIKROTIK_HOST=192.168.88.1"
+Environment="DEBUG=False"
+
+[Install]
+WantedBy=multi-user.target

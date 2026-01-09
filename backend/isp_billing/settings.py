@@ -16,13 +16,14 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-key-change-in-pro
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = [h.strip() for h in config('ALLOWED_HOSTS', default='localhost,127.0.0.1,192.168.1.151,isp.hasalioma.online,192.168.88.13,admin.hasalioma.online').split(',')]
-if 'isp.hasalioma.online' not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append('isp.hasalioma.online')
-if 'admin.hasalioma.online' not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append('admin.hasalioma.online')
-if '192.168.88.13' not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append('192.168.88.13')
+# Server IP Configuration
+SERVER_IP = config('SERVER_IP', default='192.168.88.10')
+
+ALLOWED_HOSTS = [h.strip() for h in config('ALLOWED_HOSTS', default='localhost,127.0.0.1,isp.hasalioma.online,admin.hasalioma.online').split(',')]
+# Ensure SERVER_IP is in ALLOWED_HOSTS
+if SERVER_IP not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(SERVER_IP)
+    
 print(f"DEBUG: ALLOWED_HOSTS={ALLOWED_HOSTS}")
 
 # Security settings for HTTP deployment
@@ -81,13 +82,26 @@ if DEBUG:
     MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
 
 # CSRF Trusted Origins (for production HTTPS)
+# CSRF Trusted Origins (for production HTTPS)
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost',
     'http://localhost:5173',
     'http://127.0.0.1',
     'http://127.0.0.1:5173',
+    f'http://{SERVER_IP}',
+    f'http://{SERVER_IP}:5173',
     'https://isp.hasalioma.online',
     'https://admin.hasalioma.online',
+]
+
+# CORS Configuration
+# If True, the whitelist is ignored. Set to False to enforce CORS_ALLOWED_ORIGINS
+CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=True, cast=bool)
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    f"http://{SERVER_IP}:5173",
 ]
 
 ROOT_URLCONF = 'isp_billing.urls'

@@ -36,7 +36,7 @@ def update_walled_garden():
     print("--- Checking Walled Garden ---")
     mt = MikroTikService()
     
-    laptop_ip = "192.168.88.13"
+    laptop_ip = "192.168.88.10"
     
     print(f"1. Checking IP: {laptop_ip}")
     try:
