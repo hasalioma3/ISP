@@ -83,6 +83,7 @@ services:
 
 networks:
   isp_network:
+    name: isp_network
     driver: bridge
 
 volumes:

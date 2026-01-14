@@ -48,6 +48,9 @@ export const authAPI = {
 // Billing API
 export const billingAPI = {
     getPlans: () => api.get('/billing/plans/'),
+    createPlan: (data: any) => api.post('/billing/plans/', data),
+    updatePlan: (id: number, data: any) => api.put(`/billing/plans/${id}/`, data),
+    deletePlan: (id: number) => api.delete(`/billing/plans/${id}/`),
     getCurrentSubscription: () => api.get('/billing/subscriptions/current/'),
     getTransactions: () => api.get('/billing/transactions/'),
     getUsage: () => api.get('/billing/usage/'),
@@ -106,6 +109,15 @@ export const voucherAPI = {
         api.post('/billing/vouchers/generate/', data),
     redeem: (code: string) =>
         api.post('/billing/vouchers/redeem/', { code }),
+};
+
+// Core/Tenant API
+export const coreAPI = {
+    getConfig: () => api.get('/core/config/'),
+    updateConfig: (data: FormData) => api.put('/core/config/', data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+    getBranding: () => api.get('/core/branding/'),
 };
 
 export default api;

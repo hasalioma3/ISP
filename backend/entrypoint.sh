@@ -13,10 +13,18 @@ then
 fi
 
 # Run migrations
+python manage.py makemigrations core
+python manage.py makemigrations
 python manage.py migrate
 
 # Collect static files
+echo "Collecting static files..."
 python manage.py collectstatic --no-input
 
+# Debug: Check if index.html is where we expect it
+echo "Checking for index.html..."
+ls -l /app/frontend_dist/index.html || echo "index.html NOT FOUND"
+
 # Start server
+echo "Starting Gunicorn..."
 exec "$@"

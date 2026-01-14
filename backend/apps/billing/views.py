@@ -9,14 +9,20 @@ from apps.billing.serializers import (
 )
 
 
-class BillingPlanViewSet(viewsets.ReadOnlyModelViewSet):
+class BillingPlanViewSet(viewsets.ModelViewSet):
     """
     List and retrieve billing plans
-    Public endpoint - no authentication required
+    Public read access, Admin write access
     """
     queryset = BillingPlan.objects.filter(is_active=True)
     serializer_class = BillingPlanSerializer
-    permission_classes = [AllowAny]
+    
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
 
 
 class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):

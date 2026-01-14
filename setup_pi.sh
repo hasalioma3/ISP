@@ -9,7 +9,30 @@ echo "[Setup] Updating system packages..."
 sudo apt-get update
 
 echo "[Setup] Installing system dependencies..."
-sudo apt-get install -y python3-venv python3-pip python3-dev libpq-dev postgresql postgresql-contrib redis-server nginx git curl
+sudo apt-get install -y python3-venv python3-pip python3-dev libpq-dev postgresql postgresql-contrib redis-server nginx git curl lsof
+
+# Troubleshooting: Check/Kill process on port 80
+if sudo lsof -i :80; then
+    echo "[WARNING] Port 80 is in use. Attempting to free it..."
+    
+    # Check if it's docker
+    if sudo ps aux | grep -v grep | grep "docker"; then
+         echo "[Setup] Stopping Docker Service (Force)..."
+         sudo systemctl stop docker.socket
+         sudo systemctl stop docker.service
+         # Stop all running containers to free ports
+         sudo docker stop $(sudo docker ps -q) 2>/dev/null || true
+    fi
+    # Stop apache/nginx if running
+    sudo systemctl stop apache2 || true
+    sudo systemctl stop nginx || true
+    
+    # Final check
+    sudo fuser -k 80/tcp || true
+fi
+
+# Troubleshooting: List directory to confirm extraction
+ls -la
 
 # Install Node.js 18.x
 if ! command -v node &> /dev/null; then
@@ -28,6 +51,8 @@ sudo -u postgres psql -c "ALTER ROLE isp_user SET client_encoding TO 'utf8';"
 sudo -u postgres psql -c "ALTER ROLE isp_user SET default_transaction_isolation TO 'read committed';"
 sudo -u postgres psql -c "ALTER ROLE isp_user SET timezone TO 'Africa/Nairobi';"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE isp_billing TO isp_user;"
+# Fix for Postgres 15+ ownership/schema permissions
+sudo -u postgres psql -d isp_billing -c "GRANT ALL ON SCHEMA public TO isp_user;"
 
 echo "[Setup] Setting up Backend..."
 cd backend

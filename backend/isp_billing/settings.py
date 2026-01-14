@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'django_celery_results',
     
     # Local apps
+    'apps.core',
     'apps.customers',
     'apps.billing',
     'apps.payments',
@@ -70,6 +71,7 @@ if DEBUG:
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', # Add Whitenoise
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -81,7 +83,6 @@ MIDDLEWARE = [
 if DEBUG:
     MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
 
-# CSRF Trusted Origins (for production HTTPS)
 # CSRF Trusted Origins (for production HTTPS)
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost',
@@ -109,7 +110,7 @@ ROOT_URLCONF = 'isp_billing.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'frontend_dist'], # Find index.html here
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -121,6 +122,17 @@ TEMPLATES = [
         },
     },
 ]
+
+# ...
+
+# Static files (CSS, JavaScript, Images)
+STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [
+    BASE_DIR / 'frontend_dist', # Include React build assets
+]
+# Enable Whitenoise storage
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 WSGI_APPLICATION = 'isp_billing.wsgi.application'
 

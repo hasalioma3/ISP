@@ -38,7 +38,16 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+import { useEffect } from 'react';
+import { useBrandingStore } from './store/brandingStore';
+
 function App() {
+  const fetchBranding = useBrandingStore((state) => state.fetchBranding);
+
+  useEffect(() => {
+    fetchBranding();
+  }, [fetchBranding]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
