@@ -6,7 +6,7 @@ from django.urls import path, include
 from django.conf import settings
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('django-admin/', admin.site.urls),
     
     # API endpoints
     path('api/customers/', include('apps.customers.urls')),

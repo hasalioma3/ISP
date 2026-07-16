@@ -410,5 +410,189 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    # Router Provisioning (bootstrap a fresh router to serve Hotspot/PPPoE)
+
+    def add_ip_pool(self, name, ranges):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            pool = api.get_resource('/ip/pool')
+            existing = pool.get(name=name)
+            existing = [p for p in existing if p.get('id')]
+            if existing:
+                pool.set(id=existing[0]['id'], ranges=ranges)
+            else:
+                pool.add(name=name, ranges=ranges)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_interface_address(self, address, interface, comment=''):
+        """address is CIDR form e.g. '10.5.50.1/24'"""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            ip_address = api.get_resource('/ip/address')
+            existing = ip_address.get(interface=interface)
+            existing = [a for a in existing if a.get('id')]
+            same_network = [a for a in existing if a.get('address', '').split('/')[0] == address.split('/')[0]]
+            if same_network:
+                connection.disconnect()
+                return {'success': True}
+            ip_address.add(address=address, interface=interface, comment=comment)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_dhcp_server(self, name, interface, pool_name, lease_time='1h'):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            dhcp = api.get_resource('/ip/dhcp-server')
+            existing = dhcp.get(interface=interface)
+            existing = [d for d in existing if d.get('id')]
+            if existing:
+                dhcp.set(id=existing[0]['id'], name=name, **{'address-pool': pool_name, 'lease-time': lease_time, 'disabled': 'no'})
+            else:
+                dhcp.add(name=name, interface=interface, **{'address-pool': pool_name, 'lease-time': lease_time, 'disabled': 'no'})
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_dhcp_network(self, subnet, gateway, dns_servers=''):
+        """subnet is CIDR form e.g. '10.5.50.0/24'"""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            dhcp_network = api.get_resource('/ip/dhcp-server/network')
+            existing = dhcp_network.get(address=subnet)
+            existing = [n for n in existing if n.get('id')]
+            params = {'gateway': gateway}
+            if dns_servers:
+                params['dns-server'] = dns_servers
+            if existing:
+                dhcp_network.set(id=existing[0]['id'], **params)
+            else:
+                dhcp_network.add(address=subnet, **params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_hotspot_server_profile(self, name, hotspot_address, dns_name='', login_by='http-chap,cookie'):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            hs_profile = api.get_resource('/ip/hotspot/profile')
+            existing = hs_profile.get(name=name)
+            existing = [p for p in existing if p.get('id')]
+            params = {'hotspot-address': hotspot_address, 'login-by': login_by}
+            if dns_name:
+                params['dns-name'] = dns_name
+            if existing:
+                hs_profile.set(id=existing[0]['id'], **params)
+            else:
+                hs_profile.add(name=name, **params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_hotspot_server(self, name, interface, pool_name, profile_name):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            hotspot_server = api.get_resource('/ip/hotspot')
+            existing = hotspot_server.get(interface=interface)
+            existing = [h for h in existing if h.get('id')]
+            params = {'address-pool': pool_name, 'profile': profile_name, 'disabled': 'no'}
+            if existing:
+                hotspot_server.set(id=existing[0]['id'], name=name, **params)
+            else:
+                hotspot_server.add(name=name, interface=interface, **params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_pppoe_server(self, service_name, interface, default_profile='default', one_session_per_host=True):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            pppoe_server = api.get_resource('/interface/pppoe-server/server')
+            existing = pppoe_server.get(interface=interface)
+            existing = [s for s in existing if s.get('id')]
+            params = {
+                'service-name': service_name,
+                'default-profile': default_profile,
+                'one-session-per-host': 'yes' if one_session_per_host else 'no',
+                'disabled': 'no',
+            }
+            if existing:
+                pppoe_server.set(id=existing[0]['id'], **params)
+            else:
+                pppoe_server.add(interface=interface, **params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_provisioning_snapshot(self, interface, pool_names, profile_names):
+        """
+        Read the current state of every resource `provision_router` is about
+        to touch, so there's a record of what existed beforehand. Read-only.
+        """
+        snapshot = {}
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+
+            def clean(resource, **filters):
+                items = resource.get(**filters) if filters else resource.get()
+                return [i for i in items if i.get('id')]
+
+            snapshot['ip_addresses'] = clean(api.get_resource('/ip/address'), interface=interface)
+            snapshot['dhcp_servers'] = clean(api.get_resource('/ip/dhcp-server'), interface=interface)
+            snapshot['dhcp_networks'] = clean(api.get_resource('/ip/dhcp-server/network'))
+            snapshot['hotspot_servers'] = clean(api.get_resource('/ip/hotspot'), interface=interface)
+            snapshot['pppoe_servers'] = clean(api.get_resource('/interface/pppoe-server/server'), interface=interface)
+            snapshot['ip_pools'] = [
+                p for p in clean(api.get_resource('/ip/pool')) if p.get('name') in pool_names
+            ]
+            snapshot['hotspot_profiles'] = [
+                p for p in clean(api.get_resource('/ip/hotspot/profile')) if p.get('name') in profile_names
+            ]
+            snapshot['hotspot_user_profiles'] = [
+                p for p in clean(api.get_resource('/ip/hotspot/user/profile')) if p.get('name') in profile_names
+            ]
+            snapshot['ppp_profiles'] = [
+                p for p in clean(api.get_resource('/ppp/profile')) if p.get('name') in profile_names
+            ]
+            snapshot['nat_rules'] = clean(api.get_resource('/ip/firewall/nat'), chain='srcnat')
+
+            connection.disconnect()
+            return {'success': True, 'snapshot': snapshot}
+        except Exception as e:
+            logger.error(f"Failed to snapshot router before provisioning: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def add_nat_masquerade(self, src_address, comment=''):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            nat = api.get_resource('/ip/firewall/nat')
+            params = {'chain': 'srcnat', 'src-address': src_address, 'action': 'masquerade'}
+            existing = nat.get(**params)
+            existing = [n for n in existing if n.get('id')]
+            if not existing:
+                nat.add(comment=comment, **params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
 # Default instance
 mikrotik_service = MikroTikService()

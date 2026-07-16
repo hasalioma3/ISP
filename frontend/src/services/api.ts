@@ -94,6 +94,10 @@ export const adminAPI = {
     createRouter: (data: any) => api.post('/network/routers/', data),
     updateRouter: (id: number, data: any) => api.put(`/network/routers/${id}/`, data),
     deleteRouter: (id: number) => api.delete(`/network/routers/${id}/`),
+    provisionRouter: (id: number) => api.post(`/network/routers/${id}/provision/`),
+    backupRouter: (id: number) => api.post(`/network/routers/${id}/backup/`),
+    syncRouterProfiles: (id: number) => api.post(`/network/routers/${id}/sync_profiles/`),
+    syncRouterUsers: (id: number) => api.post(`/network/routers/${id}/sync_users/`),
 
     // Manual Actions
     manualSubscribe: (data: any) => api.post('/billing/manual-subscribe/', data),

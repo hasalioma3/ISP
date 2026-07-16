@@ -17,6 +17,7 @@ import Subscribers from './pages/admin/Subscribers';
 import Reports from './pages/admin/Reports';
 import Settings from './pages/admin/Settings';
 import VoucherManager from './pages/admin/VoucherManager';
+import MikroTikSync from './pages/admin/MikroTikSync';
 
 const queryClient = new QueryClient();
 
@@ -78,6 +79,7 @@ function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="vouchers" element={<VoucherManager />} />
+            <Route path="mikrotik" element={<MikroTikSync />} />
             <Route index element={<Navigate to="dashboard" />} />
           </Route>
 

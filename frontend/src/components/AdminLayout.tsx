@@ -6,6 +6,7 @@ import {
     BarChart,
     Settings,
     Ticket,
+    Router as RouterIcon,
     LogOut,
     Menu,
     X
@@ -24,6 +25,7 @@ export default function AdminLayout() {
         { name: 'Subscribers', href: '/admin/subscribers', icon: Users },
         { name: 'Reports', href: '/admin/reports', icon: BarChart },
         { name: 'Vouchers', href: '/admin/vouchers', icon: Ticket },
+        { name: 'MikroTik', href: '/admin/mikrotik', icon: RouterIcon },
         { name: 'Settings', href: '/admin/settings', icon: Settings },
     ];
 

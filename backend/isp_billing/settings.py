@@ -216,6 +216,18 @@ MIKROTIK_PASSWORD = config('MIKROTIK_PASSWORD', default='')
 MIKROTIK_PORT = config('MIKROTIK_PORT', default=8728, cast=int)
 MIKROTIK_USE_SSL = config('MIKROTIK_USE_SSL', default=False, cast=bool)
 
+# Interface that Hotspot and PPPoE servers are bound to on every router.
+# Standardize wiring/bridging across sites to this name (e.g. "bridge1")
+# so router provisioning doesn't have to guess topology per device.
+MIKROTIK_PROVISION_INTERFACE = config('MIKROTIK_PROVISION_INTERFACE', default='bridge1')
+
+# Hosts that must stay reachable to unauthenticated Hotspot clients (walled
+# garden) so they can load the captive portal and pay before logging in.
+MIKROTIK_WALLED_GARDEN_HOSTS = [
+    h.strip() for h in config('MIKROTIK_WALLED_GARDEN_HOSTS', default='isp.hasalioma.online').split(',')
+    if h.strip()
+]
+
 # RADIUS Configuration (Optional)
 RADIUS_SERVER = config('RADIUS_SERVER', default='127.0.0.1')
 RADIUS_SECRET = config('RADIUS_SECRET', default='testing123')

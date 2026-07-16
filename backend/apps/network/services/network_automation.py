@@ -3,7 +3,9 @@ Network Automation Service
 Handles automatic network access control based on payment and subscription status
 """
 
+import ipaddress
 import logging
+from django.conf import settings
 from django.utils import timezone
 from apps.network.models import PPPoESecret, HotspotUser, Router
 from apps.network.services.mikrotik_service import MikroTikService
@@ -254,11 +256,11 @@ class NetworkAutomation:
         if customer.hotspot_mac_address:
             mikrotik.disconnect_hotspot_by_mac(customer.hotspot_mac_address)
 
-    def sync_all_profiles(self):
+    def sync_all_profiles(self, router=None):
         from apps.billing.models import BillingPlan
         results = {'success': [], 'failed': []}
         plans = BillingPlan.objects.filter(is_active=True)
-        router = Router.objects.filter(is_active=True).first()
+        router = router or Router.objects.filter(is_active=True).first()
         if not router: return {'error': 'No active router configured'}
         mikrotik = MikroTikService(
             host=router.ip_address, username=router.username, 
@@ -280,11 +282,11 @@ class NetworkAutomation:
                 else: results['failed'].append(f"Hotspot: {plan.name} - {res.get('error')}")
         return results
 
-    def sync_all_users(self):
+    def sync_all_users(self, router=None):
         from apps.billing.models import Subscription
         results = {'success': [], 'failed': []}
         active_subs = Subscription.objects.filter(status='active', expiry_date__gt=timezone.now())
-        router = Router.objects.filter(is_active=True).first()
+        router = router or Router.objects.filter(is_active=True).first()
         if not router: return {'error': 'No active router configured'}
         mikrotik = MikroTikService(
             host=router.ip_address, username=router.username, 
@@ -302,6 +304,113 @@ class NetworkAutomation:
                     results['success'].append(f"Hotspot: {customer.username}")
             except Exception as e:
                 results['failed'].append(f"{customer.username}: {str(e)}")
+        return results
+
+    def snapshot_router(self, router):
+        """
+        Read-only capture of whatever currently occupies the resources
+        `provision_router` is about to write to, so there's a record to
+        manually roll back to if a provisioning run needs undoing.
+        """
+        interface = settings.MIKROTIK_PROVISION_INTERFACE
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=router.username,
+            password=router.password, port=router.port, use_ssl=router.use_ssl
+        )
+        res = mikrotik.get_provisioning_snapshot(
+            interface=interface,
+            pool_names=['hotspot_pool', 'pppoe_pool'],
+            profile_names=['default', 'hotspot_profile'],
+        )
+        if res.get('success'):
+            router.pre_provision_snapshot = res['snapshot']
+            router.pre_provision_snapshot_at = timezone.now()
+            router.save(update_fields=['pre_provision_snapshot', 'pre_provision_snapshot_at'])
+        return res
+
+    def provision_router(self, router):
+        """
+        Bootstrap a freshly-added router so it's ready to serve Hotspot and
+        PPPoE connections: IP pools, DHCP, NAT, Hotspot server + profile,
+        PPPoE server, walled garden, and existing billing-plan profiles.
+
+        Both Hotspot and PPPoE bind to the same interface
+        (settings.MIKROTIK_PROVISION_INTERFACE) so this never has to guess
+        per-site cabling/bridging.
+        """
+        results = {'success': [], 'failed': []}
+        interface = settings.MIKROTIK_PROVISION_INTERFACE
+
+        try:
+            hotspot_net = ipaddress.ip_network(router.hotspot_subnet, strict=False)
+            pppoe_net = ipaddress.ip_network(router.pppoe_subnet, strict=False)
+        except ValueError as e:
+            return {'error': f'Invalid subnet configured on router: {e}'}
+
+        hotspot_gateway = str(hotspot_net[1])
+        hotspot_pool_range = f"{hotspot_net[2]}-{hotspot_net[-2]}"
+        pppoe_gateway = str(pppoe_net[1])
+        pppoe_pool_range = f"{pppoe_net[2]}-{pppoe_net[-2]}"
+
+        # Safety net: record what's on the router before we change anything.
+        snapshot_res = self.snapshot_router(router)
+        if not snapshot_res.get('success'):
+            return {'error': f"Could not connect to snapshot router before provisioning: {snapshot_res.get('error')}"}
+
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=router.username,
+            password=router.password, port=router.port, use_ssl=router.use_ssl
+        )
+
+        def step(label, fn, *args, **kwargs):
+            res = fn(*args, **kwargs)
+            if res.get('success'):
+                results['success'].append(label)
+            else:
+                results['failed'].append(f"{label}: {res.get('error')}")
+            return res
+
+        # --- Hotspot: interface IP, pool, DHCP, server profile, server ---
+        step('Hotspot interface address', mikrotik.add_interface_address,
+             f"{hotspot_gateway}/{hotspot_net.prefixlen}", interface, comment='ISP Billing - Hotspot gateway')
+        step('Hotspot IP pool', mikrotik.add_ip_pool, 'hotspot_pool', hotspot_pool_range)
+        step('Hotspot DHCP server', mikrotik.add_dhcp_server, 'hotspot_dhcp', interface, 'hotspot_pool')
+        step('Hotspot DHCP network', mikrotik.add_dhcp_network,
+             str(hotspot_net), hotspot_gateway, dns_servers=router.dns_servers)
+        step('Hotspot default user profile', mikrotik.add_hotspot_profile, 'default')
+        step('Hotspot server profile', mikrotik.add_hotspot_server_profile,
+             'hotspot_profile', hotspot_gateway)
+        step('Hotspot server', mikrotik.add_hotspot_server,
+             'hotspot1', interface, 'hotspot_pool', 'hotspot_profile')
+
+        # --- PPPoE: pool, default profile, server ---
+        step('PPPoE IP pool', mikrotik.add_ip_pool, 'pppoe_pool', pppoe_pool_range)
+        step('PPPoE default profile', mikrotik.add_pppoe_profile, 'default')
+        step('PPPoE server', mikrotik.add_pppoe_server, 'pppoe-service', interface, default_profile='default')
+
+        # --- NAT so both subnets can reach the internet ---
+        step('NAT masquerade (Hotspot)', mikrotik.add_nat_masquerade,
+             str(hotspot_net), comment='ISP Billing - Hotspot NAT')
+        step('NAT masquerade (PPPoE)', mikrotik.add_nat_masquerade,
+             str(pppoe_net), comment='ISP Billing - PPPoE NAT')
+
+        # --- Walled garden: let unauthenticated Hotspot clients reach the portal ---
+        for host in settings.MIKROTIK_WALLED_GARDEN_HOSTS:
+            step(f'Walled garden ({host})', mikrotik.add_walled_garden_host, host, comment='ISP Billing - Portal')
+
+        # --- Push existing billing-plan profiles so plans are sellable immediately ---
+        plan_sync = self.sync_all_profiles(router=router)
+        if isinstance(plan_sync, dict) and plan_sync.get('error'):
+            results['failed'].append(f"Plan profiles: {plan_sync['error']}")
+        else:
+            results['success'].extend(plan_sync.get('success', []))
+            results['failed'].extend(plan_sync.get('failed', []))
+
+        router.provisioned = not results['failed']
+        router.provisioned_at = timezone.now()
+        router.last_sync = timezone.now()
+        router.save(update_fields=['provisioned', 'provisioned_at', 'last_sync'])
+
         return results
 
 network_automation = NetworkAutomation()

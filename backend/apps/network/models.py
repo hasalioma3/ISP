@@ -13,11 +13,32 @@ class Router(models.Model):
     password = models.CharField(max_length=100)
     port = models.IntegerField(default=8728)
     use_ssl = models.BooleanField(default=False)
-    
+
+    # Provisioning: subnets used to auto-configure this router's Hotspot/PPPoE
+    # server, IP pools, DHCP and NAT. Gateway is the first usable address in
+    # each subnet (e.g. "10.5.50.0/24" -> gateway 10.5.50.1, pool .2-.254).
+    hotspot_subnet = models.CharField(
+        max_length=20, default='10.5.50.0/24',
+        help_text="CIDR subnet for Hotspot clients, e.g. 10.5.50.0/24"
+    )
+    pppoe_subnet = models.CharField(
+        max_length=20, default='10.5.60.0/24',
+        help_text="CIDR subnet for PPPoE clients, e.g. 10.5.60.0/24"
+    )
+    dns_servers = models.CharField(max_length=100, default='8.8.8.8,8.8.4.4')
+
     # Status
     is_active = models.BooleanField(default=True)
     last_sync = models.DateTimeField(blank=True, null=True)
-    
+    provisioned = models.BooleanField(default=False)
+    provisioned_at = models.DateTimeField(blank=True, null=True)
+
+    # Snapshot of the router's resources taken immediately before the last
+    # provisioning run, so config that existed prior to our writes can be
+    # inspected/restored manually if something needs rolling back.
+    pre_provision_snapshot = models.JSONField(blank=True, null=True)
+    pre_provision_snapshot_at = models.DateTimeField(blank=True, null=True)
+
     # Metadata
     location = models.CharField(max_length=200, blank=True)
     notes = models.TextField(blank=True)

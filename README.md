@@ -114,8 +114,8 @@ MPESA_CALLBACK_URL=https://yourdomain.com/api/payments/callback/
 
 ```env
 MIKROTIK_HOST=192.168.88.1
-MIKROTIK_USERNAME=api_user
-MIKROTIK_PASSWORD=your_password
+MIKROTIK_USERNAME=admin
+MIKROTIK_PASSWORD=jazino
 MIKROTIK_PORT=8728
 ```
 
@@ -211,7 +211,7 @@ npm run build
 
 ## 📖 Admin Panel
 
-Access Django admin at `http://localhost:8000/admin/`
+Access Django admin at `http://localhost:8000/django-admin/` (or `https://<your-domain>/django-admin/` through the nginx proxy)
 
 Features:
 - Customer management

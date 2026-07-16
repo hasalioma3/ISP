@@ -5,10 +5,48 @@ from apps.network.services.network_automation import network_automation
 
 @admin.register(Router)
 class RouterAdmin(admin.ModelAdmin):
-    list_display = ['name', 'ip_address', 'is_active', 'last_sync']
-    list_filter = ['is_active', 'last_sync']
+    list_display = ['name', 'ip_address', 'is_active', 'provisioned', 'last_sync']
+    list_filter = ['is_active', 'provisioned', 'last_sync']
     search_fields = ['name', 'ip_address', 'location']
-    actions = ['sync_profiles', 'sync_active_users']
+    actions = ['backup_router', 'provision_router', 'sync_profiles', 'sync_active_users']
+
+    @admin.action(description="Backup Router Config (snapshot only, no changes)")
+    def backup_router(self, request, queryset):
+        for router in queryset:
+            try:
+                result = network_automation.snapshot_router(router)
+                if result.get('success'):
+                    self.message_user(request, f"Snapshot saved for {router.name}.", messages.SUCCESS)
+                else:
+                    self.message_user(request, f"Error backing up {router.name}: {result.get('error')}", messages.ERROR)
+            except Exception as e:
+                self.message_user(request, f"Critical error backing up {router.name}: {str(e)}", messages.ERROR)
+
+    @admin.action(description="Provision Router (full bootstrap: pools, DHCP, NAT, Hotspot/PPPoE server)")
+    def provision_router(self, request, queryset):
+        for router in queryset:
+            try:
+                result = network_automation.provision_router(router)
+                if result.get('error'):
+                    self.message_user(request, f"Error provisioning {router.name}: {result['error']}", messages.ERROR)
+                    continue
+                success_count = len(result.get('success', []))
+                failed_count = len(result.get('failed', []))
+                if failed_count > 0:
+                    errors = "; ".join(result['failed'][:3])
+                    self.message_user(
+                        request,
+                        f"Provisioned {router.name}: {success_count} steps ok, {failed_count} failed. Errors: {errors}",
+                        messages.WARNING
+                    )
+                else:
+                    self.message_user(
+                        request,
+                        f"Provisioned {router.name}: all {success_count} steps completed. Ready for Hotspot/PPPoE connections.",
+                        messages.SUCCESS
+                    )
+            except Exception as e:
+                self.message_user(request, f"Critical error provisioning {router.name}: {str(e)}", messages.ERROR)
 
     @admin.action(description="Sync Plans to MikroTik Profiles")
     def sync_profiles(self, request, queryset):
