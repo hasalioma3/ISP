@@ -78,12 +78,14 @@ MIDDLEWARE = [
 if DEBUG:
     MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
 
-# CSRF Trusted Origins (for production HTTPS)
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:8000',
-    'http://127.0.0.1:8000',
-    'https://isp.hasalioma.online'
-]
+# CSRF Trusted Origins (for production HTTPS). Django rejects any
+# session-authenticated POST (e.g. every Django admin form) whose Origin
+# isn't listed here, regardless of ALLOWED_HOSTS -- keep this in sync with
+# wherever the app is actually being accessed from.
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS',
+    default='http://localhost:8000,http://127.0.0.1:8000,https://isp.hasalioma.online'
+).split(',')
 
 ROOT_URLCONF = 'isp_billing.urls'
 
@@ -216,17 +218,30 @@ MIKROTIK_PASSWORD = config('MIKROTIK_PASSWORD', default='')
 MIKROTIK_PORT = config('MIKROTIK_PORT', default=8728, cast=int)
 MIKROTIK_USE_SSL = config('MIKROTIK_USE_SSL', default=False, cast=bool)
 
-# Interface that Hotspot and PPPoE servers are bound to on every router.
-# Standardize wiring/bridging across sites to this name (e.g. "bridge1")
-# so router provisioning doesn't have to guess topology per device.
-MIKROTIK_PROVISION_INTERFACE = config('MIKROTIK_PROVISION_INTERFACE', default='bridge1')
+# Bridge that Hotspot and PPPoE servers are bound to on every router.
+# Provisioning creates this bridge itself (if missing) and enslaves
+# MIKROTIK_PROVISION_BRIDGE_PORTS to it, so both services share one LAN-side
+# bridge without having to guess pre-existing topology per device. Ports not
+# listed here (e.g. the WAN port, or a port reserved for management access)
+# are left exactly as they are.
+MIKROTIK_PROVISION_INTERFACE = config('MIKROTIK_PROVISION_INTERFACE', default='hotspot_bridge')
+MIKROTIK_PROVISION_BRIDGE_PORTS = [
+    p.strip() for p in config('MIKROTIK_PROVISION_BRIDGE_PORTS', default='ether2,ether3,ether4,wlan1').split(',')
+    if p.strip()
+]
 
-# Hosts that must stay reachable to unauthenticated Hotspot clients (walled
-# garden) so they can load the captive portal and pay before logging in.
+# Extra hosts (beyond CAPTIVE_PORTAL_URL's own host, which is always
+# walled-gardened automatically during provisioning) that must stay
+# reachable to unauthenticated Hotspot clients. Usually not needed.
 MIKROTIK_WALLED_GARDEN_HOSTS = [
-    h.strip() for h in config('MIKROTIK_WALLED_GARDEN_HOSTS', default='isp.hasalioma.online').split(',')
+    h.strip() for h in config('MIKROTIK_WALLED_GARDEN_HOSTS', default='').split(',')
     if h.strip()
 ]
+
+# Default external captive portal URL (CaptivePortal.tsx) suggested when
+# adding/provisioning a router -- set this per environment (a LAN IP while
+# testing, the real domain once one is actually deployed and reachable).
+CAPTIVE_PORTAL_URL = config('CAPTIVE_PORTAL_URL', default='')
 
 # RADIUS Configuration (Optional)
 RADIUS_SERVER = config('RADIUS_SERVER', default='127.0.0.1')

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from apps.network.models import Router
+from apps.network.services.network_automation import validate_portal_url
 
 class RouterSerializer(serializers.ModelSerializer):
     class Meta:
@@ -12,3 +13,10 @@ class RouterSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'password': {'write_only': True}
         }
+
+    def validate_portal_url(self, value):
+        if value:
+            error = validate_portal_url(value)
+            if error:
+                raise serializers.ValidationError(error)
+        return value

@@ -1,6 +1,13 @@
+from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from apps.customers.models import Customer
+
+
+def default_portal_url():
+    """Deferred (not baked into a migration) so CAPTIVE_PORTAL_URL can be
+    changed per environment without needing a new migration."""
+    return settings.CAPTIVE_PORTAL_URL
 
 
 class Router(models.Model):
@@ -26,6 +33,14 @@ class Router(models.Model):
         help_text="CIDR subnet for PPPoE clients, e.g. 10.5.60.0/24"
     )
     dns_servers = models.CharField(max_length=100, default='8.8.8.8,8.8.4.4')
+
+    # External captive portal (the React app's /portal page) that this
+    # router's Hotspot login.html redirects unauthenticated clients to,
+    # passing along MAC/login-link so the portal can log them back in.
+    portal_url = models.CharField(
+        max_length=200, blank=True, default=default_portal_url,
+        help_text="External captive portal URL, e.g. https://yourdomain.com/portal"
+    )
 
     # Status
     is_active = models.BooleanField(default=True)

@@ -5,12 +5,59 @@ Handles automatic network access control based on payment and subscription statu
 
 import ipaddress
 import logging
+from urllib.parse import urlparse
 from django.conf import settings
 from django.utils import timezone
 from apps.network.models import PPPoESecret, HotspotUser, Router
 from apps.network.services.mikrotik_service import MikroTikService
 
 logger = logging.getLogger('apps.network')
+
+
+def validate_portal_url(url):
+    """
+    Returns an error string if `url` isn't a usable absolute URL, else None.
+    A scheme-less value (e.g. a bare IP) is silently valid JavaScript but
+    resolves as a *relative* path against whatever page is loading it --
+    the router's own gateway -- producing a broken URL instead of an error,
+    so this must be checked explicitly rather than left to fail naturally.
+    """
+    parsed = urlparse(url or '')
+    if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+        return (
+            f"Captive portal URL {url!r} must be a full URL including scheme, "
+            f"e.g. https://192.168.88.254/portal -- a bare IP or host resolves "
+            f"as a relative link off the router's own gateway and won't load."
+        )
+    return None
+
+
+def build_hotspot_login_html(portal_url):
+    """
+    RouterOS hotspot login.html: the $(...) tokens are literal text in the
+    file that RouterOS substitutes itself when serving the page to a client
+    (not Python string formatting) -- only `portal_url` is filled in here.
+    Redirects unauthenticated clients to the external captive portal
+    (CaptivePortal.tsx), passing MAC + the router's own login/orig links so
+    it can log the client back in after payment/voucher redemption.
+    """
+    return f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Connecting...</title></head>
+<body>
+<script>
+  window.location.replace(
+    "{portal_url}" +
+    "?mac=$(mac)" +
+    "&link-login=" + encodeURIComponent("$(link-login-only)") +
+    "&link-orig=" + encodeURIComponent("$(link-orig)")
+  );
+</script>
+<noscript>Please enable JavaScript, or visit {portal_url} to continue.</noscript>
+</body>
+</html>
+"""
+
 
 class NetworkAutomation:
     """
@@ -306,21 +353,25 @@ class NetworkAutomation:
                 results['failed'].append(f"{customer.username}: {str(e)}")
         return results
 
-    def snapshot_router(self, router):
+    def snapshot_router(self, router, username=None, password=None):
         """
         Read-only capture of whatever currently occupies the resources
         `provision_router` is about to write to, so there's a record to
         manually roll back to if a provisioning run needs undoing.
+
+        username/password, if given, override the router's stored
+        credentials for this call only (they are not persisted here).
         """
         interface = settings.MIKROTIK_PROVISION_INTERFACE
         mikrotik = MikroTikService(
-            host=router.ip_address, username=router.username,
-            password=router.password, port=router.port, use_ssl=router.use_ssl
+            host=router.ip_address, username=username or router.username,
+            password=password or router.password, port=router.port, use_ssl=router.use_ssl
         )
         res = mikrotik.get_provisioning_snapshot(
             interface=interface,
             pool_names=['hotspot_pool', 'pppoe_pool'],
             profile_names=['default', 'hotspot_profile'],
+            bridge_ports=settings.MIKROTIK_PROVISION_BRIDGE_PORTS,
         )
         if res.get('success'):
             router.pre_provision_snapshot = res['snapshot']
@@ -328,18 +379,31 @@ class NetworkAutomation:
             router.save(update_fields=['pre_provision_snapshot', 'pre_provision_snapshot_at'])
         return res
 
-    def provision_router(self, router):
+    def provision_router(self, router, username=None, password=None, portal_url=None):
         """
         Bootstrap a freshly-added router so it's ready to serve Hotspot and
-        PPPoE connections: IP pools, DHCP, NAT, Hotspot server + profile,
-        PPPoE server, walled garden, and existing billing-plan profiles.
+        PPPoE connections: creates settings.MIKROTIK_PROVISION_INTERFACE as a
+        bridge (if missing), enslaves settings.MIKROTIK_PROVISION_BRIDGE_PORTS
+        to it, then sets up IP pools, DHCP, NAT, Hotspot server + profile,
+        PPPoE server, walled garden, the Hotspot login.html redirect to the
+        external captive portal, and existing billing-plan profiles -- all
+        bound to that one bridge. Ports left out of
+        MIKROTIK_PROVISION_BRIDGE_PORTS (WAN, a reserved management port,
+        etc.) are never touched.
 
-        Both Hotspot and PPPoE bind to the same interface
-        (settings.MIKROTIK_PROVISION_INTERFACE) so this never has to guess
-        per-site cabling/bridging.
+        username/password, if given, override the router's stored
+        credentials for this run, and are persisted to the router once a
+        connection with them succeeds (so stored credentials can't silently
+        go stale without being noticed). portal_url, if given, likewise
+        overrides and persists router.portal_url.
         """
         results = {'success': [], 'failed': []}
         interface = settings.MIKROTIK_PROVISION_INTERFACE
+
+        effective_portal_url = portal_url or router.portal_url
+        portal_url_error = validate_portal_url(effective_portal_url)
+        if portal_url_error:
+            return {'error': portal_url_error}
 
         try:
             hotspot_net = ipaddress.ip_network(router.hotspot_subnet, strict=False)
@@ -353,13 +417,23 @@ class NetworkAutomation:
         pppoe_pool_range = f"{pppoe_net[2]}-{pppoe_net[-2]}"
 
         # Safety net: record what's on the router before we change anything.
-        snapshot_res = self.snapshot_router(router)
+        # This also verifies the credentials work before any write happens.
+        snapshot_res = self.snapshot_router(router, username=username, password=password)
         if not snapshot_res.get('success'):
-            return {'error': f"Could not connect to snapshot router before provisioning: {snapshot_res.get('error')}"}
+            return {'error': f"Could not connect to router before provisioning: {snapshot_res.get('error')}"}
+
+        if username and password:
+            router.username = username
+            router.password = password
+            router.save(update_fields=['username', 'password'])
+
+        if portal_url:
+            router.portal_url = portal_url
+            router.save(update_fields=['portal_url'])
 
         mikrotik = MikroTikService(
-            host=router.ip_address, username=router.username,
-            password=router.password, port=router.port, use_ssl=router.use_ssl
+            host=router.ip_address, username=username or router.username,
+            password=password or router.password, port=router.port, use_ssl=router.use_ssl
         )
 
         def step(label, fn, *args, **kwargs):
@@ -369,6 +443,13 @@ class NetworkAutomation:
             else:
                 results['failed'].append(f"{label}: {res.get('error')}")
             return res
+
+        # --- Bridge: create it, and enslave the configured LAN ports to it.
+        # Ports not listed (WAN, and anything reserved e.g. for management
+        # access) are left exactly as they are. ---
+        step(f'Create {interface} bridge', mikrotik.add_bridge, interface)
+        for port in settings.MIKROTIK_PROVISION_BRIDGE_PORTS:
+            step(f'Add {port} to {interface}', mikrotik.set_bridge_port, port, interface)
 
         # --- Hotspot: interface IP, pool, DHCP, server profile, server ---
         step('Hotspot interface address', mikrotik.add_interface_address,
@@ -382,6 +463,8 @@ class NetworkAutomation:
              'hotspot_profile', hotspot_gateway)
         step('Hotspot server', mikrotik.add_hotspot_server,
              'hotspot1', interface, 'hotspot_pool', 'hotspot_profile')
+        step('Hotspot login page', mikrotik.upload_file,
+             'hotspot/login.html', build_hotspot_login_html(router.portal_url))
 
         # --- PPPoE: pool, default profile, server ---
         step('PPPoE IP pool', mikrotik.add_ip_pool, 'pppoe_pool', pppoe_pool_range)
@@ -394,9 +477,23 @@ class NetworkAutomation:
         step('NAT masquerade (PPPoE)', mikrotik.add_nat_masquerade,
              str(pppoe_net), comment='ISP Billing - PPPoE NAT')
 
-        # --- Walled garden: let unauthenticated Hotspot clients reach the portal ---
-        for host in settings.MIKROTIK_WALLED_GARDEN_HOSTS:
-            step(f'Walled garden ({host})', mikrotik.add_walled_garden_host, host, comment='ISP Billing - Portal')
+        # --- Walled garden: let unauthenticated Hotspot clients reach the portal.
+        # The login page redirects to router.portal_url, so that host must be
+        # walled-gardened too, on top of whatever's configured globally.
+        #
+        # dst-host walled-garden entries only match DNS lookups -- a bare IP
+        # (no DNS involved) needs a dst-address entry instead, or it's simply
+        # never matched and the portal stays unreachable to new clients.
+        walled_garden_hosts = set(settings.MIKROTIK_WALLED_GARDEN_HOSTS)
+        portal_host = urlparse(router.portal_url).hostname
+        if portal_host:
+            walled_garden_hosts.add(portal_host)
+        for host in walled_garden_hosts:
+            try:
+                ipaddress.ip_address(host)
+                step(f'Walled garden ({host})', mikrotik.add_walled_garden_ip, host, comment='ISP Billing - Portal')
+            except ValueError:
+                step(f'Walled garden ({host})', mikrotik.add_walled_garden_host, host, comment='ISP Billing - Portal')
 
         # --- Push existing billing-plan profiles so plans are sellable immediately ---
         plan_sync = self.sync_all_profiles(router=router)

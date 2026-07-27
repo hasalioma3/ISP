@@ -252,11 +252,16 @@ class MikroTikService:
             connection = self._get_connection()
             api = connection.get_api()
             ppp_profile = api.get_resource('/ppp/profile')
-            params = {'name': name, 'local-address': '10.0.0.1', 'dns-server': '8.8.8.8,8.8.4.4'}
+            params = {'local-address': '10.0.0.1', 'dns-server': '8.8.8.8,8.8.4.4'}
             if rate_limit: params['rate-limit'] = rate_limit
             if on_up: params['on-up'] = on_up
             if on_down: params['on-down'] = on_down
-            ppp_profile.add(**params)
+            existing = ppp_profile.get(name=name)
+            existing = [p for p in existing if p.get('id')]
+            if existing:
+                ppp_profile.set(id=existing[0]['id'], **params)
+            else:
+                ppp_profile.add(name=name, **params)
             connection.disconnect()
             return {'success': True}
         except Exception as e:
@@ -287,9 +292,14 @@ class MikroTikService:
             connection = self._get_connection()
             api = connection.get_api()
             hotspot_profile = api.get_resource('/ip/hotspot/user/profile')
-            params = {'name': name, 'shared-users': '1'}
+            params = {'shared-users': '1'}
             if rate_limit: params['rate-limit'] = rate_limit
-            hotspot_profile.add(**params)
+            existing = hotspot_profile.get(name=name)
+            existing = [p for p in existing if p.get('id')]
+            if existing:
+                hotspot_profile.set(id=existing[0]['id'], **params)
+            else:
+                hotspot_profile.add(name=name, **params)
             connection.disconnect()
             return {'success': True}
         except Exception as e:
@@ -482,14 +492,14 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def add_hotspot_server_profile(self, name, hotspot_address, dns_name='', login_by='http-chap,cookie'):
+    def add_hotspot_server_profile(self, name, hotspot_address, dns_name='', login_by='http-pap,cookie', html_directory='hotspot'):
         try:
             connection = self._get_connection()
             api = connection.get_api()
             hs_profile = api.get_resource('/ip/hotspot/profile')
             existing = hs_profile.get(name=name)
             existing = [p for p in existing if p.get('id')]
-            params = {'hotspot-address': hotspot_address, 'login-by': login_by}
+            params = {'hotspot-address': hotspot_address, 'login-by': login_by, 'html-directory': html_directory}
             if dns_name:
                 params['dns-name'] = dns_name
             if existing:
@@ -540,10 +550,87 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def get_provisioning_snapshot(self, interface, pool_names, profile_names):
+    def add_bridge(self, name):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            bridge = api.get_resource('/interface/bridge')
+            existing = bridge.get(name=name)
+            existing = [b for b in existing if b.get('id')]
+            if not existing:
+                bridge.add(name=name)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def set_bridge_port(self, interface, bridge):
+        """
+        Enslave `interface` to `bridge`, moving it off whatever bridge it
+        currently belongs to (if any). Idempotent.
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            bridge_port = api.get_resource('/interface/bridge/port')
+            existing = bridge_port.get(interface=interface)
+            existing = [p for p in existing if p.get('id')]
+            if existing:
+                if existing[0].get('bridge') != bridge:
+                    bridge_port.set(id=existing[0]['id'], bridge=bridge)
+            else:
+                bridge_port.add(interface=interface, bridge=bridge)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def upload_file(self, path, contents):
+        """
+        Write a text file to the router's flash storage (e.g. a Hotspot
+        login.html). RouterOS's API `set contents=` *appends* rather than
+        overwrites, so an existing file is removed and re-added fresh each
+        time to keep this idempotent.
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            file_resource = api.get_resource('/file')
+            existing = file_resource.get(name=path)
+            existing = [f for f in existing if f.get('id')]
+            for f in existing:
+                file_resource.remove(id=f['id'])
+            file_resource.add(name=path, contents=contents)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def list_interfaces(self):
+        """Read-only: real interface names on this router, for picking the
+        correct MIKROTIK_PROVISION_INTERFACE value before provisioning."""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            interfaces = api.get_resource('/interface').get()
+            interfaces = [
+                {'name': i.get('name'), 'type': i.get('type'), 'running': i.get('running') == 'true', 'disabled': i.get('disabled') == 'true'}
+                for i in interfaces if i.get('name')
+            ]
+            connection.disconnect()
+            return {'success': True, 'interfaces': interfaces}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_provisioning_snapshot(self, interface, pool_names, profile_names, bridge_ports=None):
         """
         Read the current state of every resource `provision_router` is about
         to touch, so there's a record of what existed beforehand. Read-only.
+
+        bridge_ports, if given, records which bridge (if any) each of those
+        physical ports currently belongs to -- provisioning moves them onto
+        the new hotspot/PPPoE bridge, so this is what you'd restore to undo
+        that move manually.
         """
         snapshot = {}
         try:
@@ -554,6 +641,10 @@ class MikroTikService:
                 items = resource.get(**filters) if filters else resource.get()
                 return [i for i in items if i.get('id')]
 
+            snapshot['bridges'] = clean(api.get_resource('/interface/bridge'))
+            if bridge_ports:
+                all_ports = clean(api.get_resource('/interface/bridge/port'))
+                snapshot['bridge_ports'] = [p for p in all_ports if p.get('interface') in bridge_ports]
             snapshot['ip_addresses'] = clean(api.get_resource('/ip/address'), interface=interface)
             snapshot['dhcp_servers'] = clean(api.get_resource('/ip/dhcp-server'), interface=interface)
             snapshot['dhcp_networks'] = clean(api.get_resource('/ip/dhcp-server/network'))
@@ -572,6 +663,7 @@ class MikroTikService:
                 p for p in clean(api.get_resource('/ppp/profile')) if p.get('name') in profile_names
             ]
             snapshot['nat_rules'] = clean(api.get_resource('/ip/firewall/nat'), chain='srcnat')
+            snapshot['hotspot_login_html'] = clean(api.get_resource('/file'), name='hotspot/login.html')
 
             connection.disconnect()
             return {'success': True, 'snapshot': snapshot}

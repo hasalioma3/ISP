@@ -1,4 +1,4 @@
-version: '3.8'
+name: isp-billing
 
 services:
   backend:
@@ -25,6 +25,7 @@ services:
       dockerfile: ./frontend/Dockerfile
       args:
         VITE_API_URL: /api
+        VITE_DEFAULT_PORTAL_URL: ${CAPTIVE_PORTAL_URL:-https://isp.hasalioma.online/portal}
     ports:
       - "80:80"
       - "443:443"
@@ -87,5 +88,11 @@ networks:
 
 volumes:
   postgres_data:
+    external: true
+    name: isp_postgres_data
   static_volume:
+    external: true
+    name: isp_static_volume
   media_volume:
+    external: true
+    name: isp_media_volume

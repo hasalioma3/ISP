@@ -137,7 +137,7 @@ const CaptivePortal: React.FC = () => {
         e.preventDefault();
         setRedeeming(true);
         try {
-            const response = await voucherAPI.redeem(voucherCode);
+            const response = await voucherAPI.redeem(voucherCode, mac || undefined);
             toast.success(response.data.message);
 
             // Auto Login if tokens are present

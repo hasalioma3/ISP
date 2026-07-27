@@ -164,6 +164,7 @@ class VoucherRedeemView(APIView):
         serializer = VoucherRedeemSerializer(data=request.data)
         if serializer.is_valid():
             code = serializer.validated_data['code']
+            mac_address = serializer.validated_data.get('mac_address') or None
             
             try:
                 voucher = Voucher.objects.select_related('plan').get(code=code)
@@ -219,7 +220,9 @@ class VoucherRedeemView(APIView):
                 if voucher.plan.service_type in ['hotspot', 'both']:
                     customer.hotspot_username = customer.username
                     customer.hotspot_password = voucher.code
-                    
+                    if mac_address:
+                        customer.hotspot_mac_address = mac_address
+
                 customer.save()
                 
                 # Logic used to vary if using get_or_create, now significantly simplified for "always create new" logic requested

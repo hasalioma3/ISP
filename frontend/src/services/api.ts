@@ -67,8 +67,8 @@ export const voucherAPI = {
     getBatches: () => api.get('/billing/batches/'),
     generate: (data: { quantity: number; value: number; note?: string }) =>
         api.post('/billing/vouchers/generate/', data),
-    redeem: (code: string) =>
-        api.post('/billing/vouchers/redeem/', { code }),
+    redeem: (code: string, macAddress?: string) =>
+        api.post('/billing/vouchers/redeem/', { code, mac_address: macAddress }),
 };
 
 // Analytics API
@@ -92,12 +92,15 @@ export const adminAPI = {
     // Routers
     getRouters: () => api.get('/network/routers/'),
     createRouter: (data: any) => api.post('/network/routers/', data),
-    updateRouter: (id: number, data: any) => api.put(`/network/routers/${id}/`, data),
+    updateRouter: (id: number, data: any) => api.patch(`/network/routers/${id}/`, data),
     deleteRouter: (id: number) => api.delete(`/network/routers/${id}/`),
-    provisionRouter: (id: number) => api.post(`/network/routers/${id}/provision/`),
+    provisionRouter: (id: number, username: string, password: string, portalUrl?: string) =>
+        api.post(`/network/routers/${id}/provision/`, { username, password, portal_url: portalUrl }),
     backupRouter: (id: number) => api.post(`/network/routers/${id}/backup/`),
     syncRouterProfiles: (id: number) => api.post(`/network/routers/${id}/sync_profiles/`),
     syncRouterUsers: (id: number) => api.post(`/network/routers/${id}/sync_users/`),
+    testRouterConnection: (data: { ip_address: string; username: string; password: string; port?: number; use_ssl?: boolean }) =>
+        api.post('/network/routers/test_connection/', data),
 
     // Manual Actions
     manualSubscribe: (data: any) => api.post('/billing/manual-subscribe/', data),
