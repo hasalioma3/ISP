@@ -96,3 +96,94 @@ class RouterViewSet(viewsets.ModelViewSet):
         if result.get('error'):
             return Response(result, status=400)
         return Response(result)
+
+
+class OnlineUsersView(APIView):
+    """
+    Currently connected Hotspot/PPPoE sessions (from the ActiveSession table
+    kept fresh by the collect_usage_statistics celery task), joined with
+    each customer's current plan/expiry/payment info for the admin
+    Online Users page.
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from apps.network.models import ActiveSession
+        from apps.billing.models import Subscription, Transaction
+
+        service_type = request.query_params.get('type')
+        sessions = ActiveSession.objects.select_related('customer', 'router').order_by('-start_time')
+        if service_type in ('hotspot', 'pppoe'):
+            sessions = sessions.filter(session_type=service_type)
+
+        data = []
+        for s in sessions:
+            customer = s.customer
+            subscription = Subscription.objects.filter(
+                customer=customer, status='active'
+            ).order_by('-created_at').first()
+            transaction = Transaction.objects.filter(
+                customer=customer, status='completed'
+            ).order_by('-created_at').first()
+
+            method = '-'
+            if transaction:
+                if transaction.payment_method == 'mpesa':
+                    method = f"M-Pesa - {transaction.mpesa_receipt_number or transaction.transaction_id}"
+                elif transaction.payment_method == 'cash':
+                    method = f"Manual - {transaction.notes[:30]}" if transaction.notes else 'Manual'
+                else:
+                    method = transaction.get_payment_method_display()
+
+            data.append({
+                'session_id': s.id,
+                'customer_id': customer.id,
+                'username': s.username,
+                'plan_name': subscription.plan.name if subscription else '-',
+                'type': s.session_type,
+                'created_on': subscription.start_date if subscription else None,
+                'expires_on': subscription.expiry_date if subscription else None,
+                'method': method,
+                'router': s.router.name,
+                'status': 'online',
+                'last_seen': s.last_update,
+                'upload_gb': round(s.upload_bytes / (1024 ** 3), 2),
+                'download_gb': round(s.download_bytes / (1024 ** 3), 2),
+            })
+
+        return Response(data)
+
+    def post(self, request):
+        """Manually trigger an immediate refresh against the live routers."""
+        from apps.network.tasks import collect_usage_statistics
+        collect_usage_statistics()
+        return Response({'success': True})
+
+
+class DisconnectSessionView(APIView):
+    """Kick a currently-online user off the router (admin only)."""
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, pk):
+        from apps.network.models import ActiveSession
+
+        try:
+            session = ActiveSession.objects.select_related('router').get(pk=pk)
+        except ActiveSession.DoesNotExist:
+            return Response({'error': 'Session not found'}, status=404)
+
+        router = session.router
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=router.username,
+            password=router.password, port=router.port, use_ssl=router.use_ssl
+        )
+        if session.session_type == 'hotspot':
+            result = mikrotik.disconnect_hotspot_session(session.username)
+        else:
+            result = mikrotik.disconnect_pppoe_session(session.username)
+
+        if not result.get('success'):
+            return Response({'error': result.get('error')}, status=400)
+
+        session.delete()
+        return Response({'success': True})

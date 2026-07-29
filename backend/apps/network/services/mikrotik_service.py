@@ -247,13 +247,14 @@ class MikroTikService:
 
     # Profile Management
     
-    def add_pppoe_profile(self, name, rate_limit=None, on_up=None, on_down=None):
+    def add_pppoe_profile(self, name, rate_limit=None, remote_address=None, on_up=None, on_down=None):
         try:
             connection = self._get_connection()
             api = connection.get_api()
             ppp_profile = api.get_resource('/ppp/profile')
             params = {'local-address': '10.0.0.1', 'dns-server': '8.8.8.8,8.8.4.4'}
             if rate_limit: params['rate-limit'] = rate_limit
+            if remote_address: params['remote-address'] = remote_address
             if on_up: params['on-up'] = on_up
             if on_down: params['on-down'] = on_down
             existing = ppp_profile.get(name=name)
@@ -267,7 +268,7 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def update_pppoe_profile(self, name, rate_limit=None, on_up=None, on_down=None):
+    def update_pppoe_profile(self, name, rate_limit=None, remote_address=None, on_up=None, on_down=None):
         try:
             connection = self._get_connection()
             api = connection.get_api()
@@ -279,6 +280,7 @@ class MikroTikService:
                 return {'success': False, 'error': 'Profile not found'}
             params = {}
             if rate_limit: params['rate-limit'] = rate_limit
+            if remote_address: params['remote-address'] = remote_address
             if on_up: params['on-up'] = on_up
             if on_down: params['on-down'] = on_down
             if params: ppp_profile.set(id=profile['id'], **params)
@@ -620,6 +622,69 @@ class MikroTikService:
             connection.disconnect()
             return {'success': True, 'interfaces': interfaces}
         except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_active_sessions(self):
+        """
+        Read-only: currently connected Hotspot + PPPoE users with live byte
+        counters, for usage tracking and dashboard online-user counts.
+
+        Hotspot sessions report bytes-in/out directly on /ip/hotspot/active.
+        PPPoE sessions don't -- RouterOS exposes those on the dynamic
+        "<pppoe-USERNAME>" interface it creates while the session is up, so
+        we cross-reference /interface for rx-byte/tx-byte per username.
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+
+            hotspot_active = [
+                s for s in api.get_resource('/ip/hotspot/active').get() if s.get('id')
+            ]
+            sessions = [
+                {
+                    'service_type': 'hotspot',
+                    'session_id': s.get('id'),
+                    'username': s.get('user'),
+                    'address': s.get('address'),
+                    'mac_address': s.get('mac-address'),
+                    'uptime': s.get('uptime'),
+                    'upload_bytes': int(s.get('bytes-in', 0) or 0),
+                    'download_bytes': int(s.get('bytes-out', 0) or 0),
+                }
+                for s in hotspot_active
+            ]
+
+            ppp_active = [
+                s for s in api.get_resource('/ppp/active').get() if s.get('id')
+            ]
+            if ppp_active:
+                interfaces = api.get_resource('/interface').get()
+                iface_bytes = {}
+                for i in interfaces:
+                    name = i.get('name', '')
+                    if name.startswith('<pppoe-') and name.endswith('>'):
+                        iface_bytes[name[len('<pppoe-'):-1]] = (
+                            int(i.get('rx-byte', 0) or 0), int(i.get('tx-byte', 0) or 0)
+                        )
+                for s in ppp_active:
+                    username = s.get('name')
+                    rx, tx = iface_bytes.get(username, (0, 0))
+                    sessions.append({
+                        'service_type': 'pppoe',
+                        'session_id': s.get('id'),
+                        'username': username,
+                        'address': s.get('address'),
+                        'mac_address': s.get('caller-id'),
+                        'uptime': s.get('uptime'),
+                        'upload_bytes': rx,
+                        'download_bytes': tx,
+                    })
+
+            connection.disconnect()
+            return {'success': True, 'sessions': sessions}
+        except Exception as e:
+            logger.error(f"Failed to get active sessions: {str(e)}")
             return {'success': False, 'error': str(e)}
 
     def get_provisioning_snapshot(self, interface, pool_names, profile_names, bridge_ports=None):

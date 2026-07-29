@@ -1,27 +1,48 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { adminAPI } from '../../services/api';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { format } from 'date-fns';
+import SubscriberDetailModal from '../../components/SubscriberDetailModal';
+
+type SortField = 'account_balance' | 'calculated_expiry';
 
 export default function Subscribers() {
-    const [searchTerm, setSearchTerm] = useState('');
+    const [urlParams] = useSearchParams();
+    const [searchTerm, setSearchTerm] = useState(urlParams.get('search') || '');
+    const [serviceFilter, setServiceFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [sortField, setSortField] = useState<SortField | ''>('');
+    const [sortDesc, setSortDesc] = useState(true);
+    const [selectedId, setSelectedId] = useState<number | null>(null);
 
     const { data: subscribers, isLoading, isError, error } = useQuery({
-        queryKey: ['admin-subscribers', searchTerm],
+        queryKey: ['admin-subscribers', searchTerm, serviceFilter, statusFilter, sortField, sortDesc],
         queryFn: async () => {
-            console.log('Fetching subscribers with term:', searchTerm);
-            try {
-                const res = await adminAPI.getSubscribers(searchTerm);
-                console.log('Subscribers res:', res);
-                // Handle DRF pagination
-                return res.data.results || res.data;
-            } catch (err) {
-                console.error('Subscribers fetch error:', err);
-                throw err;
-            }
+            const res = await adminAPI.getSubscribers({
+                search: searchTerm || undefined,
+                service_type: serviceFilter || undefined,
+                status: statusFilter || undefined,
+                ordering: sortField ? `${sortDesc ? '-' : ''}${sortField}` : undefined,
+            });
+            return res.data.results || res.data;
         }
     });
+
+    const toggleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortDesc(!sortDesc);
+        } else {
+            setSortField(field);
+            setSortDesc(true);
+        }
+    };
+
+    const SortIcon = ({ field }: { field: SortField }) => {
+        if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 text-gray-300" />;
+        return sortDesc ? <ArrowDown className="h-3 w-3 ml-1" /> : <ArrowUp className="h-3 w-3 ml-1" />;
+    };
 
     return (
         <div>
@@ -39,6 +60,38 @@ export default function Subscribers() {
                 </div>
             </div>
 
+            <div className="flex flex-wrap gap-3 mb-4">
+                <select
+                    value={serviceFilter}
+                    onChange={(e) => setServiceFilter(e.target.value)}
+                    className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                    <option value="">All Services</option>
+                    <option value="pppoe">PPPoE</option>
+                    <option value="hotspot">Hotspot</option>
+                    <option value="both">Both</option>
+                </select>
+                <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="suspended">Suspended</option>
+                    <option value="expired">Expired</option>
+                    <option value="pending">Pending</option>
+                </select>
+                {(serviceFilter || statusFilter || sortField) && (
+                    <button
+                        onClick={() => { setServiceFilter(''); setStatusFilter(''); setSortField(''); }}
+                        className="text-sm text-blue-600 hover:text-blue-800 px-2"
+                    >
+                        Clear filters
+                    </button>
+                )}
+            </div>
+
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -46,8 +99,18 @@ export default function Subscribers() {
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Calculated Expiry</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
+                                <th
+                                    onClick={() => toggleSort('calculated_expiry')}
+                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700"
+                                >
+                                    <span className="flex items-center">Calculated Expiry <SortIcon field="calculated_expiry" /></span>
+                                </th>
+                                <th
+                                    onClick={() => toggleSort('account_balance')}
+                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700"
+                                >
+                                    <span className="flex items-center">Balance <SortIcon field="account_balance" /></span>
+                                </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                             </tr>
                         </thead>
@@ -75,7 +138,11 @@ export default function Subscribers() {
                                 </tr>
                             ) : (
                                 subscribers?.map((user: any) => (
-                                    <tr key={user.id} className="hover:bg-gray-50 transition">
+                                    <tr
+                                        key={user.id}
+                                        onClick={() => setSelectedId(user.id)}
+                                        className="hover:bg-gray-50 transition cursor-pointer"
+                                    >
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="text-sm font-medium text-gray-900">{user.username}</div>
                                             <div className="text-sm text-gray-500">{user.full_name}</div>
@@ -90,11 +157,7 @@ export default function Subscribers() {
                                             )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {/* Note: Customer model doesn't have expiry, Subscription does. 
-                                                If we want expiry here, we need to fetch it or include in CustomerSerializer 
-                                                For now showing created_at or Account Status
-                                            */}
-                                            {format(new Date(user.created_at), 'MMM d, yyyy')}
+                                            {user.calculated_expiry ? format(new Date(user.calculated_expiry), 'MMM d, yyyy') : '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             KES {Number(user.account_balance).toLocaleString()}
@@ -114,6 +177,10 @@ export default function Subscribers() {
                     </table>
                 </div>
             </div>
+
+            {selectedId !== null && (
+                <SubscriberDetailModal id={selectedId} onClose={() => setSelectedId(null)} />
+            )}
         </div>
     );
 }

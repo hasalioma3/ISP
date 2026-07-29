@@ -67,3 +67,23 @@ class Customer(AbstractUser):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip() or self.username
+
+
+class LoginActivity(models.Model):
+    """
+    Successful login events, for the admin dashboard's Recent Activity feed.
+    """
+    customer = models.ForeignKey(
+        Customer, on_delete=models.CASCADE, related_name='login_activities'
+    )
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'login_activities'
+        ordering = ['-created_at']
+        verbose_name = _('Login Activity')
+        verbose_name_plural = _('Login Activities')
+
+    def __str__(self):
+        return f"{self.customer.username} logged in at {self.created_at}"

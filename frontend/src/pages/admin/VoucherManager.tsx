@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { voucherAPI, billingAPI } from '../../services/api';
-import { Plus, Download, Loader2 } from 'lucide-react';
+import { Plus, Eye, X, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
 export default function VoucherManager() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [genParams, setGenParams] = useState({ quantity: 10, plan_id: '' });
+    const [viewingBatch, setViewingBatch] = useState<any>(null);
 
     const queryClient = useQueryClient();
 
@@ -47,31 +48,15 @@ export default function VoucherManager() {
         generateMutation.mutate(genParams);
     };
 
-    const handleExport = (batch: any) => {
-        if (!batch.vouchers || batch.vouchers.length === 0) {
-            toast.error('No vouchers found in this batch');
-            return;
-        }
+    const handleCopyAll = (batch: any) => {
+        const codes = (batch.vouchers || []).map((v: any) => v.code).join('\n');
+        navigator.clipboard.writeText(codes);
+        toast.success('Codes copied to clipboard');
+    };
 
-        const csvContent = [
-            ['Code', 'Plan', 'Amount', 'Status', 'Expiry'],
-            ...batch.vouchers.map((v: any) => [
-                v.code,
-                batch.plan_name || 'N/A',
-                v.amount,
-                v.status,
-                v.expiry_date || 'Never'
-            ])
-        ].map(e => e.join(',')).join('\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', `vouchers_batch_${batch.id}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    const handleCopyCode = (code: string) => {
+        navigator.clipboard.writeText(code);
+        toast.success('Code copied');
     };
 
     return (
@@ -171,10 +156,10 @@ export default function VoucherManager() {
                                 </td>
                                 <td className="px-6 py-4 text-right text-sm font-medium">
                                     <button
-                                        onClick={() => handleExport(batch)}
+                                        onClick={() => setViewingBatch(batch)}
                                         className="text-blue-600 hover:text-blue-900 flex items-center justify-end w-full"
                                     >
-                                        <Download className="h-4 w-4 mr-1" /> Export
+                                        <Eye className="h-4 w-4 mr-1" /> View Codes
                                     </button>
                                 </td>
                             </tr>
@@ -182,6 +167,62 @@ export default function VoucherManager() {
                     </tbody>
                 </table>
             </div>
+
+            {viewingBatch && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+                        <div className="flex justify-between items-center p-6 border-b">
+                            <div>
+                                <h3 className="text-lg font-bold">Batch #{viewingBatch.id} Codes</h3>
+                                <p className="text-sm text-gray-500">
+                                    {viewingBatch.plan_name || `KES ${viewingBatch.value}`} &middot; {viewingBatch.quantity} vouchers
+                                </p>
+                            </div>
+                            <button onClick={() => setViewingBatch(null)} className="p-1 text-gray-400 hover:text-gray-600">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
+                            {(viewingBatch.vouchers || []).map((v: any) => (
+                                <div key={v.id} className="flex items-center justify-between px-6 py-3">
+                                    <div>
+                                        <p className="font-mono font-medium text-gray-900">{v.code}</p>
+                                        <p className="text-xs text-gray-400">
+                                            {v.expiry_date ? `Expires ${format(new Date(v.expiry_date), 'MMM d, yyyy')}` : 'No expiry'}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize
+                                            ${v.status === 'active' ? 'bg-green-100 text-green-800' :
+                                                v.status === 'used' ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-800'}`}>
+                                            {v.status}
+                                        </span>
+                                        <button onClick={() => handleCopyCode(v.code)} className="text-gray-400 hover:text-blue-600">
+                                            <Copy className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="p-4 border-t flex justify-end gap-2">
+                            <button
+                                onClick={() => handleCopyAll(viewingBatch)}
+                                className="flex items-center px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium"
+                            >
+                                <Copy className="h-4 w-4 mr-2" /> Copy All Codes
+                            </button>
+                            <button
+                                onClick={() => setViewingBatch(null)}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

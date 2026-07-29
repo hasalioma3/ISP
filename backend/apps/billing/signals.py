@@ -32,9 +32,25 @@ from apps.network.services.network_automation import network_automation
 @receiver(post_save, sender=Subscription)
 def sync_subscription_on_save(sender, instance, created, **kwargs):
     """
-    Trigger network automation when a Subscription is created or updated
+    Trigger network automation when a Subscription is created or updated,
+    and keep Customer.status in sync with it -- Customer has no expiry of
+    its own, so this is the only place that status reflects reality. Only
+    applied when this is the customer's most recent subscription, so an
+    older one expiring can't clobber a newer active one's status.
     """
+    is_latest = not Subscription.objects.filter(
+        customer=instance.customer, created_at__gt=instance.created_at
+    ).exists()
+
     if instance.status == 'active' and not instance.is_expired:
         network_automation.activate_customer(instance.customer, instance.plan)
+        if is_latest and instance.customer.status != 'active':
+            instance.customer.status = 'active'
+            instance.customer.save(update_fields=['status'])
     elif instance.status in ['expired', 'cancelled', 'suspended']:
         network_automation.suspend_customer(instance.customer)
+        if is_latest:
+            new_status = 'suspended' if instance.status == 'cancelled' else instance.status
+            if instance.customer.status != new_status:
+                instance.customer.status = new_status
+                instance.customer.save(update_fields=['status'])

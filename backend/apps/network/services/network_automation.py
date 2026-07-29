@@ -180,8 +180,14 @@ class NetworkAutomation:
         # Ensure we sync to router regardless of whether created locally or not
         # If created locally, we definitely add.
         # If existing locally, we update. BUT if missing on router, update fails, so we must add.
-        
-        # Check if update is actually needed (optimization & stability)
+
+        # needs_update tracks whether anything *locally recorded* changed --
+        # used below to decide whether to interrupt an already-connected
+        # session. It must NOT be used to skip the router push itself: local
+        # DB state can drift from what's actually on the router (a prior
+        # sync failure, a manual change on the router, an expiry/resubscribe
+        # cycle, etc), so every activation always re-confirms the enabled
+        # state on the router rather than trusting the local record.
         needs_update = False
         if not created:
              if pppoe_secret.profile != plan.mikrotik_profile:
@@ -191,10 +197,6 @@ class NetworkAutomation:
              # If status was disabled locally, we need to re-enable
              if pppoe_secret.status != 'enabled':
                  needs_update = True
-
-        if not created and not needs_update:
-             # Nothing changed, skip router interaction to prevent disconnects
-             return
 
         success = False
         if not created:
@@ -229,9 +231,12 @@ class NetworkAutomation:
         pppoe_secret.router = router
         pppoe_secret.synced_to_router = True
         pppoe_secret.save()
-        
-        # Reset session only if we touched the router
-        mikrotik.disconnect_pppoe_session(pppoe_secret.username)
+
+        # Only interrupt an existing session if something actually changed
+        # (or we just (re)created the secret) -- otherwise leave an
+        # already-working connection alone.
+        if needs_update or created:
+            mikrotik.disconnect_pppoe_session(pppoe_secret.username)
     
     def _activate_hotspot(self, customer, plan, router, mikrotik):
         hotspot_user, created = HotspotUser.objects.get_or_create(
@@ -246,7 +251,13 @@ class NetworkAutomation:
             }
         )
 
-        # Check if update is actually needed
+        # needs_update tracks whether anything *locally recorded* changed --
+        # used below to decide whether to interrupt an already-connected
+        # session. It must NOT be used to skip the router push itself: local
+        # DB state can drift from what's actually on the router (a prior
+        # sync failure, a manual change on the router, an expiry/resubscribe
+        # cycle, etc), so every activation always re-confirms the enabled
+        # state on the router rather than trusting the local record.
         needs_update = False
         if not created:
             if hotspot_user.profile != plan.mikrotik_profile:
@@ -259,9 +270,6 @@ class NetworkAutomation:
                 needs_update = True
             if hotspot_user.status != 'enabled':
                 needs_update = True
-        
-        if not created and not needs_update:
-             return
 
         success = False
         if not created:
@@ -298,10 +306,13 @@ class NetworkAutomation:
         hotspot_user.synced_to_router = True
         hotspot_user.save()
 
-        # Only disconnect if we made changes
-        mikrotik.disconnect_hotspot_session(hotspot_user.username)
-        if customer.hotspot_mac_address:
-            mikrotik.disconnect_hotspot_by_mac(customer.hotspot_mac_address)
+        # Only interrupt an existing session if something actually changed
+        # (or we just (re)created the user) -- otherwise leave an
+        # already-working connection alone.
+        if needs_update or created:
+            mikrotik.disconnect_hotspot_session(hotspot_user.username)
+            if customer.hotspot_mac_address:
+                mikrotik.disconnect_hotspot_by_mac(customer.hotspot_mac_address)
 
     def sync_all_profiles(self, router=None):
         from apps.billing.models import BillingPlan
@@ -316,9 +327,9 @@ class NetworkAutomation:
         for plan in plans:
             rate_limit = f"{plan.upload_speed}M/{plan.download_speed}M"
             if plan.service_type in ['pppoe', 'both']:
-                res = mikrotik.update_pppoe_profile(plan.mikrotik_profile, rate_limit)
+                res = mikrotik.update_pppoe_profile(plan.mikrotik_profile, rate_limit, remote_address='pppoe_pool')
                 if not res['success'] and 'not found' in res.get('error', ''):
-                    res = mikrotik.add_pppoe_profile(plan.mikrotik_profile, rate_limit)
+                    res = mikrotik.add_pppoe_profile(plan.mikrotik_profile, rate_limit, remote_address='pppoe_pool')
                 if res['success']: results['success'].append(f"PPPoE: {plan.name}")
                 else: results['failed'].append(f"PPPoE: {plan.name} - {res.get('error')}")
             if plan.service_type in ['hotspot', 'both']:
@@ -468,7 +479,7 @@ class NetworkAutomation:
 
         # --- PPPoE: pool, default profile, server ---
         step('PPPoE IP pool', mikrotik.add_ip_pool, 'pppoe_pool', pppoe_pool_range)
-        step('PPPoE default profile', mikrotik.add_pppoe_profile, 'default')
+        step('PPPoE default profile', mikrotik.add_pppoe_profile, 'default', remote_address='pppoe_pool')
         step('PPPoE server', mikrotik.add_pppoe_server, 'pppoe-service', interface, default_profile='default')
 
         # --- NAT so both subnets can reach the internet ---

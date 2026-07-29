@@ -32,6 +32,8 @@ const CaptivePortal: React.FC = () => {
     const [message, setMessage] = useState('Checking connection status...');
     const [voucherCode, setVoucherCode] = useState('');
     const [redeeming, setRedeeming] = useState(false);
+    const [mpesaCode, setMpesaCode] = useState('');
+    const [reactivating, setReactivating] = useState(false);
 
     // Guest Checkout State
     const [plans, setPlans] = useState<Plan[]>([]);
@@ -167,6 +169,21 @@ const CaptivePortal: React.FC = () => {
         }
     };
 
+    const handleReactivate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setReactivating(true);
+        try {
+            const response = await paymentAPI.reactivateSession(mpesaCode, mac || undefined);
+            toast.success(response.data.message);
+            doLogin(response.data.username, response.data.password);
+            setMpesaCode('');
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Failed to reactivate session');
+        } finally {
+            setReactivating(false);
+        }
+    };
+
     const handleBuyPlan = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedPlan || !phoneNumber) return;
@@ -253,6 +270,27 @@ const CaptivePortal: React.FC = () => {
                                 {redeeming ? <Loader className="animate-spin h-5 w-5" /> : 'Redeem'}
                             </button>
                         </form>
+                    </div>
+
+                    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                        <h3 className="text-white font-medium mb-3 text-sm uppercase tracking-wider text-gray-400">Already Paid? Reconnect</h3>
+                        <form onSubmit={handleReactivate} className="flex gap-2">
+                            <input
+                                type="text"
+                                placeholder="Enter M-Pesa Code"
+                                value={mpesaCode}
+                                onChange={(e) => setMpesaCode(e.target.value)}
+                                className="flex-1 bg-gray-900 border border-gray-600 rounded-lg p-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition uppercase"
+                            />
+                            <button
+                                type="submit"
+                                disabled={reactivating}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-6 rounded-lg font-bold disabled:opacity-50 transition"
+                            >
+                                {reactivating ? <Loader className="animate-spin h-5 w-5" /> : 'Reconnect'}
+                            </button>
+                        </form>
+                        <p className="text-xs text-gray-500 mt-2">Already have an active plan but got disconnected? Enter the M-Pesa code from your payment SMS.</p>
                     </div>
 
                     <button

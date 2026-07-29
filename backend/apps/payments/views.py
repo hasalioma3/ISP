@@ -145,6 +145,71 @@ def initiate_payment(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reactivate_session(request):
+    """
+    Let a Hotspot user who already paid (but whose session dropped, or who's
+    reconnecting on a device the router doesn't currently recognize)
+    reconnect using the M-Pesa code from their original payment instead of
+    paying again. Looks up the completed Transaction by receipt number,
+    confirms the subscription it paid for is still active, rebinds the
+    given MAC to that customer, and pushes them back onto the router.
+    """
+    from django.utils import timezone
+    from apps.billing.models import Transaction, Subscription
+    from apps.network.services.network_automation import network_automation
+
+    mpesa_code = (request.data.get('mpesa_code') or '').strip()
+    mac_address = request.data.get('mac_address')
+
+    if not mpesa_code:
+        return Response({'error': 'M-Pesa code is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    transaction = Transaction.objects.filter(
+        mpesa_receipt_number__iexact=mpesa_code, status='completed'
+    ).select_related('customer').order_by('-created_at').first()
+
+    if not transaction:
+        return Response({
+            'error': 'M-Pesa code not found. Double-check the code from your payment SMS.'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    customer = transaction.customer
+
+    subscription = Subscription.objects.filter(
+        customer=customer, status='active', expiry_date__gt=timezone.now()
+    ).order_by('-expiry_date').first()
+
+    if not subscription:
+        return Response({
+            'error': 'The subscription from this payment has expired. Please buy a new plan.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    if subscription.plan.service_type not in ['hotspot', 'both']:
+        return Response({
+            'error': 'This payment was for a PPPoE plan, not Hotspot -- log in via your PPPoE client instead.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    if mac_address:
+        customer.hotspot_mac_address = mac_address
+        customer.save(update_fields=['hotspot_mac_address'])
+
+    result = network_automation.activate_customer(customer, subscription.plan)
+    if not result.get('success'):
+        logger.error(f"Reactivation failed for {customer.username}: {result.get('error')}")
+        return Response({
+            'error': f"Could not reactivate your session: {result.get('error')}"
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response({
+        'success': True,
+        'message': f'Session reactivated! You are on {subscription.plan.name}.',
+        'username': customer.hotspot_username or customer.username,
+        'password': customer.hotspot_password or customer.username,
+    })
+
+
 @csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])

@@ -18,6 +18,7 @@ import Reports from './pages/admin/Reports';
 import Settings from './pages/admin/Settings';
 import VoucherManager from './pages/admin/VoucherManager';
 import MikroTikSync from './pages/admin/MikroTikSync';
+import OnlineUsers from './pages/admin/OnlineUsers';
 
 const queryClient = new QueryClient();
 
@@ -76,6 +77,7 @@ function App() {
           >
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="subscribers" element={<Subscribers />} />
+            <Route path="online-users" element={<OnlineUsers />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="vouchers" element={<VoucherManager />} />

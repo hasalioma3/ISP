@@ -60,6 +60,8 @@ export const paymentAPI = {
     getPaymentStatus: (paymentRequestId: number) =>
         api.get(`/payments/status/${paymentRequestId}/`),
     getPaymentRequests: () => api.get('/payments/requests/'),
+    reactivateSession: (mpesaCode: string, macAddress?: string) =>
+        api.post('/payments/reactivate/', { mpesa_code: mpesaCode, mac_address: macAddress }),
 };
 
 // Voucher API
@@ -74,14 +76,25 @@ export const voucherAPI = {
 // Analytics API
 export const analyticsAPI = {
     getDashboardStats: () => api.get('/analytics/dashboard/'),
+    getDashboardExtra: () => api.get('/analytics/dashboard/extra/'),
     getIncomeReport: (params?: any) => api.get('/analytics/income/', { params }),
     getUsageReport: () => api.get('/analytics/usage/'),
+    getUsageChart: () => api.get('/analytics/usage-chart/'),
+    getExpiringToday: (page: number, pageSize?: number) =>
+        api.get('/analytics/expiring-today/', { params: { page, page_size: pageSize } }),
+    getRecentActivity: () => api.get('/analytics/recent-activity/'),
 };
 
 // Admin Management API
 export const adminAPI = {
     // Subscribers
-    getSubscribers: (search?: string) => api.get('/customers/subscribers/', { params: { search } }),
+    getSubscribers: (params?: { search?: string; service_type?: string; status?: string; ordering?: string }) =>
+        api.get('/customers/subscribers/', { params }),
+    getSubscriber: (id: number) => api.get(`/customers/subscribers/${id}/`),
+    updateSubscriber: (id: number, data: any) => api.patch(`/customers/subscribers/${id}/`, data),
+    getSubscriberUsage: (id: number) => api.get(`/customers/subscribers/${id}/usage/`),
+    topUpSubscriber: (id: number, planId: number) =>
+        api.post(`/customers/subscribers/${id}/topup/`, { plan_id: planId }),
 
     // Staff
     getStaff: () => api.get('/customers/staff/'),
@@ -101,6 +114,11 @@ export const adminAPI = {
     syncRouterUsers: (id: number) => api.post(`/network/routers/${id}/sync_users/`),
     testRouterConnection: (data: { ip_address: string; username: string; password: string; port?: number; use_ssl?: boolean }) =>
         api.post('/network/routers/test_connection/', data),
+
+    // Online Users
+    getOnlineUsers: (type?: 'hotspot' | 'pppoe') => api.get('/network/online-users/', { params: { type } }),
+    syncOnlineUsers: () => api.post('/network/online-users/'),
+    disconnectUser: (sessionId: number) => api.post(`/network/online-users/${sessionId}/disconnect/`),
 
     // Manual Actions
     manualSubscribe: (data: any) => api.post('/billing/manual-subscribe/', data),

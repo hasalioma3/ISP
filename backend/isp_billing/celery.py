@@ -26,6 +26,10 @@ app.conf.beat_schedule = {
         'task': 'apps.payments.tasks.cleanup_pending_payments',
         'schedule': crontab(minute='*/30'),  # Run every 30 minutes
     },
+    'collect-usage-statistics': {
+        'task': 'apps.network.tasks.collect_usage_statistics',
+        'schedule': crontab(minute='*/5'),  # Run every 5 minutes
+    },
 }
 
 @app.task(bind=True)

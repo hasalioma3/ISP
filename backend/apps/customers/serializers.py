@@ -39,12 +39,18 @@ class CustomerRegistrationSerializer(serializers.ModelSerializer):
 
 class CustomerSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
-    
+    # Only populated when the queryset annotates it (SubscriberViewSet) --
+    # the latest active subscription's expiry_date, since Customer itself
+    # has no expiry field of its own.
+    calculated_expiry = serializers.DateTimeField(read_only=True)
+
     class Meta:
         model = Customer
         fields = ['id', 'username', 'email', 'phone_number', 'first_name', 'last_name',
                   'full_name', 'service_type', 'status', 'account_balance', 'is_verified',
-                  'pppoe_username', 'hotspot_username', 'created_at', 'is_staff', 'is_superuser']
+                  'pppoe_username', 'hotspot_username', 'hotspot_mac_address',
+                  'address', 'id_number', 'notes', 'created_at', 'is_staff', 'is_superuser',
+                  'calculated_expiry']
         read_only_fields = ['id', 'status', 'account_balance', 'is_verified', 'created_at', 'is_staff', 'is_superuser']
 
 class StaffSerializer(serializers.ModelSerializer):

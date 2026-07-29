@@ -9,12 +9,20 @@ import {
     Router as RouterIcon,
     LogOut,
     Menu,
-    X
+    X,
+    Search,
+    Zap,
+    ChevronDown,
+    UsersRound,
+    Radio,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 export default function AdminLayout() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const quickActionsRef = useRef<HTMLDivElement>(null);
     const location = useLocation();
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
@@ -23,15 +31,39 @@ export default function AdminLayout() {
     const navigation = [
         { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
         { name: 'Subscribers', href: '/admin/subscribers', icon: Users },
+        { name: 'Online Users', href: '/admin/online-users', icon: Radio },
         { name: 'Reports', href: '/admin/reports', icon: BarChart },
         { name: 'Vouchers', href: '/admin/vouchers', icon: Ticket },
         { name: 'MikroTik', href: '/admin/mikrotik', icon: RouterIcon },
         { name: 'Settings', href: '/admin/settings', icon: Settings },
     ];
 
+    const quickActions = [
+        { name: 'Generate Vouchers', icon: Ticket, href: '/admin/vouchers' },
+        { name: 'Manage Subscribers', icon: UsersRound, href: '/admin/subscribers' },
+        { name: 'Add / Provision Router', icon: RouterIcon, href: '/admin/mikrotik' },
+    ];
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (quickActionsRef.current && !quickActionsRef.current.contains(e.target as Node)) {
+                setIsQuickActionsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const handleLogout = () => {
         logout();
         navigate('/login');
+    };
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (searchTerm.trim()) {
+            navigate(`/admin/subscribers?search=${encodeURIComponent(searchTerm.trim())}`);
+        }
     };
 
     return (
@@ -46,13 +78,13 @@ export default function AdminLayout() {
 
             {/* Sidebar */}
             <div className={`
-        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white shadow-xl transform transition-transform duration-200 ease-in-out
+        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-gray-900 shadow-xl transform transition-transform duration-200 ease-in-out
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
                 <div className="h-full flex flex-col">
-                    <div className="p-6 border-b">
-                        <h1 className="text-2xl font-bold text-blue-600">ISP Admin</h1>
-                        <p className="text-sm text-gray-500">Welcome, {user?.first_name}</p>
+                    <div className="p-6 border-b border-gray-800">
+                        <h1 className="text-2xl font-bold text-blue-400">ISP Admin</h1>
+                        <p className="text-sm text-gray-400">Welcome, {user?.first_name}</p>
                     </div>
 
                     <nav className="flex-1 p-4 space-y-1">
@@ -66,8 +98,8 @@ export default function AdminLayout() {
                                     className={`
                     flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors
                     ${isActive
-                                            ? 'bg-blue-50 text-blue-700'
-                                            : 'text-gray-700 hover:bg-gray-50'
+                                            ? 'bg-blue-600/20 text-blue-400'
+                                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                                         }
                   `}
                                 >
@@ -78,10 +110,10 @@ export default function AdminLayout() {
                         })}
                     </nav>
 
-                    <div className="p-4 border-t">
+                    <div className="p-4 border-t border-gray-800">
                         <button
                             onClick={handleLogout}
-                            className="flex items-center w-full px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            className="flex items-center w-full px-4 py-3 text-sm font-medium text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                         >
                             <LogOut className="h-5 w-5 mr-3" />
                             Sign Out
@@ -92,15 +124,62 @@ export default function AdminLayout() {
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                {/* Mobile Header */}
-                <div className="lg:hidden bg-white shadow-sm p-4 flex items-center justify-between">
-                    <h1 className="text-xl font-bold text-gray-800">ISP Admin</h1>
-                    <button
-                        onClick={() => setIsSidebarOpen(true)}
-                        className="p-2 -mr-2 text-gray-600 hover:text-gray-900"
-                    >
-                        <Menu className="h-6 w-6" />
-                    </button>
+                {/* Top Bar */}
+                <div className="bg-gray-900 text-white shadow-sm flex items-center justify-between px-4 lg:px-6 py-3 gap-4">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <button
+                            onClick={() => setIsSidebarOpen(true)}
+                            className="p-2 -ml-2 text-gray-300 hover:text-white lg:hidden"
+                        >
+                            <Menu className="h-6 w-6" />
+                        </button>
+                        <form onSubmit={handleSearch} className="hidden sm:block max-w-xs w-full">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Search users..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-9 pr-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <Search className="absolute left-2.5 top-2 h-4 w-4 text-gray-500" />
+                            </div>
+                        </form>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <div className="relative" ref={quickActionsRef}>
+                            <button
+                                onClick={() => setIsQuickActionsOpen(!isQuickActionsOpen)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-medium"
+                            >
+                                <Zap className="h-4 w-4 text-yellow-400" />
+                                <span className="hidden sm:inline">Quick Actions</span>
+                                <ChevronDown className="h-3.5 w-3.5" />
+                            </button>
+                            {isQuickActionsOpen && (
+                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-100 py-1 z-50">
+                                    {quickActions.map((action) => (
+                                        <button
+                                            key={action.name}
+                                            onClick={() => { navigate(action.href); setIsQuickActionsOpen(false); }}
+                                            className="w-full flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                                        >
+                                            <action.icon className="h-4 w-4 mr-2.5 text-gray-400" />
+                                            {action.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-gray-700">
+                            <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold">
+                                {(user?.first_name || 'A')[0].toUpperCase()}
+                            </div>
+                            <span className="text-sm text-gray-300">{user?.first_name || 'Administrator'}</span>
+                        </div>
+                    </div>
                 </div>
 
                 <main className="flex-1 overflow-y-auto p-4 lg:p-8">

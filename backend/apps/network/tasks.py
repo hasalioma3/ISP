@@ -1,117 +1,160 @@
 
+import re
 from celery import shared_task
+from django.db.models import F
 from django.utils import timezone
 from apps.network.services.network_automation import network_automation
-from apps.network.services.mikrotik_service import MikroTikService, mikrotik_service
+from apps.network.services.mikrotik_service import MikroTikService
 from apps.billing.models import UsageRecord, Subscription
 import logging
 
 logger = logging.getLogger('apps.network')
 
+UPTIME_RE = re.compile(r'(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?')
+
+
+def parse_uptime_seconds(uptime):
+    """Best-effort parse of RouterOS uptime strings like '1w2d3h4m5s'."""
+    if not uptime:
+        return 0
+    m = UPTIME_RE.fullmatch(uptime)
+    if not m:
+        return 0
+    w, d, h, mi, s = (int(g) if g else 0 for g in m.groups())
+    return w * 604800 + d * 86400 + h * 3600 + mi * 60 + s
+
+
 @shared_task
 def collect_usage_statistics():
     """
-    Collect usage statistics from MikroTik Router
-    Runs periodically (e.g. every 10-30 minutes)
+    Collect live usage statistics (bytes in/out) from every active router's
+    connected Hotspot + PPPoE sessions, and refresh the ActiveSession table
+    (used for online-user counts on the admin dashboard). Scheduled
+    periodically in celery.py.
     """
+    from apps.customers.models import Customer
+    from apps.network.models import Router, ActiveSession
+
     logger.info("Starting usage statistics collection...")
-    
+    total_updated = 0
+
+    for router in Router.objects.filter(is_active=True):
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=router.username,
+            password=router.password, port=router.port, use_ssl=router.use_ssl
+        )
+        res = mikrotik.get_active_sessions()
+        if not res.get('success'):
+            logger.error(f"Usage collection failed for router {router.name}: {res.get('error')}")
+            continue
+
+        seen_session_ids = []
+        for session in res['sessions']:
+            session_id = session.get('session_id')
+            upload_raw = session['upload_bytes']
+            download_raw = session['download_bytes']
+
+            # Delta since the last poll of *this* session_id. RouterOS
+            # resets byte counters to 0 on reconnect, which mints a new
+            # session_id -- so a missing/reset previous row means the raw
+            # counter itself is all-new usage, not that nothing happened.
+            delta_up, delta_down = upload_raw, download_raw
+            if session_id:
+                prev = ActiveSession.objects.filter(router=router, session_id=session_id).first()
+                if prev:
+                    delta_up = upload_raw - prev.upload_bytes if upload_raw >= prev.upload_bytes else upload_raw
+                    delta_down = download_raw - prev.download_bytes if download_raw >= prev.download_bytes else download_raw
+
+            if update_usage_record(
+                session['username'], delta_up, delta_down,
+                session['mac_address'], session['address'], router.ip_address
+            ):
+                total_updated += 1
+
+            if not session_id:
+                continue
+            seen_session_ids.append(session_id)
+            customer = Customer.objects.filter(username=session['username']).first()
+            if not customer:
+                continue
+            ActiveSession.objects.update_or_create(
+                router=router, session_id=session_id,
+                defaults={
+                    'customer': customer,
+                    'session_type': session['service_type'],
+                    'username': session['username'],
+                    'ip_address': session['address'] or '0.0.0.0',
+                    'mac_address': session['mac_address'] or None,
+                    'upload_bytes': upload_raw,
+                    'download_bytes': download_raw,
+                    'uptime_seconds': parse_uptime_seconds(session.get('uptime')),
+                    'start_time': timezone.now() - timezone.timedelta(seconds=parse_uptime_seconds(session.get('uptime'))),
+                }
+            )
+
+        # Sessions that ended since the last run are no longer in the live
+        # list -- drop them so online-user counts stay accurate.
+        ActiveSession.objects.filter(router=router).exclude(session_id__in=seen_session_ids).delete()
+
+    logger.info(f"Usage statistics collection completed. {total_updated} sessions updated.")
+
+def update_usage_record(username, delta_upload, delta_download, mac, ip, router_ip=''):
+    """
+    Add this poll's byte delta onto today's UsageRecord for a customer, so
+    usage persists across disconnect/reconnect instead of being overwritten
+    by the new session's reset-to-zero counters. Returns True if a record
+    was created/updated, False otherwise.
+    """
+    if delta_upload <= 0 and delta_download <= 0:
+        return False
+
     try:
-        conn = mikrotik_service._get_connection()
-        api = conn.get_api()
-        
-        # 1. Fetch Hotspot Active Users
-        hotspot_active = api.get_resource('/ip/hotspot/active').get()
-        
-        # 2. Fetch PPPoE Active Connections
-        ppp_active = api.get_resource('/ppp/active').get()
-        
-        # Process Hotspot Users
-        for session in hotspot_active:
-            username = session.get('user')
-            bytes_in = int(session.get('bytes-in', 0)) # Upload from client perspective
-            bytes_out = int(session.get('bytes-out', 0)) # Download
-            uptime = session.get('uptime', '')
-            mac = session.get('mac-address', '')
-            ip = session.get('address', '')
-            
-            # Find active subscription
-            update_usage_record(username, bytes_in, bytes_out, mac, ip)
-
-        # Process PPPoE Users
-        for session in ppp_active:
-            username = session.get('name')
-            # PPPoE stats might need different handling depending on MikroTik version/accounting
-            # Standard /ppp/active often lacks byte counters, might need /interface
-            # But let's check simple params first.
-            # If not in active, we might need Interim-Updates via RADIUS, but for API:
-            # We can check specific interface stats if needed.
-            # For now, let's assume standard byte counters if available or skip.
-            pass
-
-        conn.disconnect()
-        logger.info("Usage statistics collection completed.")
-        
-    except Exception as e:
-        logger.error(f"Failed to collect usage stats: {e}")
-
-def update_usage_record(username, upload, download, mac, ip):
-    try:
-        # Find active subscription for this user
-        # Note: username in MikroTik might be phone number or "Phone_MAC"
-        
-        # Try finding customer by username (which handles the Phone_MAC case too if stored as username)
         from apps.customers.models import Customer
         customer = Customer.objects.filter(username=username).first()
-        
+
         if not customer:
             logger.warning(f"Usage collection: Customer not found for {username}")
-            return
+            return False
 
         subscription = Subscription.objects.filter(
-            customer=customer, 
+            customer=customer,
             status='active'
         ).last()
-        
-        if not subscription:
-            return
 
-        # Use MAC + IP as a pseudo-session key if true session ID isn't available
-        # Ideally, MikroTik 'id' field changes on reconnect.
-        # Let's try to match a record created recently (within last hour) for this user/subscription
-        
-        # Calculate duration from uptime? 
-        # For now, let's just create/update a daily record to keep it simple and aggregatable.
+        if not subscription:
+            return False
+
+        # One accumulating record per customer per day per source IP.
         today = timezone.now().date()
-        
-        # Check for existing record for today
+
         usage_record = UsageRecord.objects.filter(
             customer=customer,
             subscription=subscription,
             created_at__date=today,
             framed_ip_address=ip
         ).first()
-        
+
         if usage_record:
-            # Update existing record
-            usage_record.upload_bytes = upload
-            usage_record.download_bytes = download
-            usage_record.save()
+            UsageRecord.objects.filter(pk=usage_record.pk).update(
+                upload_bytes=F('upload_bytes') + delta_upload,
+                download_bytes=F('download_bytes') + delta_download,
+            )
         else:
-           # Create new record for today
-           UsageRecord.objects.create(
+            UsageRecord.objects.create(
                 customer=customer,
                 subscription=subscription,
-                upload_bytes=upload,
-                download_bytes=download,
+                upload_bytes=delta_upload,
+                download_bytes=delta_download,
                 session_time_seconds=0,
                 start_time=timezone.now(),
-                nas_ip_address='192.168.88.1',
-                framed_ip_address=ip
-           )
-        
+                nas_ip_address=router_ip or None,
+                framed_ip_address=ip or None
+            )
+        return True
+
     except Exception as e:
         logger.error(f"Error updating usage for {username}: {e}")
+        return False
 
 @shared_task
 def sync_plan_to_routers(plan_id):

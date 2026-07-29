@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { adminAPI, billingAPI } from '../../services/api';
-import { Plus, Trash2, Edit2, UserPlus, Server, Users as UsersIcon, CreditCard } from 'lucide-react';
+import { Users as UsersIcon, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Settings() {
-    const [activeTab, setActiveTab] = useState('routers');
+    const [activeTab, setActiveTab] = useState('staff');
 
     return (
         <div>
@@ -14,16 +14,6 @@ export default function Settings() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[500px]">
                 {/* Tabs */}
                 <div className="flex border-b">
-                    <button
-                        onClick={() => setActiveTab('routers')}
-                        className={`flex items-center px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'routers'
-                            ? 'border-blue-500 text-blue-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                            }`}
-                    >
-                        <Server className="h-4 w-4 mr-2" />
-                        Routers
-                    </button>
                     <button
                         onClick={() => setActiveTab('staff')}
                         className={`flex items-center px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'staff'
@@ -48,7 +38,6 @@ export default function Settings() {
 
                 {/* Content */}
                 <div className="p-6">
-                    {activeTab === 'routers' && <RoutersTab />}
                     {activeTab === 'staff' && <StaffTab />}
                     {activeTab === 'manual' && <ManualUserTab />}
                 </div>
@@ -57,62 +46,7 @@ export default function Settings() {
     );
 }
 
-function RoutersTab() {
-    const queryClient = useQueryClient();
-    const { data: routers, isLoading, isError, error } = useQuery({
-        queryKey: ['routers'],
-        queryFn: async () => {
-            const res = await adminAPI.getRouters();
-            return res.data.results || res.data;
-        }
-    });
-
-    const deleteMutation = useMutation({
-        mutationFn: adminAPI.deleteRouter,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['routers'] });
-            toast.success('Router deleted');
-        }
-    });
-
-    if (isLoading) return <div className="p-4">Loading routers...</div>;
-    if (isError) return <div className="p-4 text-red-600">Error loading routers: {(error as Error).message}</div>;
-
-    return (
-        <div>
-            <div className="flex justify-between mb-4">
-                <h3 className="text-lg font-bold">Network Routers</h3>
-                <button className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-                    <Plus className="h-4 w-4 mr-2" /> Add Router
-                </button>
-            </div>
-
-            {/* Minimal Router List */}
-            <div className="space-y-4">
-                {routers?.length === 0 && <p className="text-gray-500 text-center py-4">No routers found.</p>}
-                {routers?.map((router: any) => (
-                    <div key={router.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
-                        <div>
-                            <p className="font-bold">{router.name}</p>
-                            <p className="text-sm text-gray-500">{router.ip_address} ({router.username})</p>
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => deleteMutation.mutate(router.id)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded"
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </button>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
 function StaffTab() {
-    const queryClient = useQueryClient();
     const { data: staff, isLoading } = useQuery({
         queryKey: ['staff'],
         queryFn: async () => {
@@ -121,16 +55,10 @@ function StaffTab() {
         }
     });
 
-    // Placeholder for add staff logic (modal needed)
-
     return (
         <div>
-            <div className="flex justify-between mb-4">
-                <h3 className="text-lg font-bold">Staff Directory</h3>
-                <button className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-                    <UserPlus className="h-4 w-4 mr-2" /> Add Staff
-                </button>
-            </div>
+            <h3 className="text-lg font-bold mb-4">Staff Directory</h3>
+            {isLoading && <p className="text-gray-500 text-center py-4">Loading...</p>}
             <div className="space-y-4">
                 {staff?.map((user: any) => (
                     <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
