@@ -1,11 +1,24 @@
-import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { adminAPI, billingAPI } from '../../services/api';
-import { Users as UsersIcon, CreditCard } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { adminAPI, billingAPI, siteSettingsAPI } from '../../services/api';
+import { Users as UsersIcon, CreditCard, Plus, Pencil, Trash2, X, Copy, ShieldCheck, Image as ImageIcon, Building2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useSiteSettings } from '../../hooks/useSiteSettings';
+
+const ROLES = [
+    { value: 'admin', label: 'Admin' },
+    { value: 'technician', label: 'Technician' },
+    { value: 'sales', label: 'Sales Person' },
+];
+
+const ROLE_BADGE: Record<string, string> = {
+    admin: 'bg-purple-100 text-purple-800',
+    technician: 'bg-blue-100 text-blue-800',
+    sales: 'bg-emerald-100 text-emerald-800',
+};
 
 export default function Settings() {
-    const [activeTab, setActiveTab] = useState('staff');
+    const [activeTab, setActiveTab] = useState('branding');
 
     return (
         <div>
@@ -14,6 +27,16 @@ export default function Settings() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[500px]">
                 {/* Tabs */}
                 <div className="flex border-b">
+                    <button
+                        onClick={() => setActiveTab('branding')}
+                        className={`flex items-center px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'branding'
+                            ? 'border-blue-500 text-blue-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            }`}
+                    >
+                        <Building2 className="h-4 w-4 mr-2" />
+                        General Settings
+                    </button>
                     <button
                         onClick={() => setActiveTab('staff')}
                         className={`flex items-center px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'staff'
@@ -32,12 +55,13 @@ export default function Settings() {
                             }`}
                     >
                         <CreditCard className="h-4 w-4 mr-2" />
-                        Manual User
+                        Manual Customer
                     </button>
                 </div>
 
                 {/* Content */}
                 <div className="p-6">
+                    {activeTab === 'branding' && <BrandingTab />}
                     {activeTab === 'staff' && <StaffTab />}
                     {activeTab === 'manual' && <ManualUserTab />}
                 </div>
@@ -46,7 +70,106 @@ export default function Settings() {
     );
 }
 
+function BrandingTab() {
+    const queryClient = useQueryClient();
+    const { data: siteSettings } = useSiteSettings();
+    const [companyName, setCompanyName] = useState('');
+    const [logoFile, setLogoFile] = useState<File | null>(null);
+    const [logoPreview, setLogoPreview] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (siteSettings) setCompanyName(siteSettings.company_name);
+    }, [siteSettings]);
+
+    const updateMutation = useMutation({
+        mutationFn: () => siteSettingsAPI.update({
+            company_name: companyName,
+            ...(logoFile ? { logo: logoFile } : {}),
+        }),
+        onSuccess: () => {
+            toast.success('Branding updated');
+            queryClient.invalidateQueries({ queryKey: ['site-settings'] });
+            setLogoFile(null);
+            setLogoPreview(null);
+        },
+        onError: () => toast.error('Failed to update branding')
+    });
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setLogoFile(file);
+        setLogoPreview(URL.createObjectURL(file));
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        updateMutation.mutate();
+    };
+
+    const displayedLogo = logoPreview || siteSettings?.logo;
+
+    return (
+        <div className="max-w-xl">
+            <h3 className="text-lg font-bold mb-1">Company Branding</h3>
+            <p className="text-sm text-gray-500 mb-4">
+                Shown in the admin sidebar header and used as the browser tab icon (favicon).
+            </p>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+                    <input
+                        type="text" required
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={companyName}
+                        onChange={e => setCompanyName(e.target.value)}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Shown next to the logo in the sidebar header.</p>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Logo</label>
+                    <div className="flex items-center gap-4">
+                        <div className="h-16 w-16 rounded-lg border bg-gray-50 flex items-center justify-center overflow-hidden">
+                            {displayedLogo ? (
+                                <img src={displayedLogo} alt="Logo preview" className="h-full w-full object-contain" />
+                            ) : (
+                                <ImageIcon className="h-6 w-6 text-gray-300" />
+                            )}
+                        </div>
+                        <div>
+                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="px-3 py-2 border rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                Choose file
+                            </button>
+                            <p className="text-xs text-gray-500 mt-1">PNG or SVG recommended, square works best.</p>
+                        </div>
+                    </div>
+                </div>
+                <button
+                    type="submit"
+                    disabled={updateMutation.isPending}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                    {updateMutation.isPending ? 'Saving...' : 'Save Branding'}
+                </button>
+            </form>
+        </div>
+    );
+}
+
 function StaffTab() {
+    const queryClient = useQueryClient();
+    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
+    const [form, setForm] = useState({
+        username: '', email: '', first_name: '', last_name: '', phone_number: '', password: '', role: 'sales',
+    });
+
     const { data: staff, isLoading } = useQuery({
         queryKey: ['staff'],
         queryFn: async () => {
@@ -55,21 +178,141 @@ function StaffTab() {
         }
     });
 
+    const resetForm = () => {
+        setForm({ username: '', email: '', first_name: '', last_name: '', phone_number: '', password: '', role: 'sales' });
+        setEditingId(null);
+        setIsFormOpen(false);
+    };
+
+    const createMutation = useMutation({
+        mutationFn: (data: any) => adminAPI.createStaff(data),
+        onSuccess: () => {
+            toast.success('Staff member created');
+            queryClient.invalidateQueries({ queryKey: ['staff'] });
+            resetForm();
+        },
+        onError: (err: any) => toast.error(err.response?.data?.username?.[0] || err.response?.data?.detail || 'Failed to create staff member')
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: ({ id, data }: { id: number; data: any }) => adminAPI.updateStaff(id, data),
+        onSuccess: () => {
+            toast.success('Staff member updated');
+            queryClient.invalidateQueries({ queryKey: ['staff'] });
+            resetForm();
+        },
+        onError: () => toast.error('Failed to update staff member')
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (id: number) => adminAPI.deleteStaff(id),
+        onSuccess: () => {
+            toast.success('Staff member removed');
+            queryClient.invalidateQueries({ queryKey: ['staff'] });
+        },
+        onError: () => toast.error('Failed to remove staff member')
+    });
+
+    const openEdit = (user: any) => {
+        setForm({
+            username: user.username, email: user.email || '', first_name: user.first_name || '',
+            last_name: user.last_name || '', phone_number: user.phone_number || '', password: '', role: user.role || 'sales',
+        });
+        setEditingId(user.id);
+        setIsFormOpen(true);
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const payload: any = { ...form };
+        if (!payload.password) delete payload.password;
+        if (editingId) {
+            updateMutation.mutate({ id: editingId, data: payload });
+        } else {
+            createMutation.mutate(payload);
+        }
+    };
+
     return (
         <div>
-            <h3 className="text-lg font-bold mb-4">Staff Directory</h3>
+            <div className="flex justify-between mb-4">
+                <h3 className="text-lg font-bold">Staff Directory</h3>
+                <button
+                    onClick={() => { resetForm(); setIsFormOpen(true); }}
+                    className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                >
+                    <Plus className="h-4 w-4 mr-2" /> Add Staff
+                </button>
+            </div>
+
+            {isFormOpen && (
+                <form onSubmit={handleSubmit} className="bg-gray-50 border rounded-lg p-4 mb-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-sm">{editingId ? 'Edit Staff Member' : 'New Staff Member'}</h4>
+                        <button type="button" onClick={resetForm} className="text-gray-400 hover:text-gray-600">
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <input required disabled={!!editingId} placeholder="Username" className="border rounded-lg px-3 py-2 text-sm disabled:bg-gray-100"
+                            value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} />
+                        <input type="email" placeholder="Email" className="border rounded-lg px-3 py-2 text-sm"
+                            value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+                        <input placeholder="First Name" className="border rounded-lg px-3 py-2 text-sm"
+                            value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} />
+                        <input placeholder="Last Name" className="border rounded-lg px-3 py-2 text-sm"
+                            value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} />
+                        <input placeholder="Phone Number" className="border rounded-lg px-3 py-2 text-sm"
+                            value={form.phone_number} onChange={e => setForm({ ...form, phone_number: e.target.value })} />
+                        <select className="border rounded-lg px-3 py-2 text-sm" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
+                            {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                        </select>
+                        <input type="password" placeholder={editingId ? 'New Password (optional)' : 'Password'} required={!editingId}
+                            className="border rounded-lg px-3 py-2 text-sm col-span-2"
+                            value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={createMutation.isPending || updateMutation.isPending}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                    >
+                        {editingId ? 'Save Changes' : 'Create Staff Member'}
+                    </button>
+                </form>
+            )}
+
             {isLoading && <p className="text-gray-500 text-center py-4">Loading...</p>}
-            <div className="space-y-4">
+            <div className="space-y-3">
+                {staff?.length === 0 && <p className="text-gray-500 text-center py-4">No staff members yet.</p>}
                 {staff?.map((user: any) => (
                     <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
                         <div>
-                            <p className="font-bold">{user.username}</p>
-                            <p className="text-sm text-gray-500">{user.email || 'No email'}</p>
+                            <p className="font-bold">{user.username} {user.first_name && `(${user.first_name} ${user.last_name})`}</p>
+                            <p className="text-sm text-gray-500">{user.email || 'No email'} &middot; {user.phone_number || 'No phone'}</p>
                         </div>
-                        <div className="flex gap-2">
-                            <span className="px-2 py-1 bg-gray-100 rounded text-xs">
-                                {user.is_superuser ? 'Superuser' : 'Staff'}
-                            </span>
+                        <div className="flex items-center gap-2">
+                            {user.is_superuser ? (
+                                <span className="flex items-center px-2 py-1 bg-gray-800 text-white rounded text-xs">
+                                    <ShieldCheck className="h-3 w-3 mr-1" /> Superuser
+                                </span>
+                            ) : (
+                                <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${ROLE_BADGE[user.role] || 'bg-gray-100 text-gray-800'}`}>
+                                    {user.role}
+                                </span>
+                            )}
+                            {!user.is_superuser && (
+                                <>
+                                    <button onClick={() => openEdit(user)} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded">
+                                        <Pencil className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => { if (confirm(`Remove staff member ${user.username}?`)) deleteMutation.mutate(user.id); }}
+                                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 ))}
@@ -79,7 +322,12 @@ function StaffTab() {
 }
 
 function ManualUserTab() {
-    const [formData, setFormData] = useState({ username: '', plan_id: '', password: '', phone_number: '' });
+    const [formData, setFormData] = useState({
+        username: '', first_name: '', last_name: '', phone_number: '', email: '',
+        password: '', plan_id: '', service_type: 'pppoe',
+    });
+    const [issuedCredentials, setIssuedCredentials] = useState<any>(null);
+
     const { data: plans } = useQuery({
         queryKey: ['plans'],
         queryFn: async () => {
@@ -90,51 +338,101 @@ function ManualUserTab() {
 
     const createMutation = useMutation({
         mutationFn: adminAPI.manualSubscribe,
-        onSuccess: () => {
-            toast.success('User activated successfully');
-            setFormData({ username: '', plan_id: '', password: '', phone_number: '' });
+        onSuccess: (res) => {
+            toast.success(res.data.message || 'Customer activated successfully');
+            if (res.data.credentials) {
+                setIssuedCredentials(res.data.credentials);
+            }
+            setFormData({ username: '', first_name: '', last_name: '', phone_number: '', email: '', password: '', plan_id: '', service_type: 'pppoe' });
         },
         onError: (err: any) => {
-            toast.error('Failed to create user');
+            toast.error(err.response?.data?.error || 'Failed to create customer');
         }
     });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        setIssuedCredentials(null);
         createMutation.mutate(formData);
+    };
+
+    const copyCredentials = () => {
+        if (!issuedCredentials) return;
+        const text = [
+            `Portal login: ${issuedCredentials.portal_username} / ${issuedCredentials.portal_password}`,
+            issuedCredentials.pppoe_username && `PPPoE login: ${issuedCredentials.pppoe_username} / ${issuedCredentials.pppoe_password}`,
+            issuedCredentials.hotspot_username && `Hotspot login: ${issuedCredentials.hotspot_username} / ${issuedCredentials.hotspot_password}`,
+        ].filter(Boolean).join('\n');
+        navigator.clipboard.writeText(text);
+        toast.success('Credentials copied');
     };
 
     return (
         <div className="max-w-md">
-            <h3 className="text-lg font-bold mb-4">Manual Subscription Activation</h3>
+            <h3 className="text-lg font-bold mb-1">Create PPPoE / Hotspot Customer</h3>
+            <p className="text-sm text-gray-500 mb-4">
+                Create a customer manually and activate a plan for them (e.g. cash payment). If the username doesn't
+                already exist, a new account is created and login credentials are issued below.
+            </p>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                    <input
-                        type="text"
-                        required
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={formData.username}
-                        onChange={e => setFormData({ ...formData, username: e.target.value })}
-                    />
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                        <input
+                            type="text" required
+                            className="w-full border rounded-lg px-3 py-2"
+                            value={formData.username}
+                            onChange={e => setFormData({ ...formData, username: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+                        <select
+                            className="w-full border rounded-lg px-3 py-2"
+                            value={formData.service_type}
+                            onChange={e => setFormData({ ...formData, service_type: e.target.value })}
+                        >
+                            <option value="pppoe">PPPoE</option>
+                            <option value="hotspot">Hotspot</option>
+                            <option value="both">Both</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                        <input type="text" className="w-full border rounded-lg px-3 py-2"
+                            value={formData.first_name} onChange={e => setFormData({ ...formData, first_name: e.target.value })} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                        <input type="text" className="w-full border rounded-lg px-3 py-2"
+                            value={formData.last_name} onChange={e => setFormData({ ...formData, last_name: e.target.value })} />
+                    </div>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                    <input
-                        type="password"
-                        required
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={formData.password}
-                        onChange={e => setFormData({ ...formData, password: e.target.value })}
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone (Optional)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
                     <input
                         type="text"
                         className="w-full border rounded-lg px-3 py-2"
                         value={formData.phone_number}
                         onChange={e => setFormData({ ...formData, phone_number: e.target.value })}
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email (Optional)</label>
+                    <input
+                        type="email"
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={formData.email}
+                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Password (leave blank to auto-generate)</label>
+                    <input
+                        type="text"
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={formData.password}
+                        onChange={e => setFormData({ ...formData, password: e.target.value })}
                     />
                 </div>
                 <div>
@@ -159,6 +457,27 @@ function ManualUserTab() {
                     {createMutation.isPending ? 'Activating...' : 'Create & Activate'}
                 </button>
             </form>
+
+            {issuedCredentials && (
+                <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-2">
+                        <h4 className="font-bold text-sm text-blue-900">Issued Credentials</h4>
+                        <button onClick={copyCredentials} className="flex items-center text-xs text-blue-700 hover:text-blue-900">
+                            <Copy className="h-3 w-3 mr-1" /> Copy
+                        </button>
+                    </div>
+                    <div className="text-sm space-y-1 font-mono">
+                        <p>Portal: {issuedCredentials.portal_username} / {issuedCredentials.portal_password}</p>
+                        {issuedCredentials.pppoe_username && (
+                            <p>PPPoE: {issuedCredentials.pppoe_username} / {issuedCredentials.pppoe_password}</p>
+                        )}
+                        {issuedCredentials.hotspot_username && (
+                            <p>Hotspot: {issuedCredentials.hotspot_username} / {issuedCredentials.hotspot_password}</p>
+                        )}
+                    </div>
+                    <p className="text-xs text-blue-700 mt-2">This is shown once -- copy it now to hand to the customer.</p>
+                </div>
+            )}
         </div>
     );
 }

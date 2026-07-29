@@ -15,8 +15,11 @@ import {
     ChevronDown,
     UsersRound,
     Radio,
+    Package,
+    Database,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import { useSiteSettings } from '../hooks/useSiteSettings';
 
 export default function AdminLayout() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -27,22 +30,30 @@ export default function AdminLayout() {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
     const user = useAuthStore((state) => state.user);
+    const { data: siteSettings } = useSiteSettings();
 
-    const navigation = [
+    // Undefined `roles` means visible to every staff role. Superusers
+    // always see everything regardless of role.
+    const allNavigation = [
         { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
         { name: 'Subscribers', href: '/admin/subscribers', icon: Users },
-        { name: 'Online Users', href: '/admin/online-users', icon: Radio },
-        { name: 'Reports', href: '/admin/reports', icon: BarChart },
-        { name: 'Vouchers', href: '/admin/vouchers', icon: Ticket },
-        { name: 'MikroTik', href: '/admin/mikrotik', icon: RouterIcon },
-        { name: 'Settings', href: '/admin/settings', icon: Settings },
+        { name: 'Online Users', href: '/admin/online-users', icon: Radio, roles: ['admin', 'technician'] },
+        { name: 'Data Usage', href: '/admin/data-usage', icon: Database },
+        { name: 'Reports', href: '/admin/reports', icon: BarChart, roles: ['admin', 'sales'] },
+        { name: 'Vouchers', href: '/admin/vouchers', icon: Ticket, roles: ['admin', 'sales'] },
+        { name: 'MikroTik', href: '/admin/mikrotik', icon: RouterIcon, roles: ['admin', 'technician'] },
+        { name: 'Billing Plans', href: '/admin/billing-plans', icon: Package, roles: ['admin'] },
+        { name: 'Settings', href: '/admin/settings', icon: Settings, roles: ['admin'] },
     ];
+    const canSee = (roles?: string[]) => !roles || user?.is_superuser || roles.includes(user?.role || '');
+    const navigation = allNavigation.filter(item => canSee(item.roles));
 
-    const quickActions = [
-        { name: 'Generate Vouchers', icon: Ticket, href: '/admin/vouchers' },
+    const allQuickActions = [
+        { name: 'Generate Vouchers', icon: Ticket, href: '/admin/vouchers', roles: ['admin', 'sales'] },
         { name: 'Manage Subscribers', icon: UsersRound, href: '/admin/subscribers' },
-        { name: 'Add / Provision Router', icon: RouterIcon, href: '/admin/mikrotik' },
+        { name: 'Add / Provision Router', icon: RouterIcon, href: '/admin/mikrotik', roles: ['admin', 'technician'] },
     ];
+    const quickActions = allQuickActions.filter(item => canSee(item.roles));
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -83,7 +94,16 @@ export default function AdminLayout() {
       `}>
                 <div className="h-full flex flex-col">
                     <div className="p-6 border-b border-gray-800">
-                        <h1 className="text-2xl font-bold text-blue-400">ISP Admin</h1>
+                        <Link
+                            to="/admin/dashboard"
+                            onClick={() => setIsSidebarOpen(false)}
+                            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                        >
+                            {siteSettings?.logo ? (
+                                <img src={siteSettings.logo} alt={siteSettings.company_name} className="h-9 w-9 rounded object-contain bg-white/5" />
+                            ) : null}
+                            <h1 className="text-2xl font-bold text-blue-400 truncate">{siteSettings?.company_name || 'ISP Admin'}</h1>
+                        </Link>
                         <p className="text-sm text-gray-400">Welcome, {user?.first_name}</p>
                     </div>
 

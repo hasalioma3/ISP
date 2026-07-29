@@ -12,6 +12,14 @@ from django.http import HttpResponse
 from apps.billing.models import Transaction, Subscription, UsageRecord, BillingPlan, Voucher
 from apps.customers.models import Customer
 from apps.network.models import Router, ActiveSession, PPPoESecret, HotspotUser
+from apps.customers.permissions import RoleAllowed
+
+
+def can_see_income(user):
+    """Technicians manage the network, not the books -- keep revenue
+    figures out of their API responses entirely, not just hidden in the UI."""
+    return user.is_superuser or user.role != 'technician'
+
 
 class DashboardStatsView(APIView):
     permission_classes = [permissions.IsAdminUser]
@@ -70,11 +78,13 @@ class DashboardStatsView(APIView):
                 ),
             })
 
+        show_income = can_see_income(request.user)
+
         return Response({
             'active_subscribers': active_subs,
             'expired_subscribers': expired_subs,
-            'income_today': revenue_today,
-            'monthly_revenue': revenue_month,
+            'income_today': revenue_today if show_income else None,
+            'monthly_revenue': revenue_month if show_income else None,
             'monthly_usage_gb': usage_gb,
             'new_customers': new_customers,
             'total_customers': total_customers,
@@ -85,7 +95,7 @@ class DashboardStatsView(APIView):
         })
 
 class IncomeReportView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [RoleAllowed('admin', 'sales')]
 
     def get(self, request):
         export = request.query_params.get('export') == 'csv'
@@ -195,6 +205,7 @@ class DashboardExtraView(APIView):
         today = timezone.now().date()
         year_start = today.replace(month=1, day=1)
         start_of_month = today.replace(day=1)
+        show_income = can_see_income(request.user)
 
         # Monthly registered customers (Jan-Dec this year)
         reg_rows = Customer.objects.filter(created_at__date__gte=year_start).annotate(
@@ -206,29 +217,34 @@ class DashboardExtraView(APIView):
             for m in range(1, 13)
         ]
 
-        # Monthly sales (completed transactions, Jan-Dec this year)
-        sales_rows = Transaction.objects.filter(
-            status='completed', created_at__date__gte=year_start
-        ).annotate(month=TruncMonth('created_at')).values('month').annotate(total=Sum('amount'))
-        sales_map = {r['month'].month: float(r['total'] or 0) for r in sales_rows}
-        monthly_sales = [
-            {'month': dt.date(today.year, m, 1).strftime('%b'), 'total': sales_map.get(m, 0)}
-            for m in range(1, 13)
-        ]
+        # Monthly sales, best-selling packages, per-router and recent
+        # transaction amounts are all revenue figures -- skip computing them
+        # entirely (not just hiding in the UI) for roles that shouldn't see
+        # income.
+        monthly_sales = []
+        best_selling = []
+        if show_income:
+            sales_rows = Transaction.objects.filter(
+                status='completed', created_at__date__gte=year_start
+            ).annotate(month=TruncMonth('created_at')).values('month').annotate(total=Sum('amount'))
+            sales_map = {r['month'].month: float(r['total'] or 0) for r in sales_rows}
+            monthly_sales = [
+                {'month': dt.date(today.year, m, 1).strftime('%b'), 'total': sales_map.get(m, 0)}
+                for m in range(1, 13)
+            ]
 
-        # Best selling packages this month
-        plan_sales = Subscription.objects.filter(
-            created_at__date__gte=start_of_month, plan__isnull=False
-        ).values('plan__id', 'plan__name', 'plan__price').annotate(sales=Count('id')).order_by('-sales')[:10]
-        best_selling = [
-            {
-                'name': p['plan__name'],
-                'price': float(p['plan__price'] or 0),
-                'sales': p['sales'],
-                'revenue': float((p['plan__price'] or 0) * p['sales']),
-            }
-            for p in plan_sales
-        ]
+            plan_sales = Subscription.objects.filter(
+                created_at__date__gte=start_of_month, plan__isnull=False
+            ).values('plan__id', 'plan__name', 'plan__price').annotate(sales=Count('id')).order_by('-sales')[:10]
+            best_selling = [
+                {
+                    'name': p['plan__name'],
+                    'price': float(p['plan__price'] or 0),
+                    'sales': p['sales'],
+                    'revenue': float((p['plan__price'] or 0) * p['sales']),
+                }
+                for p in plan_sales
+            ]
 
         # All users insights (active / expired / everything else)
         active_count = Customer.objects.filter(status='active').count()
@@ -260,35 +276,37 @@ class DashboardExtraView(APIView):
         }
 
         # Transactions per router, via each customer's PPPoE/Hotspot router
-        router_customer_map = {}
-        for row in PPPoESecret.objects.values('customer_id', 'router__name'):
-            router_customer_map[row['customer_id']] = row['router__name']
-        for row in HotspotUser.objects.values('customer_id', 'router__name'):
-            router_customer_map.setdefault(row['customer_id'], row['router__name'])
+        transactions_per_router = []
+        last_transactions = []
+        if show_income:
+            router_customer_map = {}
+            for row in PPPoESecret.objects.values('customer_id', 'router__name'):
+                router_customer_map[row['customer_id']] = row['router__name']
+            for row in HotspotUser.objects.values('customer_id', 'router__name'):
+                router_customer_map.setdefault(row['customer_id'], row['router__name'])
 
-        router_totals = {}
-        total_txn_count = 0
-        for t in Transaction.objects.filter(status='completed').values('customer_id', 'amount'):
-            router_name = router_customer_map.get(t['customer_id'], 'Unassigned')
-            bucket = router_totals.setdefault(router_name, {'transactions': 0, 'amount': 0.0})
-            bucket['transactions'] += 1
-            bucket['amount'] += float(t['amount'])
-            total_txn_count += 1
-        transactions_per_router = [
-            {
-                'router': name,
-                'transactions': data['transactions'],
-                'percentage': round(data['transactions'] / total_txn_count * 100, 2) if total_txn_count else 0,
-                'amount': round(data['amount'], 2),
-            }
-            for name, data in sorted(router_totals.items(), key=lambda kv: -kv[1]['transactions'])
-        ]
+            router_totals = {}
+            total_txn_count = 0
+            for t in Transaction.objects.filter(status='completed').values('customer_id', 'amount'):
+                router_name = router_customer_map.get(t['customer_id'], 'Unassigned')
+                bucket = router_totals.setdefault(router_name, {'transactions': 0, 'amount': 0.0})
+                bucket['transactions'] += 1
+                bucket['amount'] += float(t['amount'])
+                total_txn_count += 1
+            transactions_per_router = [
+                {
+                    'router': name,
+                    'transactions': data['transactions'],
+                    'percentage': round(data['transactions'] / total_txn_count * 100, 2) if total_txn_count else 0,
+                    'amount': round(data['amount'], 2),
+                }
+                for name, data in sorted(router_totals.items(), key=lambda kv: -kv[1]['transactions'])
+            ]
 
-        # Last 5 transactions
-        last_transactions = [
-            {'username': t.customer.username, 'amount': float(t.amount), 'date': t.created_at}
-            for t in Transaction.objects.select_related('customer').order_by('-created_at')[:5]
-        ]
+            last_transactions = [
+                {'username': t.customer.username, 'amount': float(t.amount), 'date': t.created_at}
+                for t in Transaction.objects.select_related('customer').order_by('-created_at')[:5]
+            ]
 
         # Voucher stock per plan
         voucher_rows = Voucher.objects.values('plan__name').annotate(
@@ -358,3 +376,127 @@ class RecentActivityView(APIView):
             }
             for a in activities
         ])
+
+
+class DataUsageView(APIView):
+    """
+    Per-user data usage for a Daily/Weekly/Monthly window, with search,
+    router, and service-type filters, several sort orders, and CSV export.
+    Backs the admin Data Usage page.
+    """
+    permission_classes = [permissions.IsAdminUser]
+
+    def _window(self, period, ref_date):
+        if period == 'weekly':
+            start = ref_date - dt.timedelta(days=ref_date.weekday())
+            end = start + dt.timedelta(days=6)
+            prev_start = start - dt.timedelta(days=7)
+            prev_end = start - dt.timedelta(days=1)
+        elif period == 'monthly':
+            start = ref_date.replace(day=1)
+            if start.month == 12:
+                end = start.replace(year=start.year + 1, month=1, day=1) - dt.timedelta(days=1)
+            else:
+                end = start.replace(month=start.month + 1, day=1) - dt.timedelta(days=1)
+            prev_month_end = start - dt.timedelta(days=1)
+            prev_start = prev_month_end.replace(day=1)
+            prev_end = prev_month_end
+        else:  # daily
+            start = end = ref_date
+            prev_start = prev_end = ref_date - dt.timedelta(days=1)
+        return start, end, prev_start, prev_end
+
+    def get(self, request):
+        period = request.query_params.get('period', 'daily')
+        date_str = request.query_params.get('date')
+        search = request.query_params.get('search', '').strip()
+        router_id = request.query_params.get('router')
+        service_type = request.query_params.get('type')
+        sort = request.query_params.get('sort', 'highest')
+        limit = min(int(request.query_params.get('limit', 50) or 50), 200)
+        export = request.query_params.get('export') == 'csv'
+
+        try:
+            ref_date = dt.date.fromisoformat(date_str) if date_str else timezone.now().date()
+        except ValueError:
+            ref_date = timezone.now().date()
+
+        start, end, prev_start, prev_end = self._window(period, ref_date)
+
+        qs = UsageRecord.objects.filter(created_at__date__gte=start, created_at__date__lte=end)
+        if search:
+            qs = qs.filter(customer__username__icontains=search)
+        if service_type:
+            qs = qs.filter(customer__service_type=service_type)
+        if router_id:
+            customer_ids = set(PPPoESecret.objects.filter(router_id=router_id).values_list('customer_id', flat=True))
+            customer_ids |= set(HotspotUser.objects.filter(router_id=router_id).values_list('customer_id', flat=True))
+            qs = qs.filter(customer_id__in=customer_ids)
+
+        per_user = qs.values(
+            'customer__username', 'customer__first_name', 'customer__last_name'
+        ).annotate(upload=Sum('upload_bytes'), download=Sum('download_bytes'))
+
+        results = []
+        for u in per_user:
+            upload_gb = round((u['upload'] or 0) / (1024 ** 3), 2)
+            download_gb = round((u['download'] or 0) / (1024 ** 3), 2)
+            name = f"{u['customer__first_name']} {u['customer__last_name']}".strip() or u['customer__username']
+            results.append({
+                'username': u['customer__username'],
+                'name': name,
+                'upload_gb': upload_gb,
+                'download_gb': download_gb,
+                'total_gb': round(upload_gb + download_gb, 2),
+            })
+
+        sort_keys = {
+            'highest': lambda r: -r['total_gb'],
+            'lowest': lambda r: r['total_gb'],
+            'downloaders': lambda r: -r['download_gb'],
+            'uploaders': lambda r: -r['upload_gb'],
+            'username': lambda r: r['username'].lower(),
+        }
+        results.sort(key=sort_keys.get(sort, sort_keys['highest']))
+        results = results[:limit]
+
+        if export:
+            response = HttpResponse(content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="data_usage_{period}_{start}.csv"'
+            writer = csv.writer(response)
+            writer.writerow(['Username', 'Name', 'Upload (GB)', 'Download (GB)', 'Total (GB)'])
+            for r in results:
+                writer.writerow([r['username'], r['name'], r['upload_gb'], r['download_gb'], r['total_gb']])
+            return response
+
+        totals_agg = qs.aggregate(up=Sum('upload_bytes'), down=Sum('download_bytes'))
+        total_up = round((totals_agg['up'] or 0) / (1024 ** 3), 2)
+        total_down = round((totals_agg['down'] or 0) / (1024 ** 3), 2)
+        active_users = qs.values('customer_id').distinct().count()
+
+        prev_agg = UsageRecord.objects.filter(
+            created_at__date__gte=prev_start, created_at__date__lte=prev_end
+        ).aggregate(up=Sum('upload_bytes'), down=Sum('download_bytes'))
+        prev_total_bytes = (prev_agg['up'] or 0) + (prev_agg['down'] or 0)
+        current_total_bytes = (totals_agg['up'] or 0) + (totals_agg['down'] or 0)
+        vs_previous_pct = (
+            round((current_total_bytes - prev_total_bytes) / prev_total_bytes * 100, 1)
+            if prev_total_bytes else None
+        )
+
+        return Response({
+            'period': period,
+            'start': start,
+            'end': end,
+            'totals': {
+                'upload_gb': total_up,
+                'download_gb': total_down,
+                'total_gb': round(total_up + total_down, 2),
+                'active_users': active_users,
+                'avg_per_user_gb': round((total_up + total_down) / active_users, 2) if active_users else 0,
+                'vs_previous_pct': vs_previous_pct,
+                'previous_total_gb': round(prev_total_bytes / (1024 ** 3), 2),
+            },
+            'top_users': results[:10],
+            'users': results,
+        })

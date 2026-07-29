@@ -92,14 +92,16 @@ def update_profile(request):
 from rest_framework import filters
 from rest_framework.permissions import IsAdminUser
 from apps.customers.serializers import StaffSerializer
+from apps.customers.permissions import RoleAllowed
 
 class StaffViewSet(viewsets.ModelViewSet):
     """
-    Manage staff members
+    Manage staff members -- admins only, since this controls who else gets
+    admin-portal access and with what role.
     """
     queryset = Customer.objects.filter(is_staff=True)
     serializer_class = StaffSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [RoleAllowed('admin')]
 
 
 class SubscriberViewSet(

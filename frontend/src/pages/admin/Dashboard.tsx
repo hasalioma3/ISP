@@ -21,6 +21,7 @@ import {
     RouterIcon, ChevronDown, RefreshCw, ArrowRight, Smartphone, CheckCircle2, XCircle,
 } from 'lucide-react';
 import UsageChartPanels from '../../components/UsageChartPanels';
+import { useAuthStore } from '../../store/authStore';
 
 const INSIGHT_COLORS = ['#16a34a', '#7c2d3f', '#475569'];
 
@@ -37,6 +38,8 @@ const CARD_STYLES: Record<string, string> = {
 
 export default function Dashboard() {
     const navigate = useNavigate();
+    const user = useAuthStore((state) => state.user);
+    const showIncome = user?.is_superuser || user?.role !== 'technician';
     const [routerFilter, setRouterFilter] = useState<number | 'all'>('all');
     const [isRouterDropdownOpen, setIsRouterDropdownOpen] = useState(false);
     const [expiringPage, setExpiringPage] = useState(1);
@@ -54,7 +57,8 @@ export default function Dashboard() {
         queryFn: async () => {
             const res = await analyticsAPI.getIncomeReport();
             return res.data;
-        }
+        },
+        enabled: showIncome,
     });
 
     const { data: usageChart, isLoading: usageChartLoading } = useQuery({
@@ -115,14 +119,16 @@ export default function Dashboard() {
         : routers.find((r: any) => r.id === routerFilter)?.name || 'All Routers - System Wide';
 
     const statCards = [
-        {
-            label: 'Income Today', value: `Ksh. ${Number(stats?.income_today ?? 0).toLocaleString()}`,
-            icon: ShoppingBag, color: 'teal', href: '/admin/reports', linkLabel: 'View Reports',
-        },
-        {
-            label: 'Income This Month', value: `Ksh. ${Number(stats?.monthly_revenue ?? 0).toLocaleString()}`,
-            icon: BarChart3, color: 'sky', href: '/admin/reports', linkLabel: 'View Reports',
-        },
+        ...(showIncome ? [
+            {
+                label: 'Income Today', value: `Ksh. ${Number(stats?.income_today ?? 0).toLocaleString()}`,
+                icon: ShoppingBag, color: 'teal', href: '/admin/reports', linkLabel: 'View Reports',
+            },
+            {
+                label: 'Income This Month', value: `Ksh. ${Number(stats?.monthly_revenue ?? 0).toLocaleString()}`,
+                icon: BarChart3, color: 'sky', href: '/admin/reports', linkLabel: 'View Reports',
+            },
+        ] : []),
         {
             label: 'Active/Expired', value: `${stats?.active_subscribers ?? 0}/${stats?.expired_subscribers ?? 0}`,
             icon: Users, color: 'slate', href: '/admin/subscribers', linkLabel: 'View All',
@@ -262,20 +268,22 @@ export default function Dashboard() {
                         </div>
                     </div>
 
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                        <h3 className="text-lg font-bold mb-4">Total Monthly Sales</h3>
-                        <div className="h-64">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={extra?.monthly_sales || []}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                                    <YAxis tick={{ fontSize: 12 }} />
-                                    <Tooltip formatter={(v: number) => `KES ${v}`} />
-                                    <Bar dataKey="total" fill="#2563eb" name="Sales" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
+                    {showIncome && (
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <h3 className="text-lg font-bold mb-4">Total Monthly Sales</h3>
+                            <div className="h-64">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={extra?.monthly_sales || []}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                                        <YAxis tick={{ fontSize: 12 }} />
+                                        <Tooltip formatter={(v: number) => `KES ${v}`} />
+                                        <Bar dataKey="total" fill="#2563eb" name="Sales" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 <div className="space-y-6">
@@ -338,31 +346,33 @@ export default function Dashboard() {
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm">Best Selling Packages This Month</div>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                                <thead>
-                                    <tr className="text-left text-xs text-gray-500 uppercase border-b">
-                                        <th className="px-4 py-2">Package</th>
-                                        <th className="px-4 py-2 text-right">Sales</th>
-                                        <th className="px-4 py-2 text-right">Revenue</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {extra?.best_selling_packages?.length === 0 ? (
-                                        <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-400">No sales this month.</td></tr>
-                                    ) : extra?.best_selling_packages?.map((p: any) => (
-                                        <tr key={p.name}>
-                                            <td className="px-4 py-2 font-medium">{p.name}</td>
-                                            <td className="px-4 py-2 text-right">{p.sales}</td>
-                                            <td className="px-4 py-2 text-right">Ksh. {p.revenue.toLocaleString()}</td>
+                    {showIncome && (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm">Best Selling Packages This Month</div>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm">
+                                    <thead>
+                                        <tr className="text-left text-xs text-gray-500 uppercase border-b">
+                                            <th className="px-4 py-2">Package</th>
+                                            <th className="px-4 py-2 text-right">Sales</th>
+                                            <th className="px-4 py-2 text-right">Revenue</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {extra?.best_selling_packages?.length === 0 ? (
+                                            <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-400">No sales this month.</td></tr>
+                                        ) : extra?.best_selling_packages?.map((p: any) => (
+                                            <tr key={p.name}>
+                                                <td className="px-4 py-2 font-medium">{p.name}</td>
+                                                <td className="px-4 py-2 text-right">{p.sales}</td>
+                                                <td className="px-4 py-2 text-right">Ksh. {p.revenue.toLocaleString()}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
 
@@ -373,76 +383,82 @@ export default function Dashboard() {
             </div>
 
             {/* Revenue Chart */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
-                <h3 className="text-lg font-bold mb-4">Revenue Trend (Last 30 Days)</h3>
-                <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={incomeData || []}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="date" tickFormatter={(val) => val.split('-').slice(1).join('/')} />
-                            <YAxis />
-                            <Tooltip formatter={(value) => `KES ${value}`} />
-                            <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Revenue" />
-                        </BarChart>
-                    </ResponsiveContainer>
+            {showIncome && (
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
+                    <h3 className="text-lg font-bold mb-4">Revenue Trend (Last 30 Days)</h3>
+                    <div className="h-72">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={incomeData || []}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="date" tickFormatter={(val) => val.split('-').slice(1).join('/')} />
+                                <YAxis />
+                                <Tooltip formatter={(value) => `KES ${value}`} />
+                                <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Revenue" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Transactions per Router / Last 5 Transactions / Users by Service Type */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm">Transactions per Router</div>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm">
-                            <thead>
-                                <tr className="text-left text-xs text-gray-500 uppercase border-b">
-                                    <th className="px-4 py-2">Router</th>
-                                    <th className="px-4 py-2 text-right">Txns</th>
-                                    <th className="px-4 py-2 text-right">%</th>
-                                    <th className="px-4 py-2 text-right">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {extra?.transactions_per_router?.length === 0 ? (
-                                    <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-400">No transactions yet.</td></tr>
-                                ) : extra?.transactions_per_router?.map((r: any) => (
-                                    <tr key={r.router}>
-                                        <td className="px-4 py-2 font-medium">{r.router}</td>
-                                        <td className="px-4 py-2 text-right">{r.transactions}</td>
-                                        <td className="px-4 py-2 text-right">{r.percentage}%</td>
-                                        <td className="px-4 py-2 text-right">Ksh. {r.amount.toLocaleString()}</td>
+                {showIncome && (
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm">Transactions per Router</div>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                                <thead>
+                                    <tr className="text-left text-xs text-gray-500 uppercase border-b">
+                                        <th className="px-4 py-2">Router</th>
+                                        <th className="px-4 py-2 text-right">Txns</th>
+                                        <th className="px-4 py-2 text-right">%</th>
+                                        <th className="px-4 py-2 text-right">Amount</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {extra?.transactions_per_router?.length === 0 ? (
+                                        <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-400">No transactions yet.</td></tr>
+                                    ) : extra?.transactions_per_router?.map((r: any) => (
+                                        <tr key={r.router}>
+                                            <td className="px-4 py-2 font-medium">{r.router}</td>
+                                            <td className="px-4 py-2 text-right">{r.transactions}</td>
+                                            <td className="px-4 py-2 text-right">{r.percentage}%</td>
+                                            <td className="px-4 py-2 text-right">Ksh. {r.amount.toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
+                )}
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm">Last 5 Transactions</div>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm">
-                            <thead>
-                                <tr className="text-left text-xs text-gray-500 uppercase border-b">
-                                    <th className="px-4 py-2">Username</th>
-                                    <th className="px-4 py-2 text-right">Amount</th>
-                                    <th className="px-4 py-2 text-right">Date</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {extra?.last_transactions?.length === 0 ? (
-                                    <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-400">No transactions yet.</td></tr>
-                                ) : extra?.last_transactions?.map((t: any, i: number) => (
-                                    <tr key={i}>
-                                        <td className="px-4 py-2 font-medium truncate max-w-[120px]">{t.username}</td>
-                                        <td className="px-4 py-2 text-right">Ksh. {t.amount}</td>
-                                        <td className="px-4 py-2 text-right text-gray-500">{format(new Date(t.date), 'yyyy-MM-dd')}</td>
+                {showIncome && (
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm">Last 5 Transactions</div>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                                <thead>
+                                    <tr className="text-left text-xs text-gray-500 uppercase border-b">
+                                        <th className="px-4 py-2">Username</th>
+                                        <th className="px-4 py-2 text-right">Amount</th>
+                                        <th className="px-4 py-2 text-right">Date</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {extra?.last_transactions?.length === 0 ? (
+                                        <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-400">No transactions yet.</td></tr>
+                                    ) : extra?.last_transactions?.map((t: any, i: number) => (
+                                        <tr key={i}>
+                                            <td className="px-4 py-2 font-medium truncate max-w-[120px]">{t.username}</td>
+                                            <td className="px-4 py-2 text-right">Ksh. {t.amount}</td>
+                                            <td className="px-4 py-2 text-right text-gray-500">{format(new Date(t.date), 'yyyy-MM-dd')}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                     <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm flex items-center">
@@ -472,31 +488,33 @@ export default function Dashboard() {
             </div>
 
             {/* Voucher Stock */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-                <div className="bg-blue-600 px-6 py-4 text-white font-bold">Vouchers Stock</div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan Name</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unused</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Used</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {extra?.voucher_stock?.length === 0 ? (
-                                <tr><td colSpan={3} className="px-6 py-4 text-center text-gray-400">No vouchers generated yet.</td></tr>
-                            ) : extra?.voucher_stock?.map((v: any) => (
-                                <tr key={v.plan_name}>
-                                    <td className="px-6 py-3 font-medium">{v.plan_name}</td>
-                                    <td className="px-6 py-3 text-right">{v.unused}</td>
-                                    <td className="px-6 py-3 text-right">{v.used}</td>
+            {showIncome && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+                    <div className="bg-blue-600 px-6 py-4 text-white font-bold">Vouchers Stock</div>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan Name</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unused</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Used</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {extra?.voucher_stock?.length === 0 ? (
+                                    <tr><td colSpan={3} className="px-6 py-4 text-center text-gray-400">No vouchers generated yet.</td></tr>
+                                ) : extra?.voucher_stock?.map((v: any) => (
+                                    <tr key={v.plan_name}>
+                                        <td className="px-6 py-3 font-medium">{v.plan_name}</td>
+                                        <td className="px-6 py-3 text-right">{v.unused}</td>
+                                        <td className="px-6 py-3 text-right">{v.used}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Usage by User */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100">

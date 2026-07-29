@@ -10,14 +10,22 @@ from rest_framework import viewsets
 from apps.network.models import Router
 from apps.network.serializers.router import RouterSerializer
 from apps.network.services.mikrotik_service import MikroTikService
+from apps.customers.permissions import RoleAllowed
 
 class RouterViewSet(viewsets.ModelViewSet):
     """
-    Manage routers
+    Manage routers. Technicians can view routers and run the two sync
+    actions (pushing existing plans/subscriptions to a router), but can't
+    add, edit, delete, provision, or back up a router -- those change what
+    the router actually is, which stays admin-only.
     """
     queryset = Router.objects.all()
     serializer_class = RouterSerializer
-    permission_classes = [IsAdminUser]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve', 'sync_profiles', 'sync_users']:
+            return [RoleAllowed('admin', 'technician')()]
+        return [RoleAllowed('admin')()]
 
     @action(detail=True, methods=['post'])
     def provision(self, request, pk=None):
@@ -105,7 +113,7 @@ class OnlineUsersView(APIView):
     each customer's current plan/expiry/payment info for the admin
     Online Users page.
     """
-    permission_classes = [IsAdminUser]
+    permission_classes = [RoleAllowed('admin', 'technician')]
 
     def get(self, request):
         from apps.network.models import ActiveSession
@@ -161,8 +169,8 @@ class OnlineUsersView(APIView):
 
 
 class DisconnectSessionView(APIView):
-    """Kick a currently-online user off the router (admin only)."""
-    permission_classes = [IsAdminUser]
+    """Kick a currently-online user off the router (admin/technician only)."""
+    permission_classes = [RoleAllowed('admin', 'technician')]
 
     def post(self, request, pk):
         from apps.network.models import ActiveSession

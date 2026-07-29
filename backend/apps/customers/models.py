@@ -19,7 +19,17 @@ class Customer(AbstractUser):
         ('expired', 'Expired'),
         ('pending', 'Pending'),
     ]
-    
+
+    ROLE_CHOICES = [
+        ('admin', 'Admin'),
+        ('technician', 'Technician'),
+        ('sales', 'Sales Person'),
+    ]
+
+    # Staff role -- only meaningful when is_staff=True. Controls which
+    # admin sections a staff account can see/use (see apps.customers.permissions).
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='admin')
+
     # Personal Information
     phone_number = models.CharField(max_length=15, unique=False, db_index=True)
     id_number = models.CharField(max_length=20, blank=True, null=True)

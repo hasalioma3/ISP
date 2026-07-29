@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { adminAPI } from '../../services/api';
 import { toast } from 'react-hot-toast';
 import { Loader2, Router as RouterIcon, ShieldCheck, ShieldAlert, Plus, Pencil, Trash2, X, Wifi } from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
 
 type ActionKey = 'backup' | 'sync_profiles' | 'sync_users';
 
@@ -54,6 +55,9 @@ const emptyForm = {
 };
 
 export default function MikroTikSync() {
+    const user = useAuthStore((state) => state.user);
+    const canManage = !!user?.is_superuser || user?.role === 'admin';
+    const visibleActions = canManage ? ACTIONS : ACTIONS.filter((a) => a.key !== 'backup');
     const [loadingKey, setLoadingKey] = useState<string | null>(null);
     const [logsByRouter, setLogsByRouter] = useState<Record<number, string[]>>({});
 
@@ -248,12 +252,14 @@ export default function MikroTikSync() {
         <div className="max-w-5xl mx-auto">
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold">MikroTik Routers</h1>
-                <button
-                    onClick={openCreateForm}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded"
-                >
-                    <Plus className="h-4 w-4" /> Add Router
-                </button>
+                {canManage && (
+                    <button
+                        onClick={openCreateForm}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded"
+                    >
+                        <Plus className="h-4 w-4" /> Add Router
+                    </button>
+                )}
             </div>
 
             {isLoading ? (
@@ -289,25 +295,31 @@ export default function MikroTikSync() {
                                             <ShieldAlert className="h-4 w-4" /> Not provisioned
                                         </span>
                                     )}
-                                    <button onClick={() => openEditForm(router)} title="Edit" className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
-                                        <Pencil className="h-4 w-4" />
-                                    </button>
-                                    <button onClick={() => handleDelete(router)} title="Delete" className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                                        <Trash2 className="h-4 w-4" />
-                                    </button>
+                                    {canManage && (
+                                        <>
+                                            <button onClick={() => openEditForm(router)} title="Edit" className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
+                                                <Pencil className="h-4 w-4" />
+                                            </button>
+                                            <button onClick={() => handleDelete(router)} title="Delete" className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-                                <button
-                                    title="Full bootstrap: IP pools, DHCP, NAT, Hotspot server + profile, PPPoE server, walled garden, plan profiles. Asks for router login each time."
-                                    onClick={() => openProvisionModal(router)}
-                                    disabled={loadingKey !== null}
-                                    className="py-2 px-3 rounded text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700"
-                                >
-                                    Provision
-                                </button>
-                                {ACTIONS.map((a) => {
+                                {canManage && (
+                                    <button
+                                        title="Full bootstrap: IP pools, DHCP, NAT, Hotspot server + profile, PPPoE server, walled garden, plan profiles. Asks for router login each time."
+                                        onClick={() => openProvisionModal(router)}
+                                        disabled={loadingKey !== null}
+                                        className="py-2 px-3 rounded text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700"
+                                    >
+                                        Provision
+                                    </button>
+                                )}
+                                {visibleActions.map((a) => {
                                     const key = `${router.id}-${a.key}`;
                                     const isLoading = loadingKey === key;
                                     return (

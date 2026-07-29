@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'apps.payments',
     'apps.network',
     'apps.analytics',
+    'apps.sitesettings',
 ]
 
 if DEBUG:

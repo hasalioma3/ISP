@@ -48,6 +48,9 @@ export const authAPI = {
 // Billing API
 export const billingAPI = {
     getPlans: () => api.get('/billing/plans/'),
+    createPlan: (data: any) => api.post('/billing/plans/', data),
+    updatePlan: (id: number, data: any) => api.patch(`/billing/plans/${id}/`, data),
+    deletePlan: (id: number) => api.delete(`/billing/plans/${id}/`),
     getCurrentSubscription: () => api.get('/billing/subscriptions/current/'),
     getTransactions: () => api.get('/billing/transactions/'),
     getUsage: () => api.get('/billing/usage/'),
@@ -83,6 +86,10 @@ export const analyticsAPI = {
     getExpiringToday: (page: number, pageSize?: number) =>
         api.get('/analytics/expiring-today/', { params: { page, page_size: pageSize } }),
     getRecentActivity: () => api.get('/analytics/recent-activity/'),
+    getDataUsage: (params: {
+        period?: string; date?: string; search?: string; router?: string;
+        type?: string; sort?: string; limit?: number;
+    }) => api.get('/analytics/data-usage/', { params }),
 };
 
 // Admin Management API
@@ -99,7 +106,7 @@ export const adminAPI = {
     // Staff
     getStaff: () => api.get('/customers/staff/'),
     createStaff: (data: any) => api.post('/customers/staff/', data),
-    updateStaff: (id: number, data: any) => api.put(`/customers/staff/${id}/`, data),
+    updateStaff: (id: number, data: any) => api.patch(`/customers/staff/${id}/`, data),
     deleteStaff: (id: number) => api.delete(`/customers/staff/${id}/`),
 
     // Routers
@@ -122,6 +129,17 @@ export const adminAPI = {
 
     // Manual Actions
     manualSubscribe: (data: any) => api.post('/billing/manual-subscribe/', data),
+};
+
+// Site Settings (branding: company name + logo)
+export const siteSettingsAPI = {
+    get: () => api.get('/settings/site/'),
+    update: (data: { company_name?: string; logo?: File }) => {
+        const form = new FormData();
+        if (data.company_name !== undefined) form.append('company_name', data.company_name);
+        if (data.logo) form.append('logo', data.logo);
+        return api.patch('/settings/site/', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
 };
 
 export default api;

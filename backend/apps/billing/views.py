@@ -7,16 +7,28 @@ from apps.billing.serializers import (
     BillingPlanSerializer, SubscriptionSerializer,
     TransactionSerializer, UsageRecordSerializer
 )
+from apps.customers.permissions import RoleAllowed
 
 
-class BillingPlanViewSet(viewsets.ReadOnlyModelViewSet):
+class BillingPlanViewSet(viewsets.ModelViewSet):
     """
-    List and retrieve billing plans
-    Public endpoint - no authentication required
+    Billing plans. List/retrieve are public (the captive portal and
+    customer app need to show plans to unauthenticated users) and only ever
+    return active plans for non-staff callers. Create/update/delete are
+    admin-only.
     """
-    queryset = BillingPlan.objects.filter(is_active=True)
     serializer_class = BillingPlanSerializer
-    permission_classes = [AllowAny]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [RoleAllowed('admin')()]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user and user.is_authenticated and user.is_staff:
+            return BillingPlan.objects.all()
+        return BillingPlan.objects.filter(is_active=True)
 
 
 class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -88,14 +100,14 @@ class VoucherBatchViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = VoucherBatch.objects.all()
     serializer_class = VoucherBatchSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [RoleAllowed('admin', 'sales')]
 
 
 class VoucherGenerationView(APIView):
     """
-    Generate bulk vouchers (Admin only)
+    Generate bulk vouchers (admin/sales only)
     """
-    permission_classes = [IsAdminUser]
+    permission_classes = [RoleAllowed('admin', 'sales')]
     
     def post(self, request):
         serializer = VoucherGenerationSerializer(data=request.data)
@@ -268,62 +280,107 @@ class VoucherRedeemView(APIView):
 
 class ManualSubscriptionView(APIView):
     """
-    Manually create a subscription along with user if needed (Admin only)
+    Manually create a customer (PPPoE or Hotspot) -- or renew/assign a plan
+    to an existing one, by username -- and activate their subscription.
+    When a new customer is created, portal login and PPPoE/Hotspot
+    credentials (same username/password, matching the self-service
+    registration flow) are issued and returned once so the admin can hand
+    them to the customer. (Admin/Sales only)
     """
-    permission_classes = [IsAdminUser]
-    
+    permission_classes = [RoleAllowed('admin', 'sales')]
+
     def post(self, request):
-        # 1. Create or Get Customer
-        # 2. Assign Plan
-        # 3. Process 'Cash' Payment transaction
-        # 4. Activate (via signal)
-        
         from apps.customers.models import Customer
-        from apps.customers.serializers import CustomerRegistrationSerializer
-        
+
         data = request.data
-        username = data.get('username')
+        username = (data.get('username') or '').strip()
         plan_id = data.get('plan_id')
-        
-        # Check if customer exists
-        customer = Customer.objects.filter(username=username).first()
-        if not customer:
-            # Create new customer
-            serializer = CustomerRegistrationSerializer(data=data)
-            if serializer.is_valid():
-                customer = serializer.save()
-            else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Get Plan
+        password = data.get('password') or ''
+        service_type = data.get('service_type') or 'pppoe'
+
+        if not username:
+            return Response({'error': 'username is required'}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             plan = BillingPlan.objects.get(id=plan_id)
-        except BillingPlan.DoesNotExist:
+        except (BillingPlan.DoesNotExist, TypeError, ValueError):
             return Response({'error': 'Invalid plan ID'}, status=status.HTTP_400_BAD_REQUEST)
-            
-        # Create Subscription
-        expiry_date = timezone.now() + timezone.timedelta(days=plan.duration_days) # Simplified duration logic
-        
+
+        created_new = False
+        customer = Customer.objects.filter(username=username).first()
+
+        if not customer:
+            phone_number = (data.get('phone_number') or '').strip()
+            if not phone_number:
+                return Response({'error': 'phone_number is required to create a new customer'}, status=status.HTTP_400_BAD_REQUEST)
+
+            if not password:
+                password = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
+            customer = Customer.objects.create(
+                username=username,
+                email=data.get('email', ''),
+                phone_number=phone_number,
+                first_name=data.get('first_name', ''),
+                last_name=data.get('last_name', ''),
+                service_type=service_type,
+                status='pending',
+                is_verified=True,
+            )
+            customer.set_password(password)
+            if service_type in ['pppoe', 'both']:
+                customer.pppoe_username = username
+                customer.pppoe_password = password
+            if service_type in ['hotspot', 'both']:
+                customer.hotspot_username = username
+                customer.hotspot_password = password
+            customer.save()
+            created_new = True
+
+        # Duration calc mirrors payment_processor.py's logic, so manually
+        # activated and M-Pesa-activated subscriptions expire consistently.
+        duration_value = plan.duration_value
+        duration_unit = plan.duration_unit
+        if duration_unit == 'minutes':
+            expiry_delta = timezone.timedelta(minutes=duration_value)
+        elif duration_unit == 'hours':
+            expiry_delta = timezone.timedelta(hours=duration_value)
+        elif duration_unit == 'days':
+            expiry_delta = timezone.timedelta(days=duration_value)
+        elif duration_unit == 'months':
+            expiry_delta = timezone.timedelta(days=duration_value * 30)
+        else:
+            expiry_delta = timezone.timedelta(days=plan.duration_days)
+
         subscription = Subscription.objects.create(
             customer=customer,
             plan=plan,
-            expiry_date=expiry_date,
+            expiry_date=timezone.now() + expiry_delta,
             status='active'
         )
-        
-        # Record Transaction
+
         Transaction.objects.create(
             customer=customer,
             subscription=subscription,
             transaction_id='MANUAL-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=10)),
             amount=plan.price,
-            payment_method='cash', # Or 'manual'
+            payment_method='cash',
             status='completed',
             notes=f"Manual activation by {request.user.username}"
         )
-        
-        return Response({
+
+        response_data = {
             'success': True,
             'message': f'Subscription activated for {customer.username}',
-            'subscription_id': subscription.id
-        })
+            'subscription_id': subscription.id,
+        }
+        if created_new:
+            response_data['credentials'] = {
+                'portal_username': customer.username,
+                'portal_password': password,
+                'pppoe_username': customer.pppoe_username,
+                'pppoe_password': customer.pppoe_password,
+                'hotspot_username': customer.hotspot_username,
+                'hotspot_password': customer.hotspot_password,
+            }
+        return Response(response_data)

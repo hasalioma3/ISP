@@ -50,20 +50,21 @@ class CustomerSerializer(serializers.ModelSerializer):
                   'full_name', 'service_type', 'status', 'account_balance', 'is_verified',
                   'pppoe_username', 'hotspot_username', 'hotspot_mac_address',
                   'address', 'id_number', 'notes', 'created_at', 'is_staff', 'is_superuser',
-                  'calculated_expiry']
+                  'role', 'calculated_expiry']
         read_only_fields = ['id', 'status', 'account_balance', 'is_verified', 'created_at', 'is_staff', 'is_superuser']
 
 class StaffSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
-    
+
     class Meta:
         model = Customer
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'phone_number', 
-                  'is_staff', 'is_active', 'is_superuser', 'password', 'date_joined']
-        read_only_fields = ['id', 'date_joined']
-        
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'phone_number',
+                  'role', 'is_staff', 'is_active', 'is_superuser', 'password', 'date_joined']
+        read_only_fields = ['id', 'is_superuser', 'date_joined']
+
     def create(self, validated_data):
         password = validated_data.pop('password', None)
+        validated_data['is_staff'] = True
         user = Customer.objects.create(**validated_data)
         if password:
             user.set_password(password)
@@ -71,7 +72,7 @@ class StaffSerializer(serializers.ModelSerializer):
             user.set_unusable_password()
         user.save()
         return user
-        
+
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)
         for attr, value in validated_data.items():

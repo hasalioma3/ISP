@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/payments/', include('apps.payments.urls')),
     path('api/analytics/', include('apps.analytics.urls')),
     path('api/network/', include('apps.network.urls')),
+    path('api/settings/', include('apps.sitesettings.urls')),
 ]
 
 # Debug toolbar (development only)

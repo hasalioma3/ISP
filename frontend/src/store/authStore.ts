@@ -11,6 +11,7 @@ interface User {
     full_name: string;
     service_type: string;
     status: string;
+    role: string;
     is_staff: boolean;
     is_superuser: boolean;
 }
