@@ -334,8 +334,24 @@ class ManualSubscriptionView(APIView):
             if service_type in ['hotspot', 'both']:
                 customer.hotspot_username = username
                 customer.hotspot_password = password
+            if service_type == 'static':
+                static_ip = (data.get('static_ip_address') or '').strip()
+                if not static_ip:
+                    customer.delete()
+                    return Response({'error': 'static_ip_address is required for Static IP customers'}, status=status.HTTP_400_BAD_REQUEST)
+                customer.static_ip_address = static_ip
             customer.save()
             created_new = True
+        elif plan.service_type == 'static' and not customer.static_ip_address:
+            static_ip = (data.get('static_ip_address') or '').strip()
+            if not static_ip:
+                return Response(
+                    {'error': 'static_ip_address is required to assign a Static IP plan to this customer'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            customer.static_ip_address = static_ip
+            customer.service_type = 'static'
+            customer.save(update_fields=['static_ip_address', 'service_type'])
 
         # Duration calc mirrors payment_processor.py's logic, so manually
         # activated and M-Pesa-activated subscriptions expire consistently.
@@ -382,5 +398,6 @@ class ManualSubscriptionView(APIView):
                 'pppoe_password': customer.pppoe_password,
                 'hotspot_username': customer.hotspot_username,
                 'hotspot_password': customer.hotspot_password,
+                'static_ip_address': customer.static_ip_address,
             }
         return Response(response_data)

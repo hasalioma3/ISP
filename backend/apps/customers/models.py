@@ -11,6 +11,7 @@ class Customer(AbstractUser):
         ('pppoe', 'PPPoE'),
         ('hotspot', 'Hotspot'),
         ('both', 'Both'),
+        ('static', 'Static IP'),
     ]
     
     STATUS_CHOICES = [
@@ -55,7 +56,12 @@ class Customer(AbstractUser):
     hotspot_username = models.CharField(max_length=100, unique=True, blank=True, null=True)
     hotspot_password = models.CharField(max_length=100, blank=True, null=True)
     hotspot_mac_address = models.CharField(max_length=17, blank=True, null=True)
-    
+
+    # Static IP customers (no PPPoE/Hotspot auth -- billed and rate-limited
+    # purely off this fixed address via a router-side Simple Queue)
+    static_ip_address = models.GenericIPAddressField(blank=True, null=True)
+
+
     # Account Information
     account_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     created_at = models.DateTimeField(auto_now_add=True)

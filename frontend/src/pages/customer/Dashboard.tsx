@@ -2,8 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { billingAPI } from '../../services/api';
-import { formatDistanceToNow } from 'date-fns';
-import { Wifi, CreditCard, Activity, LogOut, User } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
+import { Wifi, CreditCard, Activity, LogOut, User, Receipt } from 'lucide-react';
 
 export default function CustomerDashboard() {
     const navigate = useNavigate();
@@ -21,6 +21,26 @@ export default function CustomerDashboard() {
             }
         },
     });
+
+    const { data: usageRecords } = useQuery({
+        queryKey: ['dashboard-usage'],
+        queryFn: async () => {
+            const response = await billingAPI.getUsage();
+            return response.data.results || response.data;
+        },
+    });
+
+    const { data: transactions } = useQuery({
+        queryKey: ['dashboard-transactions'],
+        queryFn: async () => {
+            const response = await billingAPI.getTransactions();
+            return response.data.results || response.data;
+        },
+    });
+
+    const recentUsage = usageRecords?.slice(0, 5) || [];
+    const usageTotalGb = (usageRecords || []).reduce((sum: number, r: any) => sum + Number(r.total_gb || 0), 0);
+    const recentTransactions = transactions?.slice(0, 5) || [];
 
     const handleLogout = () => {
         logout();
@@ -100,6 +120,66 @@ export default function CustomerDashboard() {
                         </Link>
                     </div>
                 )}
+
+                {/* Usage Stats & Recent Transactions */}
+                <div className="grid md:grid-cols-2 gap-6 mb-8">
+                    <div className="bg-white rounded-2xl shadow-lg p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                <Activity className="w-5 h-5 text-purple-600" />
+                                Usage Stats
+                            </h3>
+                            <Link to="/usage" className="text-sm text-blue-600 hover:text-blue-800">View all</Link>
+                        </div>
+                        {recentUsage.length > 0 ? (
+                            <>
+                                <p className="text-sm text-gray-600 mb-1">Data used (recent sessions)</p>
+                                <p className="text-3xl font-bold text-purple-600 mb-4">{usageTotalGb.toFixed(2)} GB</p>
+                                <div className="space-y-2">
+                                    {recentUsage.map((r: any) => (
+                                        <div key={r.id} className="flex justify-between text-sm border-t pt-2">
+                                            <span className="text-gray-600">{format(new Date(r.start_time), 'MMM d, HH:mm')}</span>
+                                            <span className="font-medium text-gray-900">{r.total_gb} GB</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        ) : (
+                            <p className="text-gray-500 text-sm">No usage recorded yet.</p>
+                        )}
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-lg p-6">
+                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+                            <Receipt className="w-5 h-5 text-green-600" />
+                            Recent Transactions
+                        </h3>
+                        {recentTransactions.length > 0 ? (
+                            <div className="space-y-2">
+                                {recentTransactions.map((t: any) => (
+                                    <div key={t.id} className="flex justify-between items-center text-sm border-t pt-2">
+                                        <div>
+                                            <p className="font-medium text-gray-900">KES {Number(t.amount).toLocaleString()}</p>
+                                            <p className="text-gray-500 uppercase text-xs">
+                                                {t.payment_method}{t.mpesa_receipt_number ? ` · ${t.mpesa_receipt_number}` : ''}
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${t.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                                t.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                                                }`}>
+                                                {t.status}
+                                            </span>
+                                            <p className="text-gray-500 text-xs mt-1">{format(new Date(t.created_at), 'MMM d, yyyy')}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-gray-500 text-sm">No transactions yet.</p>
+                        )}
+                    </div>
+                </div>
 
                 {/* Quick Actions */}
                 <div className="grid md:grid-cols-3 gap-6">

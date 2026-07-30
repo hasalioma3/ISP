@@ -2,6 +2,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from apps.customers.models import Customer
@@ -104,6 +105,12 @@ class StaffViewSet(viewsets.ModelViewSet):
     permission_classes = [RoleAllowed('admin')]
 
 
+class SubscriberPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 200
+
+
 class SubscriberViewSet(
     viewsets.mixins.ListModelMixin,
     viewsets.mixins.RetrieveModelMixin,
@@ -117,20 +124,40 @@ class SubscriberViewSet(
     """
     serializer_class = CustomerSerializer
     permission_classes = [IsAdminUser]
+    pagination_class = SubscriberPagination
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['username', 'phone_number', 'first_name', 'last_name', 'pppoe_username']
     ordering_fields = ['account_balance', 'calculated_expiry', 'created_at', 'username']
     ordering = ['-created_at']
 
     def get_queryset(self):
-        from django.db.models import OuterRef, Subquery
-        from apps.billing.models import Subscription
+        from django.db.models import OuterRef, Subquery, CharField, Q
+        from django.db.models.functions import Coalesce
+        from django.utils import timezone
+        from apps.billing.models import Subscription, UsageRecord
 
         latest_active_expiry = Subscription.objects.filter(
             customer=OuterRef('pk'), status='active'
         ).order_by('-created_at').values('expiry_date')[:1]
 
-        qs = Customer.objects.annotate(calculated_expiry=Subquery(latest_active_expiry))
+        latest_subscription = Subscription.objects.filter(
+            customer=OuterRef('pk')
+        ).order_by('-created_at')
+
+        latest_usage = UsageRecord.objects.filter(
+            customer=OuterRef('pk')
+        ).order_by('-created_at').values('framed_ip_address')[:1]
+
+        qs = Customer.objects.annotate(
+            calculated_expiry=Subquery(latest_active_expiry),
+            current_plan_name=Subquery(latest_subscription.values('plan__name')[:1]),
+            current_plan_status=Subquery(latest_subscription.values('status')[:1]),
+            router_name=Coalesce(
+                'pppoe_secret__router__name', 'hotspot_user__router__name',
+                output_field=CharField()
+            ),
+            last_ip=Subquery(latest_usage),
+        )
 
         service_type = self.request.query_params.get('service_type')
         if service_type:
@@ -139,6 +166,15 @@ class SubscriberViewSet(
         status_param = self.request.query_params.get('status')
         if status_param:
             qs = qs.filter(status=status_param)
+
+        router_param = self.request.query_params.get('router')
+        if router_param:
+            qs = qs.filter(
+                Q(pppoe_secret__router_id=router_param) | Q(hotspot_user__router_id=router_param)
+            )
+
+        if self.request.query_params.get('is_new') == 'true':
+            qs = qs.filter(created_at__gte=timezone.now() - timezone.timedelta(days=7))
 
         return qs
 
@@ -200,6 +236,17 @@ class SubscriberViewSet(
             plan = BillingPlan.objects.get(id=plan_id)
         except (BillingPlan.DoesNotExist, TypeError, ValueError):
             return Response({'error': 'Invalid plan ID'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if plan.service_type == 'static' and not customer.static_ip_address:
+            static_ip = (request.data.get('static_ip_address') or '').strip()
+            if not static_ip:
+                return Response(
+                    {'error': 'static_ip_address is required to assign a Static IP plan to this customer'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            customer.static_ip_address = static_ip
+            customer.service_type = 'static'
+            customer.save(update_fields=['static_ip_address', 'service_type'])
 
         expiry_date = timezone.now() + timezone.timedelta(days=plan.duration_days)
         subscription = Subscription.objects.create(

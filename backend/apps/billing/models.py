@@ -10,6 +10,7 @@ class BillingPlan(models.Model):
     SERVICE_TYPE_CHOICES = [
         ('pppoe', 'PPPoE'),
         ('hotspot', 'Hotspot'),
+        ('static', 'Static IP'),
     ]
     
     name = models.CharField(max_length=100)

@@ -39,18 +39,25 @@ class CustomerRegistrationSerializer(serializers.ModelSerializer):
 
 class CustomerSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
-    # Only populated when the queryset annotates it (SubscriberViewSet) --
-    # the latest active subscription's expiry_date, since Customer itself
-    # has no expiry field of its own.
+    # The following are only populated when the queryset annotates them
+    # (SubscriberViewSet) -- Customer itself has no expiry/plan/router/IP
+    # field of its own, they're derived from related Subscription/Router/
+    # UsageRecord rows. On non-annotated instances (register/login/profile)
+    # these are simply omitted from the response.
     calculated_expiry = serializers.DateTimeField(read_only=True)
+    current_plan_name = serializers.CharField(read_only=True)
+    current_plan_status = serializers.CharField(read_only=True)
+    router_name = serializers.CharField(read_only=True)
+    last_ip = serializers.CharField(read_only=True)
 
     class Meta:
         model = Customer
         fields = ['id', 'username', 'email', 'phone_number', 'first_name', 'last_name',
                   'full_name', 'service_type', 'status', 'account_balance', 'is_verified',
-                  'pppoe_username', 'hotspot_username', 'hotspot_mac_address',
+                  'pppoe_username', 'hotspot_username', 'hotspot_mac_address', 'static_ip_address',
                   'address', 'id_number', 'notes', 'created_at', 'is_staff', 'is_superuser',
-                  'role', 'calculated_expiry']
+                  'role', 'calculated_expiry', 'current_plan_name', 'current_plan_status',
+                  'router_name', 'last_ip']
         read_only_fields = ['id', 'status', 'account_balance', 'is_verified', 'created_at', 'is_staff', 'is_superuser']
 
 class StaffSerializer(serializers.ModelSerializer):

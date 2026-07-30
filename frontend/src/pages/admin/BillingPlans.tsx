@@ -136,6 +136,7 @@ export default function BillingPlans() {
                                         onChange={e => setForm({ ...form, service_type: e.target.value })}>
                                         <option value="pppoe">PPPoE</option>
                                         <option value="hotspot">Hotspot</option>
+                                        <option value="static">Static IP</option>
                                     </select>
                                 </div>
                                 <div>

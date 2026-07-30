@@ -111,6 +111,12 @@ class NetworkAutomation:
                 res3 = mikrotik.remove_hotspot_cookie(username)
                 if not res3['success']: logger.warning(f"Failed to remove cookie for {username}: {res3.get('error')}")
 
+            # Suspend Static IP (just disable their bandwidth queue -- there's
+            # no auth session to disconnect for a static/manually-configured IP)
+            if customer.service_type == 'static':
+                res1 = mikrotik.disable_simple_queue(customer.username)
+                if not res1['success']: results['errors'].append(f"Static Queue Disable: {res1.get('error')}")
+
             if results['errors']:
                 logger.error(f"Suspend customer {customer.username} errors: {results['errors']}")
                 return {'success': False, 'error': ", ".join(results['errors'])}
@@ -147,13 +153,17 @@ class NetworkAutomation:
                     # Only activate if BOTH Customer and Plan support the service
                     enable_pppoe = (customer.service_type in ['pppoe', 'both']) and (plan.service_type in ['pppoe', 'both'])
                     enable_hotspot = (customer.service_type in ['hotspot', 'both']) and (plan.service_type in ['hotspot', 'both'])
-                    
+                    enable_static = (customer.service_type == 'static') and (plan.service_type == 'static')
+
                     if enable_pppoe:
                         self._activate_pppoe(customer, plan, router, mikrotik)
-                    
+
                     if enable_hotspot:
                         self._activate_hotspot(customer, plan, router, mikrotik)
-                        
+
+                    if enable_static:
+                        self._activate_static(customer, plan, router, mikrotik)
+
                 except Exception as e:
                     results['errors'].append(f"{router.name}: {str(e)}")
                     
@@ -314,6 +324,26 @@ class NetworkAutomation:
             if customer.hotspot_mac_address:
                 mikrotik.disconnect_hotspot_by_mac(customer.hotspot_mac_address)
 
+    def _activate_static(self, customer, plan, router, mikrotik):
+        """
+        Static IP customers have no PPPoE/Hotspot auth -- their IP is
+        configured manually (or by a technician on-site), so "activation"
+        is just enforcing the plan's speed via a Simple Queue targeting
+        that fixed address.
+        """
+        if not customer.static_ip_address:
+            raise ValueError(f"{customer.username} has service_type='static' but no static_ip_address set")
+
+        rate_limit = f"{plan.upload_speed}M/{plan.download_speed}M"
+        res = mikrotik.add_simple_queue(
+            name=customer.username,
+            target=f"{customer.static_ip_address}/32",
+            max_limit=rate_limit,
+            comment=f"ISP Billing - {plan.name}",
+        )
+        if not res['success']:
+            raise Exception(res.get('error'))
+
     def sync_all_profiles(self, router=None):
         from apps.billing.models import BillingPlan
         results = {'success': [], 'failed': []}
@@ -360,6 +390,9 @@ class NetworkAutomation:
                 if customer.service_type in ['hotspot', 'both']:
                     self._activate_hotspot(customer, plan, router, mikrotik)
                     results['success'].append(f"Hotspot: {customer.username}")
+                if customer.service_type == 'static':
+                    self._activate_static(customer, plan, router, mikrotik)
+                    results['success'].append(f"Static: {customer.username}")
             except Exception as e:
                 results['failed'].append(f"{customer.username}: {str(e)}")
         return results

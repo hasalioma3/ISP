@@ -325,8 +325,56 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    # Simple Queue Management (Static IP customers -- no PPPoE/Hotspot auth,
+    # just a bandwidth cap tied to their fixed address)
+
+    def add_simple_queue(self, name, target, max_limit, comment=''):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            queue = api.get_resource('/queue/simple')
+            existing = queue.get(name=name)
+            existing = [q for q in existing if q.get('id')]
+            params = {'target': target, 'max-limit': max_limit, 'disabled': 'no', 'comment': comment}
+            if existing:
+                queue.set(id=existing[0]['id'], **params)
+            else:
+                queue.add(name=name, **params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to add simple queue {name}: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def disable_simple_queue(self, name):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            queue = api.get_resource('/queue/simple')
+            existing = [q for q in queue.get(name=name) if q.get('id')]
+            if existing:
+                queue.set(id=existing[0]['id'], disabled='yes')
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to disable simple queue {name}: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def remove_simple_queue(self, name):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            queue = api.get_resource('/queue/simple')
+            for q in [q for q in queue.get(name=name) if q.get('id')]:
+                queue.remove(id=q['id'])
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to remove simple queue {name}: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
     # Address List Management
-    
+
     def add_to_address_list(self, list_name, address, comment=''):
         try:
             connection = self._get_connection()

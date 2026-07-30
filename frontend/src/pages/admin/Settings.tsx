@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, billingAPI, siteSettingsAPI } from '../../services/api';
 import { Users as UsersIcon, CreditCard, Plus, Pencil, Trash2, X, Copy, ShieldCheck, Image as ImageIcon, Building2 } from 'lucide-react';
@@ -18,7 +19,8 @@ const ROLE_BADGE: Record<string, string> = {
 };
 
 export default function Settings() {
-    const [activeTab, setActiveTab] = useState('branding');
+    const [urlParams] = useSearchParams();
+    const [activeTab, setActiveTab] = useState(urlParams.get('tab') || 'branding');
 
     return (
         <div>
@@ -324,7 +326,7 @@ function StaffTab() {
 function ManualUserTab() {
     const [formData, setFormData] = useState({
         username: '', first_name: '', last_name: '', phone_number: '', email: '',
-        password: '', plan_id: '', service_type: 'pppoe',
+        password: '', plan_id: '', service_type: 'pppoe', static_ip_address: '',
     });
     const [issuedCredentials, setIssuedCredentials] = useState<any>(null);
 
@@ -343,7 +345,7 @@ function ManualUserTab() {
             if (res.data.credentials) {
                 setIssuedCredentials(res.data.credentials);
             }
-            setFormData({ username: '', first_name: '', last_name: '', phone_number: '', email: '', password: '', plan_id: '', service_type: 'pppoe' });
+            setFormData({ username: '', first_name: '', last_name: '', phone_number: '', email: '', password: '', plan_id: '', service_type: 'pppoe', static_ip_address: '' });
         },
         onError: (err: any) => {
             toast.error(err.response?.data?.error || 'Failed to create customer');
@@ -362,6 +364,7 @@ function ManualUserTab() {
             `Portal login: ${issuedCredentials.portal_username} / ${issuedCredentials.portal_password}`,
             issuedCredentials.pppoe_username && `PPPoE login: ${issuedCredentials.pppoe_username} / ${issuedCredentials.pppoe_password}`,
             issuedCredentials.hotspot_username && `Hotspot login: ${issuedCredentials.hotspot_username} / ${issuedCredentials.hotspot_password}`,
+            issuedCredentials.static_ip_address && `Static IP: ${issuedCredentials.static_ip_address}`,
         ].filter(Boolean).join('\n');
         navigator.clipboard.writeText(text);
         toast.success('Credentials copied');
@@ -369,7 +372,7 @@ function ManualUserTab() {
 
     return (
         <div className="max-w-md">
-            <h3 className="text-lg font-bold mb-1">Create PPPoE / Hotspot Customer</h3>
+            <h3 className="text-lg font-bold mb-1">Create PPPoE / Hotspot / Static Customer</h3>
             <p className="text-sm text-gray-500 mb-4">
                 Create a customer manually and activate a plan for them (e.g. cash payment). If the username doesn't
                 already exist, a new account is created and login credentials are issued below.
@@ -395,6 +398,7 @@ function ManualUserTab() {
                             <option value="pppoe">PPPoE</option>
                             <option value="hotspot">Hotspot</option>
                             <option value="both">Both</option>
+                            <option value="static">Static IP</option>
                         </select>
                     </div>
                     <div>
@@ -417,6 +421,20 @@ function ManualUserTab() {
                         onChange={e => setFormData({ ...formData, phone_number: e.target.value })}
                     />
                 </div>
+                {formData.service_type === 'static' && (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Static IP Address</label>
+                        <input
+                            type="text" required placeholder="10.5.70.50"
+                            className="w-full border rounded-lg px-3 py-2"
+                            value={formData.static_ip_address}
+                            onChange={e => setFormData({ ...formData, static_ip_address: e.target.value })}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            The fixed IP already configured on the customer's device. A bandwidth queue is created for it.
+                        </p>
+                    </div>
+                )}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email (Optional)</label>
                     <input
@@ -473,6 +491,9 @@ function ManualUserTab() {
                         )}
                         {issuedCredentials.hotspot_username && (
                             <p>Hotspot: {issuedCredentials.hotspot_username} / {issuedCredentials.hotspot_password}</p>
+                        )}
+                        {issuedCredentials.static_ip_address && (
+                            <p>Static IP: {issuedCredentials.static_ip_address}</p>
                         )}
                     </div>
                     <p className="text-xs text-blue-700 mt-2">This is shown once -- copy it now to hand to the customer.</p>

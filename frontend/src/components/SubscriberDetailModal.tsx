@@ -6,10 +6,11 @@ import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import UsageChartPanels from './UsageChartPanels';
 
-export default function SubscriberDetailModal({ id, onClose }: { id: number; onClose: () => void }) {
-    const [tab, setTab] = useState<'details' | 'usage' | 'plans'>('details');
+export default function SubscriberDetailModal({ id, onClose, initialTab = 'details' }: { id: number; onClose: () => void; initialTab?: 'details' | 'usage' | 'plans' }) {
+    const [tab, setTab] = useState<'details' | 'usage' | 'plans'>(initialTab);
     const [form, setForm] = useState<any | null>(null);
     const [topUpPlanId, setTopUpPlanId] = useState('');
+    const [topUpStaticIp, setTopUpStaticIp] = useState('');
     const queryClient = useQueryClient();
 
     const { data: subscriber, isLoading } = useQuery({
@@ -50,10 +51,11 @@ export default function SubscriberDetailModal({ id, onClose }: { id: number; onC
     });
 
     const topUpMutation = useMutation({
-        mutationFn: () => adminAPI.topUpSubscriber(id, parseInt(topUpPlanId)),
+        mutationFn: () => adminAPI.topUpSubscriber(id, parseInt(topUpPlanId), topUpStaticIp || undefined),
         onSuccess: (res) => {
             toast.success(res.data.message || 'Plan assigned');
             setTopUpPlanId('');
+            setTopUpStaticIp('');
             queryClient.invalidateQueries({ queryKey: ['admin-subscribers'] });
             queryClient.invalidateQueries({ queryKey: ['subscriber', id] });
             queryClient.invalidateQueries({ queryKey: ['subscriber-usage', id] });
@@ -64,8 +66,8 @@ export default function SubscriberDetailModal({ id, onClose }: { id: number; onC
 
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
-        const { username, email, phone_number, first_name, last_name, service_type, address, id_number, notes } = form;
-        saveMutation.mutate({ username, email, phone_number, first_name, last_name, service_type, address, id_number, notes });
+        const { username, email, phone_number, first_name, last_name, service_type, address, id_number, notes, static_ip_address } = form;
+        saveMutation.mutate({ username, email, phone_number, first_name, last_name, service_type, address, id_number, notes, static_ip_address });
     };
 
     return (
@@ -117,10 +119,14 @@ export default function SubscriberDetailModal({ id, onClose }: { id: number; onC
                                         <option value="pppoe">PPPoE</option>
                                         <option value="hotspot">Hotspot</option>
                                         <option value="both">Both</option>
+                                        <option value="static">Static IP</option>
                                     </select>
                                 </div>
                                 <Field label="ID Number" value={form.id_number} onChange={v => setForm({ ...form, id_number: v })} />
                                 <Field label="Address" value={form.address} onChange={v => setForm({ ...form, address: v })} />
+                                {form.service_type === 'static' && (
+                                    <Field label="Static IP Address" value={form.static_ip_address} onChange={v => setForm({ ...form, static_ip_address: v })} />
+                                )}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
@@ -211,6 +217,20 @@ export default function SubscriberDetailModal({ id, onClose }: { id: number; onC
                                         {topUpMutation.isPending ? 'Assigning...' : 'Confirm'}
                                     </button>
                                 </div>
+                                {plans?.find((p: any) => String(p.id) === topUpPlanId)?.service_type === 'static' && !subscriber?.static_ip_address && (
+                                    <div className="mt-3">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Static IP Address</label>
+                                        <input
+                                            type="text" placeholder="10.5.70.50"
+                                            className="w-full border rounded-lg px-3 py-2 text-sm"
+                                            value={topUpStaticIp}
+                                            onChange={e => setTopUpStaticIp(e.target.value)}
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            This customer has no static IP on file yet -- enter the fixed IP already configured on their device.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
 
                             <div>

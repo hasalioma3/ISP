@@ -9,7 +9,10 @@ export default function Plans() {
         queryFn: async () => {
             const response = await billingAPI.getPlans();
             // DRF returns paginated response: {count, next, previous, results}
-            return response.data.results || response.data;
+            const allPlans = response.data.results || response.data;
+            // Static IP plans require a technician to configure the fixed IP first,
+            // so they aren't available for self-service purchase.
+            return allPlans.filter((p: any) => p.service_type !== 'static');
         },
     });
 

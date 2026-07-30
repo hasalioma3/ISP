@@ -95,13 +95,13 @@ export const analyticsAPI = {
 // Admin Management API
 export const adminAPI = {
     // Subscribers
-    getSubscribers: (params?: { search?: string; service_type?: string; status?: string; ordering?: string }) =>
+    getSubscribers: (params?: { search?: string; service_type?: string; status?: string; ordering?: string; router?: string; is_new?: string; page?: number; page_size?: number }) =>
         api.get('/customers/subscribers/', { params }),
     getSubscriber: (id: number) => api.get(`/customers/subscribers/${id}/`),
     updateSubscriber: (id: number, data: any) => api.patch(`/customers/subscribers/${id}/`, data),
     getSubscriberUsage: (id: number) => api.get(`/customers/subscribers/${id}/usage/`),
-    topUpSubscriber: (id: number, planId: number) =>
-        api.post(`/customers/subscribers/${id}/topup/`, { plan_id: planId }),
+    topUpSubscriber: (id: number, planId: number, staticIpAddress?: string) =>
+        api.post(`/customers/subscribers/${id}/topup/`, { plan_id: planId, static_ip_address: staticIpAddress }),
 
     // Staff
     getStaff: () => api.get('/customers/staff/'),

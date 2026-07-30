@@ -42,7 +42,14 @@ def initiate_payment(request):
         return Response({
             'error': 'Billing plan not found'
         }, status=status.HTTP_404_NOT_FOUND)
-    
+
+    # Static IP plans require a technician to configure the fixed IP on the
+    # customer's device first, so they can't be bought through self-service.
+    if plan.service_type == 'static':
+        return Response({
+            'error': 'This plan requires setup by our team. Please contact support.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
     # Determine Customer
     if request.user.is_authenticated:
         customer = request.user

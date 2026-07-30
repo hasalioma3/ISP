@@ -14232,3 +14232,644 @@ INFO 2026-07-29 23:20:00,008 tasks Checking for expired subscriptions...
 INFO 2026-07-29 23:20:00,009 tasks Expiration check completed. Suspended 0 subscriptions.
 INFO 2026-07-29 23:20:00,012 tasks Starting usage statistics collection...
 INFO 2026-07-29 23:20:00,197 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-29 23:21:00,009 tasks Checking for expired subscriptions...
+INFO 2026-07-29 23:21:00,012 tasks Expiration check completed. Suspended 0 subscriptions.
+WARNING 2026-07-29 23:21:15,881 log Not Found: /api/billing/subscriptions/current/
+DEBUG 2026-07-29 23:21:18,665 mpesa_service Using cached M-Pesa access token
+INFO 2026-07-29 23:22:00,010 tasks Checking for expired subscriptions...
+INFO 2026-07-29 23:22:00,012 tasks Expiration check completed. Suspended 0 subscriptions.
+DEBUG 2026-07-29 23:22:02,824 mpesa_service Using cached M-Pesa access token
+DEBUG 2026-07-29 23:22:05,550 mpesa_service Using cached M-Pesa access token
+INFO 2026-07-29 23:23:00,007 tasks Checking for expired subscriptions...
+INFO 2026-07-29 23:23:00,010 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-29 23:39:30,797 tasks Checking for expired subscriptions...
+INFO 2026-07-29 23:39:30,801 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-29 23:39:30,802 tasks Starting usage statistics collection...
+INFO 2026-07-29 23:39:30,806 tasks Cleaning up pending payments...
+INFO 2026-07-29 23:39:30,817 tasks Marked 0 payments as timed out
+ERROR 2026-07-29 23:39:45,828 mikrotik_service Failed to get active sessions: timed out
+ERROR 2026-07-29 23:39:45,830 tasks Usage collection failed for router Ali: timed out
+INFO 2026-07-29 23:39:45,830 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-29 23:56:04,263 tasks Starting usage statistics collection...
+INFO 2026-07-29 23:56:04,266 tasks Checking for expired subscriptions...
+INFO 2026-07-29 23:56:04,271 tasks Suspending expired subscription for 0794907020_FD39
+ERROR 2026-07-29 23:56:19,294 mikrotik_service Failed to get active sessions: timed out
+ERROR 2026-07-29 23:56:19,295 mikrotik_service Failed to update Hotspot user 0794907020_FD39: timed out
+ERROR 2026-07-29 23:56:19,296 tasks Usage collection failed for router Ali: timed out
+INFO 2026-07-29 23:56:19,298 tasks Usage statistics collection completed. 0 sessions updated.
+ERROR 2026-07-30 00:16:52,541 mikrotik_service Failed to disconnect Hotspot session 0794907020_FD39: timed out
+INFO 2026-07-30 00:16:52,565 tasks Checking for expired subscriptions...
+INFO 2026-07-30 00:16:52,568 tasks Cleaning up pending payments...
+INFO 2026-07-30 00:16:52,571 tasks Marked 0 payments as timed out
+INFO 2026-07-30 00:16:52,573 tasks Suspending expired subscription for 0726686337_96E1
+INFO 2026-07-30 00:16:52,578 tasks Starting usage statistics collection...
+INFO 2026-07-30 00:17:00,009 tasks Checking for expired subscriptions...
+INFO 2026-07-30 00:17:00,014 tasks Expiration check completed. Suspended 0 subscriptions.
+ERROR 2026-07-30 00:17:07,567 mikrotik_service Failed to remove Hotspot cookie 0794907020_FD39: timed out
+WARNING 2026-07-30 00:17:07,569 network_automation Failed to remove cookie for 0794907020_FD39: timed out
+ERROR 2026-07-30 00:17:07,569 network_automation Suspend customer 0794907020_FD39 errors: ['Hotspot Disable: timed out', 'Hotspot Disconnect: timed out']
+INFO 2026-07-30 00:17:07,579 tasks Suspending expired subscription for 0726686337_96E1
+ERROR 2026-07-30 00:17:07,599 mikrotik_service Failed to update Hotspot user 0726686337_96E1: timed out
+ERROR 2026-07-30 00:17:07,630 mikrotik_service Failed to get active sessions: timed out
+ERROR 2026-07-30 00:17:07,632 tasks Usage collection failed for router Ali: timed out
+INFO 2026-07-30 00:17:07,632 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 00:33:30,225 tasks Checking for expired subscriptions...
+INFO 2026-07-30 00:33:30,227 tasks Starting usage statistics collection...
+INFO 2026-07-30 00:33:30,227 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 00:33:30,232 tasks Cleaning up pending payments...
+INFO 2026-07-30 00:33:30,248 tasks Marked 0 payments as timed out
+ERROR 2026-07-30 00:33:32,743 mikrotik_service Failed to update Hotspot user 0726686337_96E1: timed out
+ERROR 2026-07-30 00:33:32,753 mikrotik_service Failed to disconnect Hotspot session 0726686337_96E1: timed out
+ERROR 2026-07-30 00:33:45,256 mikrotik_service Failed to get active sessions: timed out
+ERROR 2026-07-30 00:33:45,258 tasks Usage collection failed for router Ali: timed out
+INFO 2026-07-30 00:33:45,258 tasks Usage statistics collection completed. 0 sessions updated.
+ERROR 2026-07-30 00:33:47,770 mikrotik_service Failed to disconnect Hotspot session 0726686337_96E1: timed out
+ERROR 2026-07-30 00:33:47,770 mikrotik_service Failed to remove Hotspot cookie 0726686337_96E1: timed out
+WARNING 2026-07-30 00:33:47,772 network_automation Failed to remove cookie for 0726686337_96E1: timed out
+ERROR 2026-07-30 00:33:47,772 network_automation Suspend customer 0726686337_96E1 errors: ['Hotspot Disable: timed out', 'Hotspot Disconnect: timed out']
+INFO 2026-07-30 00:33:47,773 tasks Expiration check completed. Suspended 1 subscriptions.
+INFO 2026-07-30 00:49:13,547 tasks Checking for expired subscriptions...
+INFO 2026-07-30 00:49:13,551 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 00:49:13,552 tasks Starting usage statistics collection...
+ERROR 2026-07-30 00:49:16,331 mikrotik_service Failed to remove Hotspot cookie 0726686337_96E1: timed out
+WARNING 2026-07-30 00:49:16,333 network_automation Failed to remove cookie for 0726686337_96E1: timed out
+ERROR 2026-07-30 00:49:16,333 network_automation Suspend customer 0726686337_96E1 errors: ['Hotspot Disable: timed out', 'Hotspot Disconnect: timed out']
+INFO 2026-07-30 00:49:16,334 tasks Expiration check completed. Suspended 2 subscriptions.
+ERROR 2026-07-30 00:49:28,583 mikrotik_service Failed to get active sessions: timed out
+ERROR 2026-07-30 00:49:28,585 tasks Usage collection failed for router Ali: timed out
+INFO 2026-07-30 00:49:28,585 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 01:10:00,261 tasks Starting usage statistics collection...
+INFO 2026-07-30 01:10:00,264 tasks Checking for expired subscriptions...
+INFO 2026-07-30 01:10:00,267 tasks Cleaning up pending payments...
+INFO 2026-07-30 01:10:00,268 tasks Marked 0 payments as timed out
+INFO 2026-07-30 01:10:00,277 tasks Expiration check completed. Suspended 0 subscriptions.
+ERROR 2026-07-30 01:10:15,283 mikrotik_service Failed to get active sessions: timed out
+ERROR 2026-07-30 01:10:15,284 tasks Usage collection failed for router Ali: timed out
+INFO 2026-07-30 01:10:15,284 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 01:20:39,460 tasks Checking for expired subscriptions...
+INFO 2026-07-30 01:20:39,463 tasks Starting usage statistics collection...
+INFO 2026-07-30 01:20:39,463 tasks Expiration check completed. Suspended 0 subscriptions.
+ERROR 2026-07-30 01:20:54,492 mikrotik_service Failed to get active sessions: timed out
+ERROR 2026-07-30 01:20:54,493 tasks Usage collection failed for router Ali: timed out
+INFO 2026-07-30 01:20:54,493 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 01:21:00,007 tasks Checking for expired subscriptions...
+INFO 2026-07-30 01:21:00,009 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 01:24:19,619 tasks Checking for expired subscriptions...
+INFO 2026-07-30 01:24:19,621 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 01:25:00,009 tasks Starting usage statistics collection...
+INFO 2026-07-30 01:25:00,012 tasks Checking for expired subscriptions...
+INFO 2026-07-30 01:25:00,014 tasks Expiration check completed. Suspended 0 subscriptions.
+ERROR 2026-07-30 01:25:15,045 mikrotik_service Failed to get active sessions: timed out
+ERROR 2026-07-30 01:25:15,047 tasks Usage collection failed for router Ali: timed out
+INFO 2026-07-30 01:25:15,047 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 19:07:24,591 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:07:24,591 tasks Cleaning up pending payments...
+INFO 2026-07-30 19:07:24,592 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:07:24,599 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:07:24,599 tasks Marked 0 payments as timed out
+INFO 2026-07-30 19:07:24,860 tasks Usage statistics collection completed. 0 sessions updated.
+WARNING 2026-07-30 19:07:27,849 log Not Found: /
+WARNING 2026-07-30 19:07:28,405 log Not Found: /favicon.ico
+WARNING 2026-07-30 19:07:37,531 log Not Found: /static/admin/css/dashboard.css
+WARNING 2026-07-30 19:07:38,089 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 19:07:38,091 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 19:07:38,093 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 19:07:38,093 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 19:07:38,094 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 19:07:38,095 log Not Found: /static/admin/js/theme.js
+INFO 2026-07-30 19:08:00,025 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:08:00,041 tasks Expiration check completed. Suspended 0 subscriptions.
+WARNING 2026-07-30 19:08:00,204 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 19:08:00,206 log Not Found: /static/admin/css/dashboard.css
+WARNING 2026-07-30 19:08:00,207 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 19:08:00,209 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 19:08:00,210 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 19:08:00,212 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 19:08:00,213 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 19:08:02,536 log Not Found: /api/billing/subscriptions/current/
+INFO 2026-07-30 19:08:07,825 mpesa_service Generated new M-Pesa access token
+INFO 2026-07-30 19:09:00,010 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:09:00,013 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:10:00,006 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:10:00,010 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:10:00,019 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:10:00,203 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 19:11:00,016 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:11:00,018 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:12:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:12:00,008 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:13:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:13:00,008 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:14:00,010 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:14:00,014 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:15:00,012 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:15:00,014 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:15:00,016 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:15:00,206 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 19:16:00,008 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:16:00,010 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:17:00,003 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:17:00,004 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:18:00,016 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:18:00,017 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:23:07,636 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:23:07,640 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:23:07,647 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:23:07,834 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 19:25:27,585 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:25:27,586 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:25:27,586 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:25:27,776 tasks Usage statistics collection completed. 0 sessions updated.
+DEBUG 2026-07-30 19:33:44,911 mpesa_service Using cached M-Pesa access token
+INFO 2026-07-30 19:33:45,274 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:33:45,275 tasks Cleaning up pending payments...
+INFO 2026-07-30 19:33:45,278 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:33:45,279 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:33:45,281 tasks Marked 0 payments as timed out
+INFO 2026-07-30 19:33:46,686 tasks Usage statistics collection completed. 0 sessions updated.
+DEBUG 2026-07-30 19:33:46,880 mpesa_service Using cached M-Pesa access token
+INFO 2026-07-30 19:34:00,026 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:34:00,028 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:35:00,003 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:35:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:35:00,017 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:35:00,130 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 19:36:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:36:00,009 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:37:00,004 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:37:00,007 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:38:00,008 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:38:00,010 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:39:00,007 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:39:00,009 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:40:00,003 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:40:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:40:00,007 tasks Expiration check completed. Suspended 0 subscriptions.
+ERROR 2026-07-30 19:40:15,023 mikrotik_service Failed to get active sessions: timed out
+ERROR 2026-07-30 19:40:15,023 tasks Usage collection failed for router Ali: timed out
+INFO 2026-07-30 19:40:15,024 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 19:41:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:41:00,008 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:42:00,007 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:42:00,010 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:43:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:43:00,015 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:44:00,008 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:44:00,010 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:45:00,006 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:45:00,009 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:45:00,011 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:45:01,137 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 19:46:00,005 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:46:00,006 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:47:00,007 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:47:00,009 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:48:00,007 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:48:00,009 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:49:00,007 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:49:00,010 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:50:00,007 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:50:00,010 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:50:00,022 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:50:00,131 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 19:50:22,727 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:50:22,902 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-30 19:50:59,094 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:50:59,287 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-30 19:51:00,022 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:51:00,035 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:52:00,008 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:52:00,010 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:53:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:53:00,008 tasks Expiration check completed. Suspended 0 subscriptions.
+WARNING 2026-07-30 19:53:36,230 log Unauthorized: /api/customers/login/
+INFO 2026-07-30 19:54:00,012 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:54:00,014 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:55:00,008 tasks Starting usage statistics collection...
+INFO 2026-07-30 19:55:00,010 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:55:00,025 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:55:00,128 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-30 19:55:12,269 network_automation Suspend customer static_test01 completed successfully
+INFO 2026-07-30 19:56:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:56:00,009 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:57:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:57:00,008 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:58:00,003 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:58:00,005 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 19:58:35,842 mpesa_service Generated new M-Pesa access token
+INFO 2026-07-30 19:59:00,013 tasks Checking for expired subscriptions...
+INFO 2026-07-30 19:59:00,016 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:00:00,008 tasks Cleaning up pending payments...
+INFO 2026-07-30 20:00:00,012 tasks Marked 0 payments as timed out
+INFO 2026-07-30 20:00:00,013 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:00:00,018 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:00:00,059 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:00:00,253 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-30 20:01:00,009 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:01:00,012 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:02:00,028 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:02:00,041 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:02:13,980 tasks Syncing plan static1 to 1 routers...
+ERROR 2026-07-30 20:02:13,982 tasks Failed to sync plan static1 to router Ali: local variable 'rate_limit' referenced before assignment
+INFO 2026-07-30 20:03:00,010 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:03:00,014 tasks Expiration check completed. Suspended 0 subscriptions.
+WARNING 2026-07-30 20:03:08,217 log Unauthorized: /api/settings/site/
+WARNING 2026-07-30 20:03:08,220 log Unauthorized: /api/billing/subscriptions/current/
+WARNING 2026-07-30 20:03:12,597 log Unauthorized: /api/billing/subscriptions/current/
+INFO 2026-07-30 20:04:00,008 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:04:00,011 tasks Expiration check completed. Suspended 0 subscriptions.
+WARNING 2026-07-30 20:04:58,199 log Not Found: /
+INFO 2026-07-30 20:05:00,008 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:05:00,012 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:05:00,028 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:05:00,236 tasks Usage statistics collection completed. 1 sessions updated.
+WARNING 2026-07-30 20:05:04,450 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:05:04,453 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:05:04,455 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:05:04,456 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:05:04,457 log Not Found: /static/admin/css/dashboard.css
+WARNING 2026-07-30 20:05:04,459 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:05:04,854 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:05:11,923 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:05:11,925 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:05:12,645 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:05:12,648 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:05:12,650 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:05:12,652 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:05:12,653 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:05:12,654 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:05:12,655 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:05:12,657 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:05:12,658 log Not Found: /static/admin/css/changelists.css
+WARNING 2026-07-30 20:05:12,658 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:05:12,956 log Not Found: /static/admin/img/icon-yes.svg
+WARNING 2026-07-30 20:05:12,960 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:05:12,964 log Not Found: /static/admin/img/search.svg
+WARNING 2026-07-30 20:05:15,198 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:05:15,201 log Not Found: /static/admin/js/filters.js
+WARNING 2026-07-30 20:05:15,204 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:05:15,205 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:05:15,206 log Not Found: /static/admin/img/icon-yes.svg
+WARNING 2026-07-30 20:05:27,593 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:05:27,596 log Not Found: /static/admin/css/changelists.css
+WARNING 2026-07-30 20:05:28,000 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:05:28,003 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:05:28,406 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:05:28,409 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:05:28,416 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:05:28,417 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:05:28,419 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:05:28,420 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:05:28,420 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:05:28,422 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:05:28,422 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:05:28,817 log Not Found: /static/admin/img/icon-no.svg
+WARNING 2026-07-30 20:05:28,820 log Not Found: /static/admin/img/search.svg
+WARNING 2026-07-30 20:05:29,635 log Not Found: /static/admin/js/filters.js
+WARNING 2026-07-30 20:05:29,637 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:05:29,640 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:05:29,642 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:05:39,167 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:05:40,400 log Not Found: /static/admin/js/admin/DateTimeShortcuts.js
+WARNING 2026-07-30 20:05:40,606 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:05:40,608 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:05:40,610 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:05:40,612 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:05:40,613 log Not Found: /static/admin/js/calendar.js
+WARNING 2026-07-30 20:05:40,619 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:05:40,620 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:05:40,621 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:05:40,622 log Not Found: /static/admin/css/forms.css
+WARNING 2026-07-30 20:05:40,623 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:05:40,624 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:05:40,625 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:05:40,626 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:05:40,626 log Not Found: /static/admin/js/prepopulate_init.js
+WARNING 2026-07-30 20:05:42,842 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:05:42,844 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:05:42,846 log Not Found: /static/admin/js/change_form.js
+WARNING 2026-07-30 20:05:43,255 log Not Found: /static/admin/js/nav_sidebar.js
+INFO 2026-07-30 20:06:00,008 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:06:00,011 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:07:00,008 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:07:00,011 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:08:00,004 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:08:00,006 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:09:00,017 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:09:00,024 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:10:00,009 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:10:00,014 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:10:00,020 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:10:00,236 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-30 20:11:00,003 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:11:00,006 tasks Expiration check completed. Suspended 0 subscriptions.
+WARNING 2026-07-30 20:11:36,081 log Unauthorized: /api/customers/subscribers/
+INFO 2026-07-30 20:12:00,021 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:12:00,039 tasks Expiration check completed. Suspended 0 subscriptions.
+WARNING 2026-07-30 20:12:19,648 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:12:19,949 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:12:19,953 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:12:19,955 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:12:19,957 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:12:19,958 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:12:19,959 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:12:19,960 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:12:19,961 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:12:19,963 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:12:19,964 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:12:19,965 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:12:20,873 log Not Found: /static/admin/js/cancel.js
+WARNING 2026-07-30 20:12:20,876 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:12:20,878 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:12:20,880 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:12:26,401 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:12:26,712 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:12:26,715 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:12:26,717 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:12:26,718 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:12:26,719 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:12:26,720 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:12:26,721 log Not Found: /static/admin/css/changelists.css
+WARNING 2026-07-30 20:12:26,722 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:12:26,723 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:12:26,724 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:12:26,725 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:12:26,731 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:12:27,285 log Not Found: /static/admin/img/search.svg
+WARNING 2026-07-30 20:12:27,288 log Not Found: /static/admin/img/icon-no.svg
+WARNING 2026-07-30 20:12:27,333 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:12:27,336 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:12:27,338 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:12:27,471 log Not Found: /static/admin/js/filters.js
+WARNING 2026-07-30 20:12:33,467 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:12:33,780 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:12:33,784 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:12:33,786 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:12:33,787 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:12:33,788 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:12:33,789 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:12:33,791 log Not Found: /static/admin/css/changelists.css
+WARNING 2026-07-30 20:12:33,792 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:12:33,793 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:12:33,794 log Not Found: /static/admin/img/search.svg
+WARNING 2026-07-30 20:12:33,798 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:12:33,799 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:12:33,800 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:12:33,801 log Not Found: /static/admin/img/icon-no.svg
+WARNING 2026-07-30 20:12:34,798 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:12:34,800 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:12:34,802 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:12:34,804 log Not Found: /static/admin/img/icon-no.svg
+WARNING 2026-07-30 20:12:34,805 log Not Found: /static/admin/js/filters.js
+WARNING 2026-07-30 20:12:44,221 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:12:44,534 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:12:44,535 log Not Found: /static/admin/js/calendar.js
+WARNING 2026-07-30 20:12:44,537 log Not Found: /static/admin/js/admin/DateTimeShortcuts.js
+WARNING 2026-07-30 20:12:44,538 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:12:44,539 log Not Found: /static/admin/js/prepopulate_init.js
+WARNING 2026-07-30 20:12:44,540 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:12:44,541 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:12:44,542 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:12:44,543 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:12:44,544 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:12:44,545 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:12:44,545 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:12:44,546 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:12:44,547 log Not Found: /static/admin/css/forms.css
+WARNING 2026-07-30 20:12:44,548 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:12:45,552 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:12:45,555 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:12:45,557 log Not Found: /static/admin/js/change_form.js
+WARNING 2026-07-30 20:12:45,559 log Not Found: /static/admin/js/theme.js
+INFO 2026-07-30 20:12:53,198 network_automation Suspend customer test completed successfully
+WARNING 2026-07-30 20:12:55,073 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:12:55,382 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:12:55,384 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:12:55,386 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:12:55,388 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:12:55,389 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:12:55,394 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:12:55,395 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:12:55,396 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:12:55,397 log Not Found: /static/admin/img/icon-no.svg
+WARNING 2026-07-30 20:12:55,398 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:12:55,399 log Not Found: /static/admin/img/search.svg
+WARNING 2026-07-30 20:12:55,400 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:12:55,401 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:12:55,402 log Not Found: /static/admin/css/changelists.css
+WARNING 2026-07-30 20:12:56,004 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:12:56,308 log Not Found: /static/admin/img/icon-no.svg
+WARNING 2026-07-30 20:12:56,311 log Not Found: /static/admin/js/filters.js
+WARNING 2026-07-30 20:12:56,312 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:12:56,314 log Not Found: /static/admin/css/responsive.css
+INFO 2026-07-30 20:13:00,013 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:13:00,017 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:13:09,896 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:13:10,034 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-30 20:13:15,978 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:13:16,113 tasks Usage statistics collection completed. 1 sessions updated.
+WARNING 2026-07-30 20:13:49,341 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:13:49,650 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:13:49,655 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:13:49,657 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:13:49,659 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:13:49,660 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:13:49,661 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:13:49,662 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:13:49,663 log Not Found: /static/admin/css/changelists.css
+WARNING 2026-07-30 20:13:49,664 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:13:49,665 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:13:49,666 log Not Found: /static/admin/img/icon-no.svg
+WARNING 2026-07-30 20:13:49,667 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:13:49,668 log Not Found: /static/admin/img/search.svg
+WARNING 2026-07-30 20:13:49,669 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:13:50,677 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:13:50,680 log Not Found: /static/admin/img/icon-no.svg
+WARNING 2026-07-30 20:13:50,682 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:13:50,684 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:13:50,685 log Not Found: /static/admin/js/filters.js
+INFO 2026-07-30 20:14:00,010 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:14:00,014 tasks Expiration check completed. Suspended 0 subscriptions.
+WARNING 2026-07-30 20:14:01,223 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:14:01,226 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:14:01,228 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:14:01,230 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:14:01,231 log Not Found: /static/admin/css/forms.css
+WARNING 2026-07-30 20:14:01,233 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:14:01,237 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:14:01,238 log Not Found: /static/admin/js/prepopulate_init.js
+WARNING 2026-07-30 20:14:01,240 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:14:01,241 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:14:01,242 log Not Found: /static/admin/js/calendar.js
+WARNING 2026-07-30 20:14:01,243 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:14:01,244 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:14:01,245 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:14:01,246 log Not Found: /static/admin/js/admin/DateTimeShortcuts.js
+WARNING 2026-07-30 20:14:01,248 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:14:02,159 log Not Found: /static/admin/js/change_form.js
+WARNING 2026-07-30 20:14:02,163 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:14:02,165 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:14:02,450 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:14:05,316 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:14:09,007 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:14:09,010 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:14:09,012 log Not Found: /static/admin/css/forms.css
+WARNING 2026-07-30 20:14:09,014 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:14:09,015 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:14:09,016 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:14:09,017 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:14:09,018 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:14:09,020 log Not Found: /static/admin/js/calendar.js
+WARNING 2026-07-30 20:14:09,021 log Not Found: /static/admin/js/prepopulate_init.js
+WARNING 2026-07-30 20:14:09,021 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:14:09,023 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:14:09,024 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:14:09,025 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:14:09,026 log Not Found: /static/admin/js/admin/DateTimeShortcuts.js
+WARNING 2026-07-30 20:14:09,027 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:14:09,935 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:14:09,938 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:14:09,941 log Not Found: /static/admin/js/change_form.js
+WARNING 2026-07-30 20:14:09,943 log Not Found: /static/admin/css/responsive.css
+INFO 2026-07-30 20:14:15,922 network_automation Suspend customer test completed successfully
+WARNING 2026-07-30 20:14:17,301 log Not Found: /static/admin/css/changelists.css
+WARNING 2026-07-30 20:14:17,603 log Not Found: /static/admin/js/core.js
+WARNING 2026-07-30 20:14:17,605 log Not Found: /static/admin/js/vendor/jquery/jquery.min.js
+WARNING 2026-07-30 20:14:17,606 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:14:17,607 log Not Found: /static/admin/css/nav_sidebar.css
+WARNING 2026-07-30 20:14:17,609 log Not Found: /static/admin/js/vendor/xregexp/xregexp.min.js
+WARNING 2026-07-30 20:14:17,609 log Not Found: /static/admin/css/dark_mode.css
+WARNING 2026-07-30 20:14:17,610 log Not Found: /static/admin/js/urlify.js
+WARNING 2026-07-30 20:14:17,611 log Not Found: /static/admin/js/actions.js
+WARNING 2026-07-30 20:14:17,612 log Not Found: /static/admin/js/jquery.init.js
+WARNING 2026-07-30 20:14:17,612 log Not Found: /static/admin/js/admin/RelatedObjectLookups.js
+WARNING 2026-07-30 20:14:17,613 log Not Found: /static/admin/img/icon-no.svg
+WARNING 2026-07-30 20:14:17,614 log Not Found: /static/admin/img/search.svg
+WARNING 2026-07-30 20:14:17,615 log Not Found: /static/admin/js/prepopulate.js
+WARNING 2026-07-30 20:14:17,618 log Not Found: /static/admin/css/base.css
+WARNING 2026-07-30 20:14:18,319 log Not Found: /static/admin/js/theme.js
+WARNING 2026-07-30 20:14:18,630 log Not Found: /static/admin/css/responsive.css
+WARNING 2026-07-30 20:14:18,631 log Not Found: /static/admin/js/nav_sidebar.js
+WARNING 2026-07-30 20:14:18,632 log Not Found: /static/admin/img/icon-no.svg
+WARNING 2026-07-30 20:14:18,633 log Not Found: /static/admin/js/filters.js
+INFO 2026-07-30 20:15:00,031 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:15:00,035 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:15:00,056 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:15:00,172 tasks Usage statistics collection completed. 0 sessions updated.
+WARNING 2026-07-30 20:15:20,140 log Not Found: /api/billing/subscriptions/current/
+WARNING 2026-07-30 20:15:22,514 log Not Found: /api/billing/subscriptions/current/
+INFO 2026-07-30 20:15:44,292 mpesa_service Generated new M-Pesa access token
+INFO 2026-07-30 20:15:44,293 mpesa_service Initiating STK Push for 254726686337, amount: 3.00
+INFO 2026-07-30 20:15:44,912 mpesa_service STK Push response: {'MerchantRequestID': '125e-4091-abd7-137c1517ac6f4923', 'CheckoutRequestID': 'ws_CO_300720262015446726686337', 'ResponseCode': '0', 'ResponseDescription': 'Success. Request accepted for processing', 'CustomerMessage': 'Success. Request accepted for processing'}
+INFO 2026-07-30 20:15:56,831 views Received M-Pesa callback: {'Body': {'stkCallback': {'MerchantRequestID': '125e-4091-abd7-137c1517ac6f4923', 'CheckoutRequestID': 'ws_CO_300720262015446726686337', 'ResultCode': 0, 'ResultDesc': 'The service request is processed successfully.', 'CallbackMetadata': {'Item': [{'Name': 'Amount', 'Value': 3}, {'Name': 'MpesaReceiptNumber', 'Value': 'UGUJ40VOAT'}, {'Name': 'Balance'}, {'Name': 'TransactionDate', 'Value': 20260730201555}, {'Name': 'PhoneNumber', 'Value': 254726686337}]}}}}
+INFO 2026-07-30 20:15:56,832 payment_processor Processing callback for 125e-4091-abd7-137c1517ac6f4923, result: 0
+INFO 2026-07-30 20:15:57,283 payment_processor Network access activated for test
+INFO 2026-07-30 20:15:57,287 payment_processor Payment processed successfully: 125e-4091-abd7-137c1517ac6f4923
+INFO 2026-07-30 20:16:00,004 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:16:00,008 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:17:00,005 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:17:00,007 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:18:00,009 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:18:00,012 tasks Expiration check completed. Suspended 0 subscriptions.
+WARNING 2026-07-30 20:18:16,617 log Bad Request: /api/billing/manual-subscribe/
+INFO 2026-07-30 20:19:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:19:00,008 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:20:00,009 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:20:00,013 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:20:00,013 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:20:00,212 tasks Usage statistics collection completed. 1 sessions updated.
+ERROR 2026-07-30 20:20:03,535 exception Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/usr/local/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/usr/local/lib/python3.9/site-packages/django/middleware/security.py", line 28, in process_request
+    host = self.redirect_host or request.get_host()
+  File "/usr/local/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2026-07-30 20:20:03,561 log Bad Request: /api/billing/usage/
+ERROR 2026-07-30 20:20:03,562 exception Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/usr/local/lib/python3.9/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/usr/local/lib/python3.9/site-packages/django/middleware/security.py", line 28, in process_request
+    host = self.redirect_host or request.get_host()
+  File "/usr/local/lib/python3.9/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2026-07-30 20:20:03,562 log Bad Request: /api/billing/transactions/
+INFO 2026-07-30 20:21:00,016 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:21:00,032 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:21:32,219 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:21:32,404 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-30 20:22:00,009 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:22:00,015 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:22:49,980 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:22:50,171 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-30 20:23:00,013 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:23:00,017 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:24:00,008 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:24:00,013 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:25:00,007 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:25:00,013 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:25:00,023 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:25:00,202 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-30 20:26:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:26:00,023 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:27:00,005 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:27:00,010 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:28:00,007 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:28:00,008 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:29:00,005 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:29:00,007 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:30:00,004 tasks Cleaning up pending payments...
+INFO 2026-07-30 20:30:00,007 tasks Marked 0 payments as timed out
+INFO 2026-07-30 20:30:00,007 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:30:00,012 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:30:00,019 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:30:00,220 tasks Usage statistics collection completed. 1 sessions updated.
+DEBUG 2026-07-30 20:30:57,318 mpesa_service Using cached M-Pesa access token
+INFO 2026-07-30 20:31:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:31:00,009 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:32:00,010 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:32:00,014 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:33:00,008 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:33:00,011 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:34:00,006 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:34:00,007 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:35:00,015 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:35:00,019 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:35:00,024 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:35:00,141 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-07-30 20:36:00,010 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:36:00,012 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:37:00,005 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:37:00,014 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:38:00,018 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:38:00,025 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:39:00,010 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:39:00,014 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:40:00,020 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:40:00,021 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:40:00,038 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:40:00,285 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-30 20:41:00,013 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:41:00,018 tasks Expiration check completed. Suspended 0 subscriptions.
+WARNING 2026-07-30 20:41:38,998 log Unauthorized: /api/customers/login/
+WARNING 2026-07-30 20:41:39,029 log Unauthorized: /api/customers/subscribers/
+INFO 2026-07-30 20:42:11,222 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:42:11,238 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:43:00,005 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:43:00,007 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:44:00,005 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:44:00,011 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:45:00,007 tasks Starting usage statistics collection...
+INFO 2026-07-30 20:45:00,011 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:45:00,037 tasks Expiration check completed. Suspended 0 subscriptions.
+INFO 2026-07-30 20:45:00,254 tasks Usage statistics collection completed. 1 sessions updated.
+INFO 2026-07-30 20:46:00,011 tasks Checking for expired subscriptions...
+INFO 2026-07-30 20:46:00,014 tasks Expiration check completed. Suspended 0 subscriptions.
