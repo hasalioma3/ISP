@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-PI_HOST="192.168.88.11"
+PI_HOST="192.168.88.253"
 PI_USER="pi"
 REMOTE_DIR="~/ISP"
 
