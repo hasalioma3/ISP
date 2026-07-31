@@ -289,7 +289,7 @@ class SubscriberViewSet(
             customer.service_type = 'static'
             customer.save(update_fields=['static_ip_address', 'service_type'])
 
-        expiry_date = timezone.now() + timezone.timedelta(days=plan.duration_days)
+        expiry_date = timezone.now() + plan.get_duration_timedelta()
         try:
             subscription = Subscription.objects.create(
                 customer=customer,

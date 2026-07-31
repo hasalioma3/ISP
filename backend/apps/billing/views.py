@@ -371,7 +371,7 @@ class VoucherRedeemView(APIView):
                 from apps.billing.models import Subscription
                 
                 # Calculate expiry
-                expiry_date = timezone.now() + timezone.timedelta(days=voucher.plan.duration_days)
+                expiry_date = timezone.now() + voucher.plan.get_duration_timedelta()
                 
                 Subscription.objects.create(
                     customer=customer,
@@ -474,20 +474,7 @@ class ManualSubscriptionView(APIView):
             customer.service_type = 'static'
             customer.save(update_fields=['static_ip_address', 'service_type'])
 
-        # Duration calc mirrors payment_processor.py's logic, so manually
-        # activated and M-Pesa-activated subscriptions expire consistently.
-        duration_value = plan.duration_value
-        duration_unit = plan.duration_unit
-        if duration_unit == 'minutes':
-            expiry_delta = timezone.timedelta(minutes=duration_value)
-        elif duration_unit == 'hours':
-            expiry_delta = timezone.timedelta(hours=duration_value)
-        elif duration_unit == 'days':
-            expiry_delta = timezone.timedelta(days=duration_value)
-        elif duration_unit == 'months':
-            expiry_delta = timezone.timedelta(days=duration_value * 30)
-        else:
-            expiry_delta = timezone.timedelta(days=plan.duration_days)
+        expiry_delta = plan.get_duration_timedelta()
 
         subscription = Subscription.objects.create(
             customer=customer,
@@ -626,15 +613,7 @@ class PPPoEBulkImportView(APIView):
                     errors.append({'row': i, 'username': username, 'error': 'expiry_date must be YYYY-MM-DD'})
                     continue
             else:
-                if plan.duration_unit == 'minutes':
-                    expiry_delta = timezone.timedelta(minutes=plan.duration_value)
-                elif plan.duration_unit == 'hours':
-                    expiry_delta = timezone.timedelta(hours=plan.duration_value)
-                elif plan.duration_unit == 'months':
-                    expiry_delta = timezone.timedelta(days=plan.duration_value * 30)
-                else:
-                    expiry_delta = timezone.timedelta(days=plan.duration_value)
-                expiry_date = timezone.now() + expiry_delta
+                expiry_date = timezone.now() + plan.get_duration_timedelta()
 
             try:
                 with transaction.atomic():

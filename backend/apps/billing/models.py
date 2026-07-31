@@ -79,6 +79,29 @@ class BillingPlan(models.Model):
     def __str__(self):
         return f"{self.name} - {self.download_speed}/{self.upload_speed} Mbps - KES {self.price}"
 
+    def get_duration_timedelta(self):
+        """
+        The plan's real duration, from duration_value/duration_unit --
+        NOT duration_days, which is a legacy field that's never kept in
+        sync (e.g. a 15-minute plan can have duration_days=30, its
+        unrelated default value). Every place that computes a subscription
+        expiry must go through this, not duplicate the unit-conversion
+        logic -- that duplication is exactly how a "15 minutes" hotspot
+        voucher once ended up with a 1-month expiry: one call site used
+        duration_value/duration_unit correctly, another used the stale
+        legacy duration_days.
+        """
+        from datetime import timedelta
+        if self.duration_unit == 'minutes':
+            return timedelta(minutes=self.duration_value)
+        elif self.duration_unit == 'hours':
+            return timedelta(hours=self.duration_value)
+        elif self.duration_unit == 'months':
+            return timedelta(days=self.duration_value * 30)  # Approx
+        elif self.duration_unit == 'days':
+            return timedelta(days=self.duration_value)
+        return timedelta(days=self.duration_days)  # Fallback for bad/missing duration_unit
+
 
 class Subscription(models.Model):
     """
