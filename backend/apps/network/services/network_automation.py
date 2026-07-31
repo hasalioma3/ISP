@@ -490,9 +490,20 @@ class NetworkAutomation:
 
         # --- Bridge: create it, and enslave the configured LAN ports to it.
         # Ports not listed (WAN, and anything reserved e.g. for management
-        # access) are left exactly as they are. ---
+        # access) are left exactly as they are. Configured ports that don't
+        # actually exist on this router (e.g. wlan1 on a wired-only model)
+        # are skipped rather than attempted-and-failed, since
+        # MIKROTIK_PROVISION_BRIDGE_PORTS is one fixed list shared across
+        # every router regardless of hardware. ---
         step(f'Create {interface} bridge', mikrotik.add_bridge, interface)
+        existing_interface_names = set()
+        interfaces_res = mikrotik.list_interfaces()
+        if interfaces_res.get('success'):
+            existing_interface_names = {i['name'] for i in interfaces_res['interfaces']}
         for port in settings.MIKROTIK_PROVISION_BRIDGE_PORTS:
+            if existing_interface_names and port not in existing_interface_names:
+                results['success'].append(f'Skip {port} (not present on this router)')
+                continue
             step(f'Add {port} to {interface}', mikrotik.set_bridge_port, port, interface)
 
         # --- Hotspot: interface IP, pool, DHCP, server profile, server ---

@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, billingAPI } from '../services/api';
-import { X, Save, PlusCircle } from 'lucide-react';
+import { X, Save, PlusCircle, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import UsageChartPanels from './UsageChartPanels';
+import { useAuthStore } from '../store/authStore';
 
 export default function SubscriberDetailModal({ id, onClose, initialTab = 'details' }: { id: number; onClose: () => void; initialTab?: 'details' | 'usage' | 'plans' }) {
     const [tab, setTab] = useState<'details' | 'usage' | 'plans'>(initialTab);
     const [form, setForm] = useState<any | null>(null);
     const [topUpPlanId, setTopUpPlanId] = useState('');
     const [topUpStaticIp, setTopUpStaticIp] = useState('');
+    const [showPasswords, setShowPasswords] = useState(false);
+    const isSuperuser = useAuthStore((state) => state.user?.is_superuser);
     const queryClient = useQueryClient();
 
     const { data: subscriber, isLoading } = useQuery({
@@ -128,6 +131,38 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                     <Field label="Static IP Address" value={form.static_ip_address} onChange={v => setForm({ ...form, static_ip_address: v })} />
                                 )}
                             </div>
+
+                            {isSuperuser && (form.pppoe_username || form.hotspot_username) && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h4 className="text-sm font-bold text-amber-900 flex items-center gap-2">
+                                            <KeyRound className="h-4 w-4" /> Credentials (Superuser Only)
+                                        </h4>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPasswords(!showPasswords)}
+                                            className="flex items-center text-xs text-amber-800 hover:text-amber-900"
+                                        >
+                                            {showPasswords ? <EyeOff className="h-3.5 w-3.5 mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
+                                            {showPasswords ? 'Hide' : 'Reveal'}
+                                        </button>
+                                    </div>
+                                    <div className="space-y-1 font-mono text-sm text-amber-900">
+                                        {form.pppoe_username && (
+                                            <p>PPPoE: {form.pppoe_username} / {showPasswords ? (form.pppoe_password || '(not set)') : '••••••••'}</p>
+                                        )}
+                                        {form.hotspot_username && (
+                                            <p>Hotspot: {form.hotspot_username} / {showPasswords ? (form.hotspot_password || '(not set)') : '••••••••'}</p>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-amber-700 mt-2">
+                                        This is also their portal login password at the time it was set -- if they've since changed
+                                        their portal password via "Change Password", it will have diverged from this value. The
+                                        portal password itself can never be shown; it's a one-way hash, not stored anywhere.
+                                    </p>
+                                </div>
+                            )}
+
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                                 <textarea

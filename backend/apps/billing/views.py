@@ -30,6 +30,127 @@ class BillingPlanViewSet(viewsets.ModelViewSet):
             return BillingPlan.objects.all()
         return BillingPlan.objects.filter(is_active=True)
 
+    @action(detail=False, methods=['get'], url_path='csv-template')
+    def csv_template(self, request):
+        """Downloadable CSV template for bulk-importing billing plans."""
+        import csv
+        from django.http import HttpResponse
+
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="billing_plans_template.csv"'
+        writer = csv.writer(response)
+        writer.writerow([
+            'name', 'service_type', 'price', 'duration_value', 'duration_unit',
+            'download_speed', 'upload_speed', 'data_limit_gb', 'mikrotik_profile',
+            'description', 'is_active',
+        ])
+        writer.writerow([
+            'Home 10Mbps', 'pppoe', '2000', '30', 'days',
+            '10', '10', '', 'home-10mb',
+            'Standard home package', 'true',
+        ])
+        return response
+
+    @action(detail=False, methods=['post'], url_path='import-csv')
+    def import_csv(self, request):
+        """
+        Bulk-create billing plans from an uploaded CSV (see csv_template for
+        the expected columns). service_type must be one of pppoe/hotspot/
+        static; data_limit_gb and is_active are optional (blank = unlimited
+        / active). Every row is validated independently -- one bad row
+        doesn't block the rest.
+        """
+        import csv
+        import io
+
+        csv_file = request.FILES.get('file')
+        if not csv_file:
+            return Response({'error': 'file is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            decoded = csv_file.read().decode('utf-8-sig')
+        except UnicodeDecodeError:
+            return Response({'error': 'File must be UTF-8 encoded CSV'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reader = csv.DictReader(io.StringIO(decoded))
+        required_cols = {'name', 'service_type', 'price', 'download_speed', 'upload_speed', 'mikrotik_profile'}
+        if not required_cols.issubset(set(reader.fieldnames or [])):
+            missing = required_cols - set(reader.fieldnames or [])
+            return Response(
+                {'error': f'CSV is missing required column(s): {", ".join(sorted(missing))}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        valid_service_types = {choice[0] for choice in BillingPlan.SERVICE_TYPE_CHOICES}
+        created, errors = [], []
+
+        for i, row in enumerate(reader, start=2):  # row 1 is the header
+            name = (row.get('name') or '').strip()
+            service_type = (row.get('service_type') or '').strip().lower()
+            mikrotik_profile = (row.get('mikrotik_profile') or '').strip()
+
+            if not name or not mikrotik_profile:
+                errors.append({'row': i, 'name': name, 'error': 'name and mikrotik_profile are required'})
+                continue
+            if service_type not in valid_service_types:
+                errors.append({'row': i, 'name': name, 'error': f'service_type must be one of {", ".join(sorted(valid_service_types))}'})
+                continue
+
+            try:
+                price = float((row.get('price') or '').strip())
+                download_speed = int((row.get('download_speed') or '').strip())
+                upload_speed = int((row.get('upload_speed') or '').strip())
+            except ValueError:
+                errors.append({'row': i, 'name': name, 'error': 'price/download_speed/upload_speed must be numeric'})
+                continue
+
+            data_limit_raw = (row.get('data_limit_gb') or '').strip()
+            data_limit_gb = None
+            if data_limit_raw:
+                try:
+                    data_limit_gb = int(data_limit_raw)
+                except ValueError:
+                    errors.append({'row': i, 'name': name, 'error': 'data_limit_gb must be a whole number or blank'})
+                    continue
+
+            duration_unit = (row.get('duration_unit') or 'days').strip().lower()
+            if duration_unit not in {c[0] for c in BillingPlan.DURATION_UNIT_CHOICES}:
+                errors.append({'row': i, 'name': name, 'error': 'duration_unit must be one of minutes/hours/days/months'})
+                continue
+            duration_raw = (row.get('duration_value') or '').strip()
+            try:
+                duration_value = int(duration_raw) if duration_raw else 30
+            except ValueError:
+                errors.append({'row': i, 'name': name, 'error': 'duration_value must be a whole number'})
+                continue
+
+            is_active_raw = (row.get('is_active') or 'true').strip().lower()
+            is_active = is_active_raw not in {'false', '0', 'no'}
+
+            plan = BillingPlan.objects.create(
+                name=name,
+                description=(row.get('description') or '').strip(),
+                service_type=service_type,
+                download_speed=download_speed,
+                upload_speed=upload_speed,
+                price=price,
+                duration_value=duration_value,
+                duration_unit=duration_unit,
+                duration_days=duration_value if duration_unit == 'days' else 30,
+                data_limit_gb=data_limit_gb,
+                mikrotik_profile=mikrotik_profile,
+                is_active=is_active,
+            )
+            created.append({'row': i, 'name': plan.name, 'id': plan.id})
+
+        return Response({
+            'success': True,
+            'created_count': len(created),
+            'error_count': len(errors),
+            'created': created,
+            'errors': errors,
+        })
+
 
 class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -401,3 +522,151 @@ class ManualSubscriptionView(APIView):
                 'static_ip_address': customer.static_ip_address,
             }
         return Response(response_data)
+
+
+class PPPoEImportTemplateView(APIView):
+    """Downloadable CSV template for bulk-importing PPPoE customers."""
+    permission_classes = [RoleAllowed('admin', 'sales')]
+
+    def get(self, request):
+        import csv
+        from django.http import HttpResponse
+
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="pppoe_users_template.csv"'
+        writer = csv.writer(response)
+        writer.writerow([
+            'username', 'password', 'first_name', 'last_name', 'phone_number',
+            'email', 'plan_name', 'expiry_date',
+        ])
+        writer.writerow([
+            'jdoe', 'SecurePass123', 'John', 'Doe', '0712345678',
+            'jdoe@example.com', 'Home 10Mbps', '',
+        ])
+        return response
+
+
+class PPPoEBulkImportView(APIView):
+    """
+    Bulk-create PPPoE customers from an uploaded CSV (see
+    PPPoEImportTemplateView for the expected columns). Each row's username/
+    password become BOTH the portal login and the PPPoE login, matching
+    ManualSubscriptionView's convention for a single manually-created
+    customer -- and each row immediately activates on the router the same
+    way (via Subscription's post_save signal), so an imported user is fully
+    ready to connect, not just a DB row.
+
+    Existing usernames are rejected per-row rather than modified -- this is
+    for onboarding customers who don't exist in the system yet, not for
+    bulk-editing existing ones.
+
+    expiry_date (YYYY-MM-DD) is optional: provide it to preserve a
+    customer's real remaining time when migrating them in from elsewhere;
+    leave it blank for a fresh full-duration subscription starting today.
+    No Transaction is created for imported rows -- these aren't real
+    payments taken through this system, and fabricating one would distort
+    revenue reports.
+    """
+    permission_classes = [RoleAllowed('admin', 'sales')]
+
+    def post(self, request):
+        import csv
+        import io
+        from datetime import datetime
+        from apps.customers.models import Customer
+
+        csv_file = request.FILES.get('file')
+        if not csv_file:
+            return Response({'error': 'file is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            decoded = csv_file.read().decode('utf-8-sig')
+        except UnicodeDecodeError:
+            return Response({'error': 'File must be UTF-8 encoded CSV'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reader = csv.DictReader(io.StringIO(decoded))
+        required_cols = {'username', 'password', 'phone_number', 'plan_name'}
+        if not required_cols.issubset(set(reader.fieldnames or [])):
+            missing = required_cols - set(reader.fieldnames or [])
+            return Response(
+                {'error': f'CSV is missing required column(s): {", ".join(sorted(missing))}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        created, errors = [], []
+
+        for i, row in enumerate(reader, start=2):  # row 1 is the header
+            username = (row.get('username') or '').strip()
+            password = (row.get('password') or '').strip()
+            phone_number = (row.get('phone_number') or '').strip()
+            plan_name = (row.get('plan_name') or '').strip()
+
+            if not username or not password or not phone_number or not plan_name:
+                errors.append({'row': i, 'username': username, 'error': 'username, password, phone_number and plan_name are required'})
+                continue
+
+            if len(password) < 8:
+                errors.append({'row': i, 'username': username, 'error': 'password must be at least 8 characters'})
+                continue
+
+            if Customer.objects.filter(username=username).exists():
+                errors.append({'row': i, 'username': username, 'error': 'Username already exists'})
+                continue
+
+            plan = BillingPlan.objects.filter(name__iexact=plan_name).first()
+            if not plan:
+                errors.append({'row': i, 'username': username, 'error': f'No billing plan named "{plan_name}"'})
+                continue
+
+            expiry_raw = (row.get('expiry_date') or '').strip()
+            if expiry_raw:
+                try:
+                    expiry_date = timezone.make_aware(datetime.strptime(expiry_raw, '%Y-%m-%d'))
+                except ValueError:
+                    errors.append({'row': i, 'username': username, 'error': 'expiry_date must be YYYY-MM-DD'})
+                    continue
+            else:
+                if plan.duration_unit == 'minutes':
+                    expiry_delta = timezone.timedelta(minutes=plan.duration_value)
+                elif plan.duration_unit == 'hours':
+                    expiry_delta = timezone.timedelta(hours=plan.duration_value)
+                elif plan.duration_unit == 'months':
+                    expiry_delta = timezone.timedelta(days=plan.duration_value * 30)
+                else:
+                    expiry_delta = timezone.timedelta(days=plan.duration_value)
+                expiry_date = timezone.now() + expiry_delta
+
+            try:
+                with transaction.atomic():
+                    customer = Customer.objects.create(
+                        username=username,
+                        email=(row.get('email') or '').strip(),
+                        phone_number=phone_number,
+                        first_name=(row.get('first_name') or '').strip(),
+                        last_name=(row.get('last_name') or '').strip(),
+                        service_type='pppoe',
+                        status='pending',
+                        is_verified=True,
+                        pppoe_username=username,
+                        pppoe_password=password,
+                    )
+                    customer.set_password(password)
+                    customer.save()
+
+                    Subscription.objects.create(
+                        customer=customer,
+                        plan=plan,
+                        expiry_date=expiry_date,
+                        status='active',
+                    )
+                created.append({'row': i, 'username': username})
+            except Exception as e:
+                errors.append({'row': i, 'username': username, 'error': str(e)})
+
+        return Response({
+            'success': True,
+            'created_count': len(created),
+            'error_count': len(errors),
+            'created': created,
+            'errors': errors,
+        })

@@ -48,12 +48,17 @@ services:
     restart: always
     networks:
       - isp_network
+      # Also reachable from other companies' stacks (see
+      # docker-compose.company.yml) -- one shared Postgres server, one
+      # database per company, instead of a Postgres container per company.
+      - isp_shared_network
 
   redis:
     image: redis:alpine
     restart: always
     networks:
       - isp_network
+      - isp_shared_network
 
   celery_worker:
     build: ./backend
@@ -85,6 +90,8 @@ services:
 networks:
   isp_network:
     driver: bridge
+  isp_shared_network:
+    name: isp_shared_network
 
 volumes:
   postgres_data:

@@ -43,6 +43,8 @@ export const authAPI = {
     login: (data: any) => api.post('/customers/login/', data),
     getProfile: () => api.get('/customers/profile/'),
     updateProfile: (data: any) => api.put('/customers/profile/update/', data),
+    changePassword: (data: { old_password: string; new_password: string }) =>
+        api.post('/customers/profile/change-password/', data),
 };
 
 // Billing API
@@ -54,6 +56,18 @@ export const billingAPI = {
     getCurrentSubscription: () => api.get('/billing/subscriptions/current/'),
     getTransactions: () => api.get('/billing/transactions/'),
     getUsage: () => api.get('/billing/usage/'),
+    downloadPlanTemplate: () => api.get('/billing/plans/csv-template/', { responseType: 'blob' }),
+    importPlansCSV: (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return api.post('/billing/plans/import-csv/', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
+    downloadPppoeTemplate: () => api.get('/billing/pppoe-import-template/', { responseType: 'blob' }),
+    importPppoeCSV: (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return api.post('/billing/pppoe-import/', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
 };
 
 // Payment API

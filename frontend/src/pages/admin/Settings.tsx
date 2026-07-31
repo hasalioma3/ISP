@@ -2,9 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, billingAPI, siteSettingsAPI } from '../../services/api';
-import { Users as UsersIcon, CreditCard, Plus, Pencil, Trash2, X, Copy, ShieldCheck, Image as ImageIcon, Building2 } from 'lucide-react';
+import { Users as UsersIcon, CreditCard, Plus, Pencil, Trash2, X, Copy, ShieldCheck, Image as ImageIcon, Building2, Download, Upload, UploadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSiteSettings } from '../../hooks/useSiteSettings';
+import { downloadBlob } from '../../utils/downloadBlob';
 
 const ROLES = [
     { value: 'admin', label: 'Admin' },
@@ -59,6 +60,16 @@ export default function Settings() {
                         <CreditCard className="h-4 w-4 mr-2" />
                         Manual Customer
                     </button>
+                    <button
+                        onClick={() => setActiveTab('bulk-import')}
+                        className={`flex items-center px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'bulk-import'
+                            ? 'border-blue-500 text-blue-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            }`}
+                    >
+                        <UploadCloud className="h-4 w-4 mr-2" />
+                        Bulk Import
+                    </button>
                 </div>
 
                 {/* Content */}
@@ -66,6 +77,7 @@ export default function Settings() {
                     {activeTab === 'branding' && <BrandingTab />}
                     {activeTab === 'staff' && <StaffTab />}
                     {activeTab === 'manual' && <ManualUserTab />}
+                    {activeTab === 'bulk-import' && <BulkImportTab />}
                 </div>
             </div>
         </div>
@@ -497,6 +509,87 @@ function ManualUserTab() {
                         )}
                     </div>
                     <p className="text-xs text-blue-700 mt-2">This is shown once -- copy it now to hand to the customer.</p>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function BulkImportTab() {
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [importResult, setImportResult] = useState<any>(null);
+
+    const importMutation = useMutation({
+        mutationFn: (file: File) => billingAPI.importPppoeCSV(file),
+        onSuccess: (res) => {
+            setImportResult(res.data);
+            if (res.data.created_count > 0) toast.success(`Imported ${res.data.created_count} PPPoE user(s)`);
+            if (res.data.error_count > 0) toast.error(`${res.data.error_count} row(s) failed`);
+        },
+        onError: (err: any) => toast.error(err.response?.data?.error || 'Import failed'),
+    });
+
+    const handleDownloadTemplate = async () => {
+        const res = await billingAPI.downloadPppoeTemplate();
+        downloadBlob(res.data, 'pppoe_users_template.csv');
+    };
+
+    const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) importMutation.mutate(file);
+        e.target.value = '';
+    };
+
+    return (
+        <div className="max-w-2xl">
+            <h3 className="text-lg font-bold mb-1">Import PPPoE Users</h3>
+            <p className="text-sm text-gray-500 mb-4">
+                Bulk-create PPPoE customers from a CSV. Each row's username/password become both their
+                portal login and PPPoE login, and they're activated on the router immediately -- same as
+                creating one manually, just many at once. Existing usernames are rejected, not modified.
+                Leave <code className="text-xs bg-gray-100 px-1 rounded">expiry_date</code> blank for a
+                fresh subscription starting today, or set it to preserve a migrated customer's real
+                remaining time.
+            </p>
+            <div className="flex gap-2 mb-6">
+                <button
+                    onClick={handleDownloadTemplate}
+                    className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+                >
+                    <Download className="h-4 w-4 mr-2" /> Download Template
+                </button>
+                <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileSelected} />
+                <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={importMutation.isPending}
+                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
+                >
+                    <Upload className="h-4 w-4 mr-2" /> {importMutation.isPending ? 'Importing...' : 'Import CSV'}
+                </button>
+            </div>
+
+            {importResult && (
+                <div className="bg-gray-50 border rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-2">
+                        <h4 className="text-sm font-bold text-gray-900">
+                            {importResult.created_count} created, {importResult.error_count} failed
+                        </h4>
+                        <button onClick={() => setImportResult(null)} className="text-gray-400 hover:text-gray-600">
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                    {importResult.created?.length > 0 && (
+                        <p className="text-sm text-green-700 mb-2">
+                            Created: {importResult.created.map((c: any) => c.username).join(', ')}
+                        </p>
+                    )}
+                    {importResult.errors?.length > 0 && (
+                        <ul className="text-sm text-red-600 space-y-1">
+                            {importResult.errors.map((e: any, idx: number) => (
+                                <li key={idx}>Row {e.row} ({e.username}): {e.error}</li>
+                            ))}
+                        </ul>
+                    )}
                 </div>
             )}
         </div>

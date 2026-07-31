@@ -17,15 +17,21 @@ import {
     Radio,
     Package,
     Database,
+    UserCog,
+    KeyRound,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useSiteSettings } from '../hooks/useSiteSettings';
+import AccountModal from './AccountModal';
 
 export default function AdminLayout() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
+    const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+    const [accountModalTab, setAccountModalTab] = useState<'profile' | 'password' | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const quickActionsRef = useRef<HTMLDivElement>(null);
+    const userMenuRef = useRef<HTMLDivElement>(null);
     const location = useLocation();
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
@@ -59,6 +65,9 @@ export default function AdminLayout() {
         const handleClickOutside = (e: MouseEvent) => {
             if (quickActionsRef.current && !quickActionsRef.current.contains(e.target as Node)) {
                 setIsQuickActionsOpen(false);
+            }
+            if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+                setIsUserMenuOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -193,11 +202,47 @@ export default function AdminLayout() {
                             )}
                         </div>
 
-                        <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-gray-700">
-                            <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold">
-                                {(user?.first_name || 'A')[0].toUpperCase()}
-                            </div>
-                            <span className="text-sm text-gray-300">{user?.first_name || 'Administrator'}</span>
+                        <div className="relative pl-3 border-l border-gray-700" ref={userMenuRef}>
+                            <button
+                                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                                className="hidden sm:flex items-center gap-2 hover:bg-gray-800 rounded-lg px-1.5 py-1 -my-1"
+                            >
+                                <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold shrink-0">
+                                    {(user?.first_name || 'A')[0].toUpperCase()}
+                                </div>
+                                <span className="text-sm text-gray-300">{user?.first_name || 'Administrator'}</span>
+                                <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+                            </button>
+                            {isUserMenuOpen && (
+                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-100 py-1 z-50">
+                                    <div className="px-4 py-2 border-b border-gray-100">
+                                        <p className="text-sm font-medium text-gray-900 truncate">{user?.full_name || user?.username}</p>
+                                        <p className="text-xs text-gray-500 truncate">{user?.email || user?.username}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => { setAccountModalTab('profile'); setIsUserMenuOpen(false); }}
+                                        className="w-full flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                                    >
+                                        <UserCog className="h-4 w-4 mr-2.5 text-gray-400" />
+                                        Edit Profile
+                                    </button>
+                                    <button
+                                        onClick={() => { setAccountModalTab('password'); setIsUserMenuOpen(false); }}
+                                        className="w-full flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                                    >
+                                        <KeyRound className="h-4 w-4 mr-2.5 text-gray-400" />
+                                        Change Password
+                                    </button>
+                                    <div className="border-t border-gray-100 my-1" />
+                                    <button
+                                        onClick={handleLogout}
+                                        className="w-full flex items-center px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 text-left"
+                                    >
+                                        <LogOut className="h-4 w-4 mr-2.5" />
+                                        Sign Out
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -206,6 +251,10 @@ export default function AdminLayout() {
                     <Outlet />
                 </main>
             </div>
+
+            {accountModalTab && (
+                <AccountModal initialTab={accountModalTab} onClose={() => setAccountModalTab(null)} />
+            )}
         </div>
     );
 }

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { billingAPI, adminAPI } from '../../services/api';
-import { Plus, Pencil, Trash2, X, Package } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Package, Download, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { downloadBlob } from '../../utils/downloadBlob';
 
 const emptyForm = {
     name: '', description: '', service_type: 'pppoe',
@@ -16,6 +17,8 @@ export default function BillingPlans() {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [form, setForm] = useState<any>(emptyForm);
+    const [importResult, setImportResult] = useState<any>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const { data: plans, isLoading, isError } = useQuery({
         queryKey: ['billing-plans'],
@@ -97,17 +100,75 @@ export default function BillingPlans() {
         }));
     };
 
+    const importMutation = useMutation({
+        mutationFn: (file: File) => billingAPI.importPlansCSV(file),
+        onSuccess: (res) => {
+            setImportResult(res.data);
+            queryClient.invalidateQueries({ queryKey: ['billing-plans'] });
+            if (res.data.created_count > 0) toast.success(`Imported ${res.data.created_count} plan(s)`);
+            if (res.data.error_count > 0) toast.error(`${res.data.error_count} row(s) failed`);
+        },
+        onError: (err: any) => toast.error(formatError(err) || 'Import failed'),
+    });
+
+    const handleDownloadTemplate = async () => {
+        const res = await billingAPI.downloadPlanTemplate();
+        downloadBlob(res.data, 'billing_plans_template.csv');
+    };
+
+    const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) importMutation.mutate(file);
+        e.target.value = '';
+    };
+
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold">Billing Plans</h1>
-                <button
-                    onClick={() => { resetForm(); setIsFormOpen(true); }}
-                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                    <Plus className="h-4 w-4 mr-2" /> Add Plan
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleDownloadTemplate}
+                        className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+                    >
+                        <Download className="h-4 w-4 mr-2" /> Download Template
+                    </button>
+                    <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileSelected} />
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={importMutation.isPending}
+                        className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium disabled:opacity-50"
+                    >
+                        <Upload className="h-4 w-4 mr-2" /> {importMutation.isPending ? 'Importing...' : 'Import CSV'}
+                    </button>
+                    <button
+                        onClick={() => { resetForm(); setIsFormOpen(true); }}
+                        className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    >
+                        <Plus className="h-4 w-4 mr-2" /> Add Plan
+                    </button>
+                </div>
             </div>
+
+            {importResult && (
+                <div className="mb-6 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                    <div className="flex justify-between items-start mb-2">
+                        <h3 className="text-sm font-bold text-gray-900">
+                            Import Results: {importResult.created_count} created, {importResult.error_count} failed
+                        </h3>
+                        <button onClick={() => setImportResult(null)} className="text-gray-400 hover:text-gray-600">
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                    {importResult.errors?.length > 0 && (
+                        <ul className="text-sm text-red-600 space-y-1 mt-2">
+                            {importResult.errors.map((e: any, idx: number) => (
+                                <li key={idx}>Row {e.row} ({e.name}): {e.error}</li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
 
             {isFormOpen && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

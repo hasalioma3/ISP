@@ -80,14 +80,42 @@ def profile(request):
 @permission_classes([IsAuthenticated])
 def update_profile(request):
     """
-    Update customer profile
+    Update the logged-in user's own basic details (name/email/phone) --
+    intentionally NOT the full CustomerSerializer, see SelfProfileSerializer.
     """
-    serializer = CustomerSerializer(request.user, data=request.data, partial=True)
+    from apps.customers.serializers import SelfProfileSerializer
+
+    serializer = SelfProfileSerializer(request.user, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data)
-    
+
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    """
+    Change the logged-in user's own password (requires the current one).
+    """
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+
+    old_password = request.data.get('old_password') or ''
+    new_password = request.data.get('new_password') or ''
+
+    if not request.user.check_password(old_password):
+        return Response({'error': 'Current password is incorrect'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        validate_password(new_password, user=request.user)
+    except ValidationError as e:
+        return Response({'error': ' '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+    request.user.set_password(new_password)
+    request.user.save(update_fields=['password'])
+    return Response({'success': True, 'message': 'Password changed successfully'})
 
 
 from rest_framework import filters

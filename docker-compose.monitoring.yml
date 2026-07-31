@@ -1,0 +1,46 @@
+# System + container monitoring dashboard (Netdata) for this Pi. Standalone
+# from the app stacks -- it watches every container on the host (the main
+# isp-billing project plus any companies provisioned via
+# provision_company.sh) through the Docker socket, alongside host-level
+# CPU/RAM/disk/network. Uses host networking, Netdata's own recommended
+# setup, so its numbers match `top`/`df` exactly and the dashboard is
+# reachable directly at http://<pi-ip>:19999/ -- no `ports:` mapping needed.
+#
+# Usage:
+#   docker compose -f docker-compose.monitoring.yml up -d
+#
+# NOTE: Netdata's web UI has no login by default. Anyone on the same LAN
+# who knows the IP:port can view it (read-only -- metrics only, no control
+# over containers). Fine for a private home/office network; if hotspot
+# customers share this same subnet, lock it down afterward with the
+# `[web] allow connections from` setting in /etc/netdata/netdata.conf
+# (edit it inside the running container, then `docker restart netdata`).
+
+services:
+  netdata:
+    image: netdata/netdata:stable
+    container_name: netdata
+    hostname: isp-pi
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    cap_add:
+      - SYS_PTRACE
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - netdataconfig:/etc/netdata
+      - netdatalib:/var/lib/netdata
+      - netdatacache:/var/cache/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+volumes:
+  netdataconfig:
+  netdatalib:
+  netdatacache:

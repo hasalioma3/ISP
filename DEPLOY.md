@@ -24,10 +24,12 @@ confident it's right, push to the Pi (`https://192.168.88.253`).
    ```bash
    ./deploy_fresh.sh
    ```
-   This rsyncs the repo to the Pi, backs up the Pi's database to
-   `~/isp_backups/pre_deploy_<timestamp>.sql`, stops the stack, prunes unused
-   images/build cache (never volumes), rebuilds everything, and runs
-   migrations.
+   This rsyncs the repo to the Pi, then on the Pi: installs Docker if it
+   isn't there yet (and if so, stops there — SSH group membership needs a
+   fresh connection, so just re-run the script once it prints that message),
+   backs up the database to `~/isp_backups/pre_deploy_<timestamp>.sql`, stops
+   the stack, prunes unused images/build cache (never volumes), rebuilds
+   everything, and runs migrations.
 
 4. **Verify:**
    ```bash
@@ -71,3 +73,59 @@ anything.
 (`--build --force-recreate`), even for a one-line frontend change. That's
 deliberately simple and safe rather than fast — on a Pi 5 a full rebuild is a
 couple of minutes, which is fine for how often you'll actually deploy.
+
+## Multi-company (Phase 2)
+
+The Pi can host more than one company's portal at once, each fully isolated:
+its own Postgres database, its own Redis DB index (so Celery queues never
+cross between companies), its own backend/frontend/celery containers, and
+its own port. Postgres and Redis themselves are shared processes — a
+separate Postgres/Redis container per company isn't worth the RAM on a Pi 5
+when a separate database already gives full data isolation.
+
+**Provision a new company:**
+```bash
+./provision_company.sh <slug> "<Display Name>" <port>
+# e.g. ./provision_company.sh acme "Acme Wireless" 8081
+```
+Creates the database + role, writes `companies/<slug>.env`, builds and starts
+that company's containers, runs migrations, creates a default `admin`
+account (password printed once — save it), and seeds the company name into
+their branding settings. **`MPESA_*` and `MIKROTIK_*` in the generated env
+file are placeholders** — edit them with that company's real credentials and
+router, then `docker compose -f docker-compose.company.yml --env-file companies/<slug>.env -p isp-<slug> up -d --force-recreate`
+before they can take real payments or reach a router.
+
+`companies/*.env` files hold real secrets and are gitignored — they exist
+only on the Pi, not in the repo.
+
+**Remove a company:**
+```bash
+./deprovision_company.sh <slug>
+```
+Destructive — stops its containers, drops its database, deletes its env
+file. Asks you to re-type the slug to confirm.
+
+**Redeploying code changes** (`./deploy_fresh.sh`) only rebuilds the main
+`isp-billing` project (`docker-compose.yml`) — it does not touch company
+stacks. To ship a code change to a company too, rerun the same `docker
+compose -f docker-compose.company.yml --env-file companies/<slug>.env -p
+isp-<slug> up -d --build` command for each one (not yet wired into
+`deploy_fresh.sh`).
+
+## Monitoring (Netdata)
+
+`docker-compose.monitoring.yml` runs a single Netdata container that watches
+every container on the Pi (main project + all companies) via the Docker
+socket, plus host CPU/RAM/disk/network. Standalone from the app stacks —
+start it once on the Pi and leave it running:
+
+```bash
+docker compose -f docker-compose.monitoring.yml up -d
+```
+
+Dashboard: `http://192.168.88.253:19999/`. It's on host networking (Netdata's
+own recommendation, for accurate numbers), so there's no port mapping to
+manage. `restart: unless-stopped` + Docker starting on boot means it survives
+reboots on its own. No login by default — see the note at the top of the
+compose file if that matters on your LAN.

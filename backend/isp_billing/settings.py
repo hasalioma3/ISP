@@ -223,11 +223,13 @@ MIKROTIK_USE_SSL = config('MIKROTIK_USE_SSL', default=False, cast=bool)
 # Provisioning creates this bridge itself (if missing) and enslaves
 # MIKROTIK_PROVISION_BRIDGE_PORTS to it, so both services share one LAN-side
 # bridge without having to guess pre-existing topology per device. Ports not
-# listed here (e.g. the WAN port, or a port reserved for management access)
-# are left exactly as they are.
+# listed here -- ether1 (WAN), ether2 and ether5 (reserved -- e.g. ether2 for
+# management access, ether5 for a second uplink/failover) -- are left exactly
+# as they are. wlan1 is only enslaved if it actually exists on the router
+# (see provision_router) since plenty of wired-only models have no radio.
 MIKROTIK_PROVISION_INTERFACE = config('MIKROTIK_PROVISION_INTERFACE', default='hotspot_bridge')
 MIKROTIK_PROVISION_BRIDGE_PORTS = [
-    p.strip() for p in config('MIKROTIK_PROVISION_BRIDGE_PORTS', default='ether2,ether3,ether4,wlan1').split(',')
+    p.strip() for p in config('MIKROTIK_PROVISION_BRIDGE_PORTS', default='ether3,ether4,wlan1').split(',')
     if p.strip()
 ]
 

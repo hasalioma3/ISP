@@ -1,0 +1,75 @@
+# App-tier stack for one additional company/tenant. Postgres and Redis are
+# NOT defined here -- they're the shared `db`/`redis` services from the main
+# docker-compose.yml (isp-billing project), reached over the external
+# isp_shared_network. Each company gets its own database on that shared
+# Postgres server (see provision_company.sh) and its own backend/frontend/
+# celery containers on their own port, fully isolated from other companies.
+#
+# Usage (see provision_company.sh for the full flow):
+#   docker compose -f docker-compose.company.yml --env-file companies/<slug>.env -p isp-<slug> up -d --build
+
+services:
+  backend:
+    build: ./backend
+    command: gunicorn isp_billing.wsgi:application --bind 0.0.0.0:8000
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/mediafiles
+    env_file:
+      - companies/${COMPANY_SLUG}.env
+    restart: always
+    networks:
+      - default
+      - isp_shared_network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+      args:
+        VITE_API_URL: /api
+        VITE_DEFAULT_PORTAL_URL: ${CAPTIVE_PORTAL_URL}
+    ports:
+      - "${COMPANY_PORT}:443"
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/mediafiles
+      - ./nginx/certs:/etc/nginx/certs
+    depends_on:
+      - backend
+    restart: always
+    networks:
+      - default
+
+  celery_worker:
+    build: ./backend
+    command: celery -A isp_billing worker -l info
+    volumes:
+      - media_volume:/app/mediafiles
+    env_file:
+      - companies/${COMPANY_SLUG}.env
+    depends_on:
+      - backend
+    restart: always
+    networks:
+      - isp_shared_network
+
+  celery_beat:
+    build: ./backend
+    command: celery -A isp_billing beat -l info
+    env_file:
+      - companies/${COMPANY_SLUG}.env
+    depends_on:
+      - backend
+    restart: always
+    networks:
+      - isp_shared_network
+
+networks:
+  default:
+  isp_shared_network:
+    external: true
+
+volumes:
+  static_volume:
+  media_volume:

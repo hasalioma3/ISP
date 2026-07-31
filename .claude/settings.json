@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -e 's|__SLUG__|test|g' -e 's|__PORT__|8081|g' -e 's|__SECRET_KEY__|dummy|g' -e 's|__HOST_IP__|192.168.88.253|g' -e 's|__DB_NAME__|isp_test|g' -e 's|__DB_USER__|isp_test_user|g' -e 's|__DB_PASSWORD__|dummy|g' -e 's|__REDIS_INDEX__|1|g' companies/.env.template)",
+      "Bash(COMPANY_SLUG=test COMPANY_PORT=8081 CAPTIVE_PORTAL_URL=https://192.168.88.253:8081/portal docker compose -f docker-compose.company.yml --env-file companies/test.env -p isp-test config --quiet)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(chmod +x /Users/hassanomar/Documents/GitHub/ISP/deprovision_company.sh)",
+      "Bash(bash -n /Users/hassanomar/Documents/GitHub/ISP/deprovision_company.sh)",
+      "Bash(docker network *)",
+      "Bash(docker volume *)",
+      "Bash(echo \"clean: $?\")",
+      "Bash(bash -n /Users/hassanomar/Documents/GitHub/ISP/deploy_fresh.sh)",
+      "Read(//private/tmp/**)",
+      "Bash(cat)",
+      "Bash(curl -sk -X POST https://192.168.88.254/api/billing/plans/import-csv/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -F file=@/tmp/plans_test.csv)",
+      "Bash(curl -sk https://192.168.88.254/api/billing/pppoe-import-template/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -sk -X POST https://192.168.88.254/api/billing/pppoe-import/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -F file=@/tmp/pppoe_test.csv)"
+    ]
+  }
+}

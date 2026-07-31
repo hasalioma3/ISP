@@ -50,15 +50,55 @@ class CustomerSerializer(serializers.ModelSerializer):
     router_name = serializers.CharField(read_only=True)
     last_ip = serializers.CharField(read_only=True)
 
+    # Plaintext by necessity (RouterOS needs the raw value for PPPoE/Hotspot
+    # auth) -- unlike the portal login password, which is a one-way hash
+    # (set_password) and genuinely can't be recovered by anyone, superadmin
+    # included. Only ever populated for a superuser caller (checked against
+    # the request in context, which is only present when a view explicitly
+    # passes it -- e.g. SubscriberViewSet); every other caller, including a
+    # customer viewing their own profile, gets null.
+    pppoe_password = serializers.SerializerMethodField()
+    hotspot_password = serializers.SerializerMethodField()
+
     class Meta:
         model = Customer
         fields = ['id', 'username', 'email', 'phone_number', 'first_name', 'last_name',
                   'full_name', 'service_type', 'status', 'account_balance', 'is_verified',
-                  'pppoe_username', 'hotspot_username', 'hotspot_mac_address', 'static_ip_address',
+                  'pppoe_username', 'pppoe_password', 'hotspot_username', 'hotspot_password',
+                  'hotspot_mac_address', 'static_ip_address',
                   'address', 'id_number', 'notes', 'created_at', 'is_staff', 'is_superuser',
                   'role', 'calculated_expiry', 'current_plan_name', 'current_plan_status',
                   'router_name', 'last_ip']
         read_only_fields = ['id', 'status', 'account_balance', 'is_verified', 'created_at', 'is_staff', 'is_superuser']
+
+    def _is_superuser_request(self):
+        request = self.context.get('request')
+        return bool(request and getattr(request.user, 'is_superuser', False))
+
+    def get_pppoe_password(self, obj):
+        return obj.pppoe_password if self._is_superuser_request() else None
+
+    def get_hotspot_password(self, obj):
+        return obj.hotspot_password if self._is_superuser_request() else None
+
+
+class SelfProfileSerializer(serializers.ModelSerializer):
+    """
+    Used only by the self-service "edit my profile" endpoint -- a narrow
+    whitelist of genuinely personal fields. Deliberately NOT the same as
+    CustomerSerializer: that one also exposes `role`/`service_type`/
+    `notes`/etc for admin-side subscriber management, and letting a user
+    write those on themselves would (for `role` specifically) let a
+    technician un-set their own income-visibility restriction -- role
+    changes must only happen through StaffViewSet (admin-only).
+    """
+    full_name = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Customer
+        fields = ['id', 'username', 'email', 'phone_number', 'first_name', 'last_name', 'full_name']
+        read_only_fields = ['id', 'username']
+
 
 class StaffSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)

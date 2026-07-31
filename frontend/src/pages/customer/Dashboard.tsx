@@ -1,13 +1,16 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { billingAPI } from '../../services/api';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Wifi, CreditCard, Activity, LogOut, User, Receipt } from 'lucide-react';
+import { Wifi, CreditCard, Activity, LogOut, User, Receipt, UserCog } from 'lucide-react';
+import AccountModal from '../../components/AccountModal';
 
 export default function CustomerDashboard() {
     const navigate = useNavigate();
     const { user, logout } = useAuthStore();
+    const [accountModalTab, setAccountModalTab] = useState<'profile' | 'password' | null>(null);
     console.log('Current User Debug:', user);
 
     const { data: subscription } = useQuery({
@@ -54,13 +57,22 @@ export default function CustomerDashboard() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex justify-between items-center">
                         <h1 className="text-2xl font-bold text-gray-900">ISP Dashboard</h1>
-                        <button
-                            onClick={handleLogout}
-                            className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-                        >
-                            <LogOut className="w-5 h-5" />
-                            Logout
-                        </button>
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setAccountModalTab('profile')}
+                                className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+                            >
+                                <UserCog className="w-5 h-5" />
+                                Account
+                            </button>
+                            <button
+                                onClick={handleLogout}
+                                className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+                            >
+                                <LogOut className="w-5 h-5" />
+                                Logout
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -252,6 +264,10 @@ export default function CustomerDashboard() {
                     </div>
                 )}
             </div>
+
+            {accountModalTab && (
+                <AccountModal initialTab={accountModalTab} onClose={() => setAccountModalTab(null)} />
+            )}
         </div>
     );
 }
