@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -15,7 +15,7 @@ import {
     Legend,
 } from 'recharts';
 import { format } from 'date-fns';
-import { analyticsAPI } from '../../services/api';
+import { analyticsAPI, adminAPI } from '../../services/api';
 import {
     Users, CreditCard, ShoppingBag, BarChart3, Wifi, Share2, Radio, UsersRound,
     RouterIcon, ChevronDown, RefreshCw, ArrowRight, Smartphone, CheckCircle2, XCircle,
@@ -101,6 +101,44 @@ export default function Dashboard() {
         },
         refetchInterval: 30000,
     });
+
+    // Live per-router CPU/RAM/disk + WAN traffic, polled every 10s. WAN
+    // byte counters are cumulative (that's all RouterOS gives us), so
+    // throughput is derived by diffing consecutive polls per router.
+    const { data: routerHealth } = useQuery({
+        queryKey: ['admin-router-health'],
+        queryFn: async () => {
+            const res = await adminAPI.getRouterHealth();
+            return res.data as Record<string, any>;
+        },
+        refetchInterval: 10000,
+    });
+
+    const [routerThroughput, setRouterThroughput] = useState<Record<string, { rxKbps: number; txKbps: number }>>({});
+    const prevWanBytesRef = useRef<Record<string, { rx: number; tx: number; ts: number }>>({});
+
+    useEffect(() => {
+        if (!routerHealth) return;
+        const now = Date.now();
+        const nextThroughput: Record<string, { rxKbps: number; txKbps: number }> = {};
+        for (const [routerId, health] of Object.entries(routerHealth)) {
+            if (!health?.success) continue;
+            const prev = prevWanBytesRef.current[routerId];
+            if (prev) {
+                const elapsedSec = (now - prev.ts) / 1000;
+                if (elapsedSec > 0) {
+                    const rxDelta = Math.max(0, health.wan_rx_bytes - prev.rx);
+                    const txDelta = Math.max(0, health.wan_tx_bytes - prev.tx);
+                    nextThroughput[routerId] = {
+                        rxKbps: (rxDelta * 8) / elapsedSec / 1024,
+                        txKbps: (txDelta * 8) / elapsedSec / 1024,
+                    };
+                }
+            }
+            prevWanBytesRef.current[routerId] = { rx: health.wan_rx_bytes, tx: health.wan_tx_bytes, ts: now };
+        }
+        setRouterThroughput(prev => ({ ...prev, ...nextThroughput }));
+    }, [routerHealth]);
 
     if (statsError) {
         return (
@@ -201,22 +239,47 @@ export default function Dashboard() {
                         <div className="text-gray-500 text-sm py-4 px-2">Loading routers...</div>
                     ) : visibleRouters.length === 0 ? (
                         <div className="text-gray-500 text-sm py-4 px-2">No routers configured yet.</div>
-                    ) : visibleRouters.map((r: any) => (
-                        <button
-                            key={r.id}
-                            onClick={() => navigate('/admin/mikrotik')}
-                            className="border rounded-lg px-4 py-3 min-w-[180px] text-left hover:bg-gray-50 transition"
-                        >
-                            <p className="font-medium text-blue-600 mb-1">{r.name}</p>
-                            <div className="flex items-center gap-3 text-sm">
-                                <span className="flex items-center text-emerald-600">
-                                    <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1" /> {r.online}
-                                </span>
-                                <span className="text-blue-600">✓ {r.valid}</span>
-                                <span className="text-red-500">✕ {r.invalid}</span>
-                            </div>
-                        </button>
-                    ))}
+                    ) : visibleRouters.map((r: any) => {
+                        const health = routerHealth?.[r.id];
+                        const throughput = routerThroughput[r.id];
+                        const pctColor = (pct: number | null | undefined) =>
+                            pct == null ? 'text-gray-400' : pct >= 85 ? 'text-red-600' : pct >= 60 ? 'text-amber-600' : 'text-gray-700';
+                        return (
+                            <button
+                                key={r.id}
+                                onClick={() => navigate('/admin/mikrotik')}
+                                className="border rounded-lg px-4 py-3 min-w-[200px] text-left hover:bg-gray-50 transition"
+                            >
+                                <p className="font-medium text-blue-600 mb-1">{r.name}</p>
+                                <div className="flex items-center gap-3 text-sm mb-2">
+                                    <span className="flex items-center text-emerald-600">
+                                        <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1" /> {r.online}
+                                    </span>
+                                    <span className="text-blue-600">✓ {r.valid}</span>
+                                    <span className="text-red-500">✕ {r.invalid}</span>
+                                </div>
+                                {health?.success ? (
+                                    <>
+                                        <div className="flex items-center gap-3 text-xs border-t pt-2">
+                                            <span className={pctColor(health.cpu_load)}>CPU {health.cpu_load}%</span>
+                                            <span className={pctColor(health.memory_used_pct)}>RAM {health.memory_used_pct ?? '-'}%</span>
+                                            <span className={pctColor(health.disk_used_pct)}>Disk {health.disk_used_pct ?? '-'}%</span>
+                                        </div>
+                                        {throughput && (
+                                            <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+                                                <span>&darr; {throughput.rxKbps.toFixed(0)} Kbps</span>
+                                                <span>&uarr; {throughput.txKbps.toFixed(0)} Kbps</span>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : health && !health.success ? (
+                                    <p className="text-xs text-gray-400 border-t pt-2">Unreachable</p>
+                                ) : (
+                                    <p className="text-xs text-gray-300 border-t pt-2">Loading health...</p>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 

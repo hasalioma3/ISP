@@ -233,6 +233,12 @@ MIKROTIK_PROVISION_BRIDGE_PORTS = [
     if p.strip()
 ]
 
+# The internet-facing port, by the same ether1-as-WAN convention noted
+# above -- used only to read live WAN throughput counters for the admin
+# dashboard's Router View card (get_system_health). Not enforced anywhere;
+# if a router's actual WAN port differs, override per-deployment via env.
+MIKROTIK_WAN_INTERFACE = config('MIKROTIK_WAN_INTERFACE', default='ether1')
+
 # Extra hosts (beyond CAPTIVE_PORTAL_URL's own host, which is always
 # walled-gardened automatically during provisioning) that must stay
 # reachable to unauthenticated Hotspot clients. Usually not needed.

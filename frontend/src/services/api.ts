@@ -139,6 +139,7 @@ export const adminAPI = {
     backupRouter: (id: number) => api.post(`/network/routers/${id}/backup/`),
     syncRouterProfiles: (id: number) => api.post(`/network/routers/${id}/sync_profiles/`),
     syncRouterUsers: (id: number) => api.post(`/network/routers/${id}/sync_users/`),
+    getRouterHealth: () => api.get('/network/routers/health/'),
     testRouterConnection: (data: { ip_address: string; username: string; password: string; port?: number; use_ssl?: boolean }) =>
         api.post('/network/routers/test_connection/', data),
 

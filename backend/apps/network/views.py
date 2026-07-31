@@ -23,9 +23,26 @@ class RouterViewSet(viewsets.ModelViewSet):
     serializer_class = RouterSerializer
 
     def get_permissions(self):
-        if self.action in ['list', 'retrieve', 'sync_profiles', 'sync_users']:
+        if self.action in ['list', 'retrieve', 'sync_profiles', 'sync_users', 'health']:
             return [RoleAllowed('admin', 'technician')()]
         return [RoleAllowed('admin')()]
+
+    @action(detail=False, methods=['get'])
+    def health(self, request):
+        """
+        Live CPU/RAM/disk + WAN traffic counters for every active router,
+        for the admin dashboard's Router View card. Hits each router
+        directly (not DB-cached, unlike the online-user counts) -- fine for
+        a 10s poll across a handful of routers, not meant for hundreds.
+        """
+        results = {}
+        for router in Router.objects.filter(is_active=True):
+            mikrotik = MikroTikService(
+                host=router.ip_address, username=router.username,
+                password=router.password, port=router.port, use_ssl=router.use_ssl
+            )
+            results[router.id] = mikrotik.get_system_health()
+        return Response(results)
 
     @action(detail=True, methods=['post'])
     def provision(self, request, pk=None):

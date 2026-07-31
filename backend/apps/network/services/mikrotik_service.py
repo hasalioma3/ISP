@@ -672,6 +672,53 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    def get_system_health(self):
+        """
+        Read-only: CPU load, memory/disk usage, and uptime from
+        /system/resource, plus cumulative rx/tx byte counters on
+        settings.MIKROTIK_WAN_INTERFACE -- RouterOS only exposes running
+        totals here, not a rate, so the caller derives live throughput by
+        diffing two polls a few seconds apart (same approach as
+        get_active_sessions' PPPoE byte counters).
+        """
+        try:
+            from django.conf import settings
+
+            connection = self._get_connection()
+            api = connection.get_api()
+
+            resource = api.get_resource('/system/resource').get()
+            res = resource[0] if resource else {}
+
+            total_memory = int(res.get('total-memory', 0) or 0)
+            free_memory = int(res.get('free-memory', 0) or 0)
+            total_hdd = int(res.get('total-hdd-space', 0) or 0)
+            free_hdd = int(res.get('free-hdd-space', 0) or 0)
+
+            wan_rx, wan_tx = 0, 0
+            wan_iface = settings.MIKROTIK_WAN_INTERFACE
+            wan_interfaces = api.get_resource('/interface').get(name=wan_iface)
+            if wan_interfaces:
+                wan_rx = int(wan_interfaces[0].get('rx-byte', 0) or 0)
+                wan_tx = int(wan_interfaces[0].get('tx-byte', 0) or 0)
+
+            connection.disconnect()
+            return {
+                'success': True,
+                'cpu_load': int(res.get('cpu-load', 0) or 0),
+                'memory_used_pct': round((1 - free_memory / total_memory) * 100, 1) if total_memory else None,
+                'disk_used_pct': round((1 - free_hdd / total_hdd) * 100, 1) if total_hdd else None,
+                'uptime': res.get('uptime'),
+                'board_name': res.get('board-name'),
+                'version': res.get('version'),
+                'wan_interface': wan_iface,
+                'wan_rx_bytes': wan_rx,
+                'wan_tx_bytes': wan_tx,
+            }
+        except Exception as e:
+            logger.error(f"Failed to get system health: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
     def get_active_sessions(self):
         """
         Read-only: currently connected Hotspot + PPPoE users with live byte
