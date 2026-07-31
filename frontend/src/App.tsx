@@ -12,7 +12,10 @@ import CustomerDashboard from './pages/customer/Dashboard';
 import Plans from './pages/customer/Plans';
 import Payment from './pages/customer/Payment';
 import Usage from './pages/customer/Usage';
+import OrderHistory from './pages/customer/OrderHistory';
+import ActivationHistory from './pages/customer/ActivationHistory';
 import CaptivePortal from './pages/portal/CaptivePortal';
+import CustomerLayout from './components/CustomerLayout';
 import AdminLayout from './components/AdminLayout';
 import AdminDashboard from './pages/admin/Dashboard';
 import Subscribers from './pages/admin/Subscribers';
@@ -76,24 +79,22 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
-          <Route
-            path="/dashboard"
-            element={
-              <PrivateRoute>
-                <CustomerDashboard />
-              </PrivateRoute>
-            }
-          />
           <Route path="/plans" element={<Plans />} />
           <Route path="/payment" element={<Payment />} />
+
+          {/* Customer Portal Routes */}
           <Route
-            path="/usage"
             element={
               <PrivateRoute>
-                <Usage />
+                <CustomerLayout />
               </PrivateRoute>
             }
-          />
+          >
+            <Route path="/dashboard" element={<CustomerDashboard />} />
+            <Route path="/usage" element={<Usage />} />
+            <Route path="/orders" element={<OrderHistory />} />
+            <Route path="/activations" element={<ActivationHistory />} />
+          </Route>
 
           {/* Admin Routes */}
           <Route

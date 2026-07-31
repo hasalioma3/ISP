@@ -14,6 +14,11 @@ interface User {
     role: string;
     is_staff: boolean;
     is_superuser: boolean;
+    account_balance?: string;
+    pppoe_username?: string | null;
+    pppoe_password?: string | null;
+    hotspot_username?: string | null;
+    hotspot_password?: string | null;
 }
 
 interface AuthState {

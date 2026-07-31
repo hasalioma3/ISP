@@ -1,19 +1,22 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { billingAPI } from '../../services/api';
-import { format, formatDistanceToNow } from 'date-fns';
-import { Wifi, CreditCard, Activity, LogOut, User, Receipt, UserCog } from 'lucide-react';
-import AccountModal from '../../components/AccountModal';
+import { format } from 'date-fns';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Wifi, Activity, RefreshCw, Wallet, ShieldCheck, Router } from 'lucide-react';
+
+function greeting() {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
+}
 
 export default function CustomerDashboard() {
-    const navigate = useNavigate();
-    const { user, logout } = useAuthStore();
-    const [accountModalTab, setAccountModalTab] = useState<'profile' | 'password' | null>(null);
-    console.log('Current User Debug:', user);
+    const { user } = useAuthStore();
 
-    const { data: subscription } = useQuery({
+    const { data: subscription, refetch: refetchSubscription, isFetching: statusRefreshing } = useQuery({
         queryKey: ['subscription'],
         queryFn: async () => {
             try {
@@ -41,232 +44,201 @@ export default function CustomerDashboard() {
         },
     });
 
-    const recentUsage = usageRecords?.slice(0, 5) || [];
-    const usageTotalGb = (usageRecords || []).reduce((sum: number, r: any) => sum + Number(r.total_gb || 0), 0);
-    const recentTransactions = transactions?.slice(0, 5) || [];
+    const recentTransactions = transactions?.slice(0, 3) || [];
 
-    const handleLogout = () => {
-        logout();
-        navigate('/login');
-    };
+    // Daily-bucketed usage, computed client-side from real session records --
+    // there's no separate pre-aggregated chart endpoint for a customer's own
+    // usage (the admin one is staff-only), so this is built from the exact
+    // same records shown on the /usage page.
+    const dailyUsage = (() => {
+        const byDay = new Map<string, { upload: number; download: number }>();
+        for (const r of usageRecords || []) {
+            const day = format(new Date(r.start_time), 'MMM d');
+            const entry = byDay.get(day) || { upload: 0, download: 0 };
+            entry.upload += Number(r.upload_bytes || 0) / (1024 ** 3);
+            entry.download += Number(r.download_bytes || 0) / (1024 ** 3);
+            byDay.set(day, entry);
+        }
+        return Array.from(byDay.entries())
+            .map(([day, v]) => ({ day, upload: Number(v.upload.toFixed(2)), download: Number(v.download.toFixed(2)) }))
+            .slice(-14);
+    })();
+
+    const credentialUsername = user?.pppoe_username || user?.hotspot_username || user?.username;
+    const credentialPassword = user?.pppoe_password || user?.hotspot_password;
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <div className="bg-white shadow">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <div className="flex justify-between items-center">
-                        <h1 className="text-2xl font-bold text-gray-900">ISP Dashboard</h1>
-                        <div className="flex items-center gap-4">
-                            <button
-                                onClick={() => setAccountModalTab('profile')}
-                                className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-                            >
-                                <UserCog className="w-5 h-5" />
-                                Account
-                            </button>
-                            <button
-                                onClick={handleLogout}
-                                className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-                            >
-                                <LogOut className="w-5 h-5" />
-                                Logout
-                            </button>
-                        </div>
+        <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-6">Your Account Information</h1>
+
+            <div className="grid md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-5 text-white">
+                    <p className="text-blue-100 text-sm">{greeting()},</p>
+                    <p className="text-xl font-bold mb-2">{user?.full_name || user?.username}</p>
+                    <p className="text-blue-100 text-xs">Welcome to {user?.full_name ? 'your portal' : 'the portal'}</p>
+                </div>
+
+                <div className="bg-gray-900 rounded-2xl p-5 text-white">
+                    <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
+                        <Wallet className="h-3.5 w-3.5" /> Current Balance
                     </div>
+                    <p className="text-2xl font-bold">KES {Number(user?.account_balance || 0).toLocaleString()}</p>
+                </div>
+
+                <div className="bg-gray-900 rounded-2xl p-5 text-white">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 text-gray-400 text-xs">
+                            <ShieldCheck className="h-3.5 w-3.5" /> Account Status
+                        </div>
+                        <button
+                            onClick={() => refetchSubscription()}
+                            disabled={statusRefreshing}
+                            className="text-gray-400 hover:text-white disabled:opacity-50"
+                            title="Refresh"
+                        >
+                            <RefreshCw className={`h-3.5 w-3.5 ${statusRefreshing ? 'animate-spin' : ''}`} />
+                        </button>
+                    </div>
+                    <p className={`text-2xl font-bold capitalize ${user?.status === 'active' ? 'text-green-400' : 'text-amber-400'}`}>
+                        {user?.status || 'Unknown'}
+                    </p>
+                </div>
+
+                <div className="bg-gray-900 rounded-2xl p-5 text-white">
+                    <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
+                        <Wifi className="h-3.5 w-3.5" /> Current Plan
+                    </div>
+                    {subscription ? (
+                        <>
+                            <p className="text-lg font-bold truncate">{subscription.plan.name}</p>
+                            <p className="text-gray-400 text-xs">{subscription.plan.download_speed}/{subscription.plan.upload_speed} Mbps</p>
+                        </>
+                    ) : (
+                        <>
+                            <p className="text-lg font-bold text-gray-400">No active plan</p>
+                            <Link to="/plans" className="text-blue-400 text-xs font-semibold hover:text-blue-300">Browse plans &rarr;</Link>
+                        </>
+                    )}
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Welcome Section */}
-                <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-white mb-8">
-                    <div className="flex items-center gap-4 mb-4">
-                        <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
-                            <User className="w-8 h-8" />
-                        </div>
-                        <div>
-                            <h2 className="text-3xl font-bold">Welcome, {user?.full_name || user?.username}!</h2>
-                            <p className="text-blue-100">Account Status: <span className="font-semibold">{user?.status}</span></p>
-                        </div>
+            <div className="grid lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                            <Activity className="h-5 w-5 text-purple-600" /> Data Usage
+                        </h3>
+                        <Link to="/usage" className="text-sm text-blue-600 hover:text-blue-800">View all</Link>
                     </div>
+                    {dailyUsage.length > 0 ? (
+                        <div className="h-72">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={dailyUsage}>
+                                    <defs>
+                                        <linearGradient id="uploadGrad" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.5} />
+                                            <stop offset="95%" stopColor="#60a5fa" stopOpacity={0} />
+                                        </linearGradient>
+                                        <linearGradient id="downloadGrad" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#2dd4bf" stopOpacity={0.5} />
+                                            <stop offset="95%" stopColor="#2dd4bf" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                                    <YAxis tick={{ fontSize: 11 }} unit=" GB" />
+                                    <Tooltip formatter={(v: number) => `${v} GB`} />
+                                    <Area type="monotone" dataKey="upload" name="Upload" stroke="#3b82f6" fill="url(#uploadGrad)" />
+                                    <Area type="monotone" dataKey="download" name="Download" stroke="#14b8a6" fill="url(#downloadGrad)" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="h-72 flex items-center justify-center text-gray-400 text-sm">No usage recorded yet.</div>
+                    )}
                 </div>
 
-                {/* Subscription Card */}
-                {subscription ? (
-                    <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
-                        <h3 className="text-xl font-bold text-gray-900 mb-4">Current Subscription</h3>
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div>
-                                <p className="text-sm text-gray-600 mb-1">Plan</p>
-                                <p className="text-2xl font-bold text-blue-600">{subscription.plan.name}</p>
-                                <p className="text-gray-600 mt-2">{subscription.plan.download_speed}/{subscription.plan.upload_speed} Mbps</p>
+                <div className="space-y-6">
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-4">
+                            <Router className="h-4 w-4 text-gray-500" /> Account Overview
+                        </h3>
+                        <dl className="space-y-3 text-sm">
+                            <div className="flex justify-between">
+                                <dt className="text-gray-500">Username</dt>
+                                <dd className="font-medium text-gray-900">{credentialUsername || '-'}</dd>
                             </div>
-                            <div>
-                                <p className="text-sm text-gray-600 mb-1">Expires</p>
-                                <p className="text-lg font-semibold text-gray-900">
-                                    {formatDistanceToNow(new Date(subscription.expiry_date), { addSuffix: true })}
-                                </p>
-                                <p className="text-sm text-gray-600 mt-1">
-                                    {new Date(subscription.expiry_date).toLocaleDateString()}
-                                </p>
+                            {credentialPassword && (
+                                <div className="flex justify-between">
+                                    <dt className="text-gray-500">Password</dt>
+                                    <dd className="font-mono font-medium text-gray-900">{credentialPassword}</dd>
+                                </div>
+                            )}
+                            <div className="flex justify-between">
+                                <dt className="text-gray-500">Balance</dt>
+                                <dd className="font-medium text-gray-900">KES {Number(user?.account_balance || 0).toLocaleString()}</dd>
                             </div>
-                        </div>
-
-                        {subscription.days_remaining <= 3 && (
-                            <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                                <p className="text-yellow-800 font-semibold">⚠️ Your subscription is expiring soon!</p>
-                                <Link to="/plans" className="text-yellow-900 underline">Renew now</Link>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <div className="bg-white rounded-2xl shadow-lg p-8 mb-8 text-center">
-                        <Wifi className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                        <h3 className="text-xl font-bold text-gray-900 mb-2">No Active Subscription</h3>
-                        <p className="text-gray-600 mb-4">Subscribe to a plan to get started</p>
+                            {subscription && (
+                                <>
+                                    <div className="flex justify-between">
+                                        <dt className="text-gray-500">Plan</dt>
+                                        <dd className="font-medium text-gray-900">{subscription.plan.name}</dd>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <dt className="text-gray-500">Created On</dt>
+                                        <dd className="font-medium text-gray-900">{format(new Date(subscription.created_at), 'MMM d, yyyy')}</dd>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <dt className="text-gray-500">Expires On</dt>
+                                        <dd className="font-medium text-gray-900">{format(new Date(subscription.expiry_date), 'MMM d, yyyy HH:mm')}</dd>
+                                    </div>
+                                </>
+                            )}
+                        </dl>
                         <Link
                             to="/plans"
-                            className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700"
+                            className="mt-4 block text-center w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-700"
                         >
-                            View Plans
+                            Renew / Buy a Package
                         </Link>
                     </div>
-                )}
 
-                {/* Usage Stats & Recent Transactions */}
-                <div className="grid md:grid-cols-2 gap-6 mb-8">
-                    <div className="bg-white rounded-2xl shadow-lg p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                                <Activity className="w-5 h-5 text-purple-600" />
-                                Usage Stats
-                            </h3>
-                            <Link to="/usage" className="text-sm text-blue-600 hover:text-blue-800">View all</Link>
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-bold text-gray-900">Recent Transactions</h3>
+                            <Link to="/orders" className="text-xs text-blue-600 hover:text-blue-800">View all</Link>
                         </div>
-                        {recentUsage.length > 0 ? (
-                            <>
-                                <p className="text-sm text-gray-600 mb-1">Data used (recent sessions)</p>
-                                <p className="text-3xl font-bold text-purple-600 mb-4">{usageTotalGb.toFixed(2)} GB</p>
-                                <div className="space-y-2">
-                                    {recentUsage.map((r: any) => (
-                                        <div key={r.id} className="flex justify-between text-sm border-t pt-2">
-                                            <span className="text-gray-600">{format(new Date(r.start_time), 'MMM d, HH:mm')}</span>
-                                            <span className="font-medium text-gray-900">{r.total_gb} GB</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        ) : (
-                            <p className="text-gray-500 text-sm">No usage recorded yet.</p>
-                        )}
-                    </div>
-
-                    <div className="bg-white rounded-2xl shadow-lg p-6">
-                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
-                            <Receipt className="w-5 h-5 text-green-600" />
-                            Recent Transactions
-                        </h3>
                         {recentTransactions.length > 0 ? (
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                                 {recentTransactions.map((t: any) => (
-                                    <div key={t.id} className="flex justify-between items-center text-sm border-t pt-2">
+                                    <div key={t.id} className="flex justify-between items-center text-sm border-t pt-2 first:border-t-0 first:pt-0">
                                         <div>
                                             <p className="font-medium text-gray-900">KES {Number(t.amount).toLocaleString()}</p>
-                                            <p className="text-gray-500 uppercase text-xs">
-                                                {t.payment_method}{t.mpesa_receipt_number ? ` · ${t.mpesa_receipt_number}` : ''}
-                                            </p>
+                                            <p className="text-gray-500 text-xs uppercase">{t.payment_method}</p>
                                         </div>
-                                        <div className="text-right">
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${t.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                                t.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
-                                                }`}>
-                                                {t.status}
-                                            </span>
-                                            <p className="text-gray-500 text-xs mt-1">{format(new Date(t.created_at), 'MMM d, yyyy')}</p>
-                                        </div>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${t.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                            t.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                                            }`}>
+                                            {t.status}
+                                        </span>
                                     </div>
                                 ))}
                             </div>
                         ) : (
-                            <p className="text-gray-500 text-sm">No transactions yet.</p>
+                            <p className="text-gray-400 text-sm">No transactions yet.</p>
                         )}
                     </div>
                 </div>
-
-                {/* Quick Actions */}
-                <div className="grid md:grid-cols-3 gap-6">
-                    <Link
-                        to="/plans"
-                        className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition group"
-                    >
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition">
-                                <Wifi className="w-6 h-6 text-blue-600" />
-                            </div>
-                            <div>
-                                <h4 className="font-semibold text-gray-900">View Plans</h4>
-                                <p className="text-sm text-gray-600">Browse packages</p>
-                            </div>
-                        </div>
-                    </Link>
-
-                    <Link
-                        to="/payment"
-                        className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition group"
-                    >
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition">
-                                <CreditCard className="w-6 h-6 text-green-600" />
-                            </div>
-                            <div>
-                                <h4 className="font-semibold text-gray-900">Make Payment</h4>
-                                <p className="text-sm text-gray-600">Pay via M-Pesa</p>
-                            </div>
-                        </div>
-                    </Link>
-
-                    <Link
-                        to="/usage"
-                        className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition group"
-                    >
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition">
-                                <Activity className="w-6 h-6 text-purple-600" />
-                            </div>
-                            <div>
-                                <h4 className="font-semibold text-gray-900">Usage Stats</h4>
-                                <p className="text-sm text-gray-600">View consumption</p>
-                            </div>
-                        </div>
-                    </Link>
-                </div>
-
-                {/* Admin Actions */}
-                {(user?.is_staff || user?.is_superuser) && (
-                    <div className="mt-8 pt-8 border-t border-gray-200">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">Administration</h3>
-                        <div className="grid md:grid-cols-3 gap-6">
-                            <Link
-                                to="/admin"
-                                className="bg-gray-800 text-white rounded-xl shadow-lg p-6 hover:bg-gray-700 transition group"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-gray-700 rounded-lg flex items-center justify-center group-hover:bg-gray-600 transition">
-                                        <Activity className="w-6 h-6 text-blue-400" />
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold">Admin Dashboard</h4>
-                                        <p className="text-sm text-gray-400">Manage ISP System</p>
-                                    </div>
-                                </div>
-                            </Link>
-                        </div>
-                    </div>
-                )}
             </div>
 
-            {accountModalTab && (
-                <AccountModal initialTab={accountModalTab} onClose={() => setAccountModalTab(null)} />
+            {(user?.is_staff || user?.is_superuser) && (
+                <div className="mt-6">
+                    <Link
+                        to="/admin"
+                        className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-blue-600"
+                    >
+                        &rarr; Go to Admin Dashboard
+                    </Link>
+                </div>
             )}
         </div>
     );

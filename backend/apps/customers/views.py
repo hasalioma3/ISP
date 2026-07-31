@@ -21,9 +21,13 @@ def register(request):
         
         # Generate JWT tokens
         refresh = RefreshToken.for_user(customer)
-        
+
+        # Same reasoning as login(): request.user isn't the new customer yet.
+        from types import SimpleNamespace
+        serializer_context = {'request': SimpleNamespace(user=customer)}
+
         return Response({
-            'customer': CustomerSerializer(customer).data,
+            'customer': CustomerSerializer(customer, context=serializer_context).data,
             'tokens': {
                 'refresh': str(refresh),
                 'access': str(refresh.access_token),
@@ -53,8 +57,17 @@ def login(request):
 
         refresh = RefreshToken.for_user(customer)
 
+        # request.user is still AnonymousUser here -- authenticate() found a
+        # match but nothing has attached it to the request, and no JWT
+        # exists yet for DRF's own auth middleware to have run against. The
+        # serializer's "is this the customer's own profile" check needs the
+        # real customer, so build a minimal stand-in with just the one
+        # attribute it reads.
+        from types import SimpleNamespace
+        serializer_context = {'request': SimpleNamespace(user=customer)}
+
         return Response({
-            'customer': CustomerSerializer(customer).data,
+            'customer': CustomerSerializer(customer, context=serializer_context).data,
             'tokens': {
                 'refresh': str(refresh),
                 'access': str(refresh.access_token),
@@ -72,7 +85,7 @@ def profile(request):
     """
     Get customer profile
     """
-    serializer = CustomerSerializer(request.user)
+    serializer = CustomerSerializer(request.user, context={'request': request})
     return Response(serializer.data)
 
 

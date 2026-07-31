@@ -4,10 +4,12 @@ import { authAPI } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { LogIn } from 'lucide-react';
+import { useSiteSettings } from '../hooks/useSiteSettings';
 
 export default function Login() {
     const navigate = useNavigate();
     const setAuth = useAuthStore((state) => state.setAuth);
+    const { data: siteSettings } = useSiteSettings();
     const [formData, setFormData] = useState({
         username: '',
         password: '',
@@ -45,10 +47,18 @@ export default function Login() {
         <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                        <LogIn className="w-8 h-8 text-blue-600" />
-                    </div>
-                    <h1 className="text-3xl font-bold text-gray-900">ISP Billing</h1>
+                    {siteSettings?.logo ? (
+                        <img
+                            src={siteSettings.logo}
+                            alt={siteSettings.company_name}
+                            className="w-16 h-16 rounded-full object-contain bg-blue-50 mx-auto mb-4"
+                        />
+                    ) : (
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+                            <LogIn className="w-8 h-8 text-blue-600" />
+                        </div>
+                    )}
+                    <h1 className="text-3xl font-bold text-gray-900">{siteSettings?.company_name || 'ISP Billing'}</h1>
                     <p className="text-gray-600 mt-2">Login to your account</p>
                 </div>
 

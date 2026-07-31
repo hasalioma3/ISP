@@ -1,3 +1,7 @@
 1. host the site on a rasberry pi 5 with docker
 2. setup wireguard vpn to access the mikrotik remotely
 3. setup actual Mpesa callback url for real payments.
+4. intergrate for sms notifications
+5. intergrate for whatsapp/Telegram
+6. change provisioning to leave out port 2 and 5 and provision wifi(if available), ports 3 and 4 only
+7. be able to view the customer pppoe and portal passwords from the admin portal(only super admin)

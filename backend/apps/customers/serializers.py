@@ -53,10 +53,11 @@ class CustomerSerializer(serializers.ModelSerializer):
     # Plaintext by necessity (RouterOS needs the raw value for PPPoE/Hotspot
     # auth) -- unlike the portal login password, which is a one-way hash
     # (set_password) and genuinely can't be recovered by anyone, superadmin
-    # included. Only ever populated for a superuser caller (checked against
-    # the request in context, which is only present when a view explicitly
-    # passes it -- e.g. SubscriberViewSet); every other caller, including a
-    # customer viewing their own profile, gets null.
+    # included. Populated for a superuser caller (viewing anyone), or for a
+    # customer viewing their own profile (they already know it -- they need
+    # it to configure a router/device); every other caller gets null. Only
+    # applies when the request is present in context, which a view must
+    # explicitly pass (e.g. SubscriberViewSet, profile()).
     pppoe_password = serializers.SerializerMethodField()
     hotspot_password = serializers.SerializerMethodField()
 
@@ -71,15 +72,17 @@ class CustomerSerializer(serializers.ModelSerializer):
                   'router_name', 'last_ip']
         read_only_fields = ['id', 'status', 'account_balance', 'is_verified', 'created_at', 'is_staff', 'is_superuser']
 
-    def _is_superuser_request(self):
+    def _may_see_passwords(self, obj):
         request = self.context.get('request')
-        return bool(request and getattr(request.user, 'is_superuser', False))
+        if not request or not getattr(request, 'user', None):
+            return False
+        return bool(request.user.is_superuser or request.user == obj)
 
     def get_pppoe_password(self, obj):
-        return obj.pppoe_password if self._is_superuser_request() else None
+        return obj.pppoe_password if self._may_see_passwords(obj) else None
 
     def get_hotspot_password(self, obj):
-        return obj.hotspot_password if self._is_superuser_request() else None
+        return obj.hotspot_password if self._may_see_passwords(obj) else None
 
 
 class SelfProfileSerializer(serializers.ModelSerializer):

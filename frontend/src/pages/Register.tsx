@@ -4,10 +4,12 @@ import { authAPI } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { UserPlus } from 'lucide-react';
+import { useSiteSettings } from '../hooks/useSiteSettings';
 
 export default function Register() {
     const navigate = useNavigate();
     const setAuth = useAuthStore((state) => state.setAuth);
+    const { data: siteSettings } = useSiteSettings();
     const [formData, setFormData] = useState({
         username: '',
         email: '',
@@ -64,9 +66,20 @@ export default function Register() {
         <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl">
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                        <UserPlus className="w-8 h-8 text-blue-600" />
-                    </div>
+                    {siteSettings?.logo ? (
+                        <img
+                            src={siteSettings.logo}
+                            alt={siteSettings.company_name}
+                            className="w-16 h-16 rounded-full object-contain bg-blue-50 mx-auto mb-4"
+                        />
+                    ) : (
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+                            <UserPlus className="w-8 h-8 text-blue-600" />
+                        </div>
+                    )}
+                    {siteSettings?.company_name && (
+                        <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">{siteSettings.company_name}</p>
+                    )}
                     <h1 className="text-3xl font-bold text-gray-900">Create Account</h1>
                     <p className="text-gray-600 mt-2">Register for ISP services</p>
                 </div>
