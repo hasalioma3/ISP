@@ -71,6 +71,11 @@ export const billingAPI = {
     },
 };
 
+// Network API (customer-facing subset)
+export const networkAPI = {
+    getMySession: () => api.get('/network/my-session/'),
+};
+
 // Payment API
 export const paymentAPI = {
     initiatePayment: (data: { plan_id: number; phone_number: string; mac_address?: string }) =>

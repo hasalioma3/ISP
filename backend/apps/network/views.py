@@ -195,3 +195,39 @@ class DisconnectSessionView(APIView):
 
         session.delete()
         return Response({'success': True})
+
+
+class MySessionView(APIView):
+    """
+    The logged-in customer's own live session, straight from the router
+    (not the ActiveSession table, which is only refreshed every 5 minutes
+    by the collect_usage_statistics celery task -- too stale for a
+    dashboard widget that's meant to refresh every few seconds).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        customer = request.user
+        router = None
+        if hasattr(customer, 'pppoe_secret'):
+            router = customer.pppoe_secret.router
+        elif hasattr(customer, 'hotspot_user'):
+            router = customer.hotspot_user.router
+
+        if not router:
+            return Response({'active': False})
+
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=router.username,
+            password=router.password, port=router.port, use_ssl=router.use_ssl
+        )
+        res = mikrotik.get_active_sessions()
+        if not res.get('success'):
+            return Response({'active': False, 'error': res.get('error')})
+
+        usernames = {u for u in (customer.pppoe_username, customer.hotspot_username) if u}
+        session = next((s for s in res['sessions'] if s['username'] in usernames), None)
+        if not session:
+            return Response({'active': False})
+
+        return Response({'active': True, **session})

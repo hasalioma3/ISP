@@ -3,6 +3,19 @@
 Workflow: debug and test on this Mac (`https://192.168.88.254`), and once you're
 confident it's right, push to the Pi (`https://192.168.88.253`).
 
+## Two deploy scripts — which one to use
+
+- **`./deploy_update.sh`** — the 95% case. Routine code changes, bug fixes,
+  new migrations, `.env`/`.env.prod` edits. Fast: reuses Docker's build
+  cache, and only recreates containers whose image actually changed.
+- **`./deploy_fresh.sh`** — a genuinely new system from scratch, or a hard
+  reset if the Pi's Docker state is somehow broken/needs to be nuked. Slow
+  by design: it wipes the build cache (`docker system prune -af`) and
+  rebuilds everything unconditionally, every time.
+
+Don't reach for `deploy_fresh.sh` out of habit — the cache wipe is the whole
+reason it's slow, and routine changes don't need it.
+
 ## Normal deploy (the 95% case: code changes, migrations, env tweaks)
 
 1. **Develop & test locally on the Mac:**
@@ -22,14 +35,16 @@ confident it's right, push to the Pi (`https://192.168.88.253`).
 
 3. **Deploy to the Pi:**
    ```bash
-   ./deploy_fresh.sh
+   ./deploy_update.sh
    ```
-   This rsyncs the repo to the Pi, then on the Pi: installs Docker if it
-   isn't there yet (and if so, stops there — SSH group membership needs a
-   fresh connection, so just re-run the script once it prints that message),
-   backs up the database to `~/isp_backups/pre_deploy_<timestamp>.sql`, stops
-   the stack, prunes unused images/build cache (never volumes), rebuilds
-   everything, and runs migrations.
+   Rsyncs the repo to the Pi, then on the Pi: backs up the database to
+   `~/isp_backups/pre_update_<timestamp>.sql`, runs `docker compose build`
+   (fast — cached layers are reused, only what changed rebuilds) and
+   `docker compose up -d` (no `--force-recreate` — Compose only restarts a
+   container if its image/config actually changed, so unrelated services
+   stay up), then runs migrations. Refuses to run (tells you to use
+   `deploy_fresh.sh` instead) if Docker isn't installed yet or nothing's
+   running on the Pi at all.
 
 4. **Verify:**
    ```bash
@@ -39,9 +54,21 @@ confident it's right, push to the Pi (`https://192.168.88.253`).
 
 That's it for almost every change — new features, bug fixes, new migrations,
 and `.env`/`.env.prod` edits are all picked up automatically: rsync copies the
-env files (they aren't excluded), and `--build --force-recreate` re-bakes both
-the Vite build args and the container runtime env, so there's no separate step
-for env changes.
+env files (they aren't excluded), and a rebuild re-bakes both the Vite build
+args and the container runtime env, so there's no separate step for env
+changes.
+
+## Occasional Pi maintenance
+
+`deploy_update.sh` never prunes anything, so old image layers accumulate on
+the Pi's disk over many updates. Every so often (not every deploy), free up
+space with:
+```bash
+ssh pi@192.168.88.253 "docker image prune -f"
+```
+That only removes untagged/dangling images — never anything a running
+container is actually using, so it's safe to run anytime, unlike
+`deploy_fresh.sh`'s `system prune -af`.
 
 ## Rollback
 

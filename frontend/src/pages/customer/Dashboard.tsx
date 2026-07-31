@@ -1,7 +1,8 @@
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { billingAPI } from '../../services/api';
+import { billingAPI, networkAPI } from '../../services/api';
 import { format } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Wifi, Activity, RefreshCw, Wallet, ShieldCheck, Router } from 'lucide-react';
@@ -45,6 +46,53 @@ export default function CustomerDashboard() {
     });
 
     const recentTransactions = transactions?.slice(0, 3) || [];
+
+    // Live session, straight from the router -- refreshed every 5s. Byte
+    // counters are cumulative session totals (that's all the router gives
+    // us), so "current speed" is derived by diffing this poll against the
+    // last one, not something the backend provides directly.
+    const { data: liveSession } = useQuery({
+        queryKey: ['my-session'],
+        queryFn: async () => {
+            const res = await networkAPI.getMySession();
+            return res.data;
+        },
+        refetchInterval: 5000,
+    });
+
+    const [liveSpeed, setLiveSpeed] = useState<{ uploadKbps: number; downloadKbps: number } | null>(null);
+    const prevSessionRef = useRef<{ upload_bytes: number; download_bytes: number; ts: number } | null>(null);
+
+    // Rolling window of recent speed samples for the live chart -- 30
+    // samples at one every 5s is 2.5 minutes of visible history.
+    const MAX_TRAFFIC_SAMPLES = 30;
+    const [trafficSamples, setTrafficSamples] = useState<{ time: string; download: number; upload: number }[]>([]);
+
+    useEffect(() => {
+        if (!liveSession?.active) {
+            setLiveSpeed(null);
+            setTrafficSamples([]);
+            prevSessionRef.current = null;
+            return;
+        }
+        const now = Date.now();
+        const prev = prevSessionRef.current;
+        if (prev) {
+            const elapsedSec = (now - prev.ts) / 1000;
+            if (elapsedSec > 0) {
+                const uploadDelta = Math.max(0, liveSession.upload_bytes - prev.upload_bytes);
+                const downloadDelta = Math.max(0, liveSession.download_bytes - prev.download_bytes);
+                const uploadKbps = (uploadDelta * 8) / elapsedSec / 1024;
+                const downloadKbps = (downloadDelta * 8) / elapsedSec / 1024;
+                setLiveSpeed({ uploadKbps, downloadKbps });
+                setTrafficSamples(samples => [
+                    ...samples,
+                    { time: format(new Date(now), 'HH:mm:ss'), download: Number(downloadKbps.toFixed(1)), upload: Number(uploadKbps.toFixed(1)) },
+                ].slice(-MAX_TRAFFIC_SAMPLES));
+            }
+        }
+        prevSessionRef.current = { upload_bytes: liveSession.upload_bytes, download_bytes: liveSession.download_bytes, ts: now };
+    }, [liveSession]);
 
     // Daily-bucketed usage, computed client-side from real session records --
     // there's no separate pre-aggregated chart endpoint for a customer's own
@@ -124,12 +172,50 @@ export default function CustomerDashboard() {
 
             <div className="grid lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-2">
                         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                             <Activity className="h-5 w-5 text-purple-600" /> Data Usage
                         </h3>
                         <Link to="/usage" className="text-sm text-blue-600 hover:text-blue-800">View all</Link>
                     </div>
+                    <div className="flex items-center gap-4 mb-4 text-sm">
+                        <span className={`flex items-center gap-1.5 font-medium ${liveSession?.active ? 'text-green-600' : 'text-gray-400'}`}>
+                            <span className={`h-2 w-2 rounded-full ${liveSession?.active ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                            {liveSession?.active ? 'Online now' : 'Offline'}
+                        </span>
+                        {liveSession?.active && liveSpeed && (
+                            <>
+                                <span className="text-gray-500">&darr; {liveSpeed.downloadKbps.toFixed(0)} Kbps</span>
+                                <span className="text-gray-500">&uarr; {liveSpeed.uploadKbps.toFixed(0)} Kbps</span>
+                            </>
+                        )}
+                    </div>
+
+                    {liveSession?.active && trafficSamples.length > 0 && (
+                        <div className="h-40 mb-6">
+                            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Live Traffic</p>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={trafficSamples}>
+                                    <defs>
+                                        <linearGradient id="liveDownloadGrad" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.4} />
+                                            <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
+                                        </linearGradient>
+                                        <linearGradient id="liveUploadGrad" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
+                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <XAxis dataKey="time" tick={{ fontSize: 10 }} minTickGap={40} />
+                                    <YAxis tick={{ fontSize: 10 }} unit=" Kbps" width={70} />
+                                    <Tooltip formatter={(v: number) => `${v} Kbps`} />
+                                    <Area type="monotone" dataKey="download" name="Download" stroke="#14b8a6" fill="url(#liveDownloadGrad)" isAnimationActive={false} />
+                                    <Area type="monotone" dataKey="upload" name="Upload" stroke="#3b82f6" fill="url(#liveUploadGrad)" isAnimationActive={false} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    )}
+
                     {dailyUsage.length > 0 ? (
                         <div className="h-72">
                             <ResponsiveContainer width="100%" height="100%">

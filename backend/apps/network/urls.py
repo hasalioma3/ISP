@@ -11,4 +11,5 @@ urlpatterns = [
     path('hotspot/status/', HotspotStatusView.as_view(), name='hotspot-status'),
     path('online-users/', views.OnlineUsersView.as_view(), name='online-users'),
     path('online-users/<int:pk>/disconnect/', views.DisconnectSessionView.as_view(), name='online-user-disconnect'),
+    path('my-session/', views.MySessionView.as_view(), name='my-session'),
 ]

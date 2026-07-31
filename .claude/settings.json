@@ -15,7 +15,9 @@
       "Bash(curl -sk -X POST https://192.168.88.254/api/billing/plans/import-csv/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -F file=@/tmp/plans_test.csv)",
       "Bash(curl -sk https://192.168.88.254/api/billing/pppoe-import-template/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
       "Bash(curl -sk -X POST https://192.168.88.254/api/billing/pppoe-import/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -F file=@/tmp/pppoe_test.csv)",
-      "Bash(curl -sk -o /dev/null -w \"Frontend HTTP: %{http_code}\\\\n\" https://192.168.88.254/dashboard)"
+      "Bash(curl -sk -o /dev/null -w \"Frontend HTTP: %{http_code}\\\\n\" https://192.168.88.254/dashboard)",
+      "Bash(chmod +x /Users/hassanomar/Documents/GitHub/ISP/deploy_update.sh)",
+      "Bash(bash -n /Users/hassanomar/Documents/GitHub/ISP/deploy_update.sh)"
     ]
   }
 }
