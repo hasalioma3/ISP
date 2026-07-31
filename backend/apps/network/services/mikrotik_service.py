@@ -609,14 +609,26 @@ class MikroTikService:
             return {'success': False, 'error': str(e)}
 
     def add_bridge(self, name):
+        """
+        fast-forward is explicitly disabled -- RouterOS defaults a new
+        bridge to fast-forward=yes, which routes eligible bridged traffic
+        around the normal CPU forwarding path and, with it, around Simple
+        Queue rate-limiting entirely. Since the PPPoE server is bound to
+        this same bridge, that silently let PPPoE customers run uncapped
+        despite a correctly-configured profile rate-limit. Applied
+        idempotently (also corrects an already-existing bridge that
+        predates this fix), not just at creation.
+        """
         try:
             connection = self._get_connection()
             api = connection.get_api()
             bridge = api.get_resource('/interface/bridge')
             existing = bridge.get(name=name)
             existing = [b for b in existing if b.get('id')]
-            if not existing:
-                bridge.add(name=name)
+            if existing:
+                bridge.set(id=existing[0]['id'], **{'fast-forward': 'no'})
+            else:
+                bridge.add(name=name, **{'fast-forward': 'no'})
             connection.disconnect()
             return {'success': True}
         except Exception as e:
@@ -851,6 +863,35 @@ class MikroTikService:
                 nat.add(comment=comment, **params)
             connection.disconnect()
             return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def disable_fasttrack(self):
+        """
+        Disable any `forward` chain `fasttrack-connection` firewall rule --
+        RouterOS's own quick-setup wizard adds one by default on virtually
+        every router (usually commented "defconf: fasttrack"), and it
+        explicitly bypasses simple queues (and mangle) for the bulk of a
+        connection's traffic after the first few packets. Combined with
+        bridge fast-forward (see add_bridge), this is how a customer can
+        blow straight through their plan's rate-limit despite the profile
+        being configured correctly -- the queue only ever sees a trickle
+        before fasttrack routes the rest of the connection around it.
+        Matched by chain+action, not the comment text, since a router set
+        up differently from the default wizard may have retitled or
+        recreated the rule.
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            filter_rules = api.get_resource('/ip/firewall/filter')
+            rules = filter_rules.get(chain='forward', action='fasttrack-connection')
+            rules = [r for r in rules if r.get('id')]
+            for rule in rules:
+                if rule.get('disabled') != 'true':
+                    filter_rules.set(id=rule['id'], disabled='yes')
+            connection.disconnect()
+            return {'success': True, 'disabled_count': len(rules)}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 

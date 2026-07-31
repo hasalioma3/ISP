@@ -546,6 +546,16 @@ class NetworkAutomation:
         # MIKROTIK_PROVISION_BRIDGE_PORTS is one fixed list shared across
         # every router regardless of hardware. ---
         step(f'Create {interface} bridge', mikrotik.add_bridge, interface)
+
+        # RouterOS's own quick-setup wizard adds a `forward
+        # fasttrack-connection` firewall rule by default on virtually every
+        # router. Combined with bridge fast-forward (just handled by
+        # add_bridge above), this is enough on its own to let a customer's
+        # traffic bypass Simple Queue rate-limiting entirely after the
+        # first few packets of each connection -- silently defeating every
+        # plan's speed cap regardless of how correctly it's configured.
+        step('Disable fasttrack (bypasses queue rate-limits)', mikrotik.disable_fasttrack)
+
         existing_interface_names = set()
         interfaces_res = mikrotik.list_interfaces()
         if interfaces_res.get('success'):

@@ -22,7 +22,11 @@
       "Bash(nslookup portal.hasanet.net)",
       "Bash(curl -sv https://portal.hasanet.net/api/payments/callback/ -X GET -o /dev/null)",
       "Bash(curl -s -o /dev/null -w \"Status: %{http_code}\\\\n\" https://portal.hasanet.net/api/payments/callback/)",
-      "Bash(curl -sk -o /dev/null -w \"Frontend still up on LAN IP -> %{http_code}\\\\n\" https://192.168.88.254/)"
+      "Bash(curl -sk -o /dev/null -w \"Frontend still up on LAN IP -> %{http_code}\\\\n\" https://192.168.88.254/)",
+      "Bash(ssh pi@192.168.88.252 \"grep -c 'get_duration_timedelta' ~/ISP/backend/apps/billing/models.py 2>&1; grep -c 'raise Exception' ~/ISP/backend/apps/network/services/network_automation.py 2>&1; grep -n 'MIKROTIK_WAN_INTERFACE\\\\|MIKROTIK_DEFAULT_PROFILE_RATE_LIMIT' ~/ISP/backend/isp_billing/settings.py 2>&1\")",
+      "Bash(ssh pi@192.168.88.252 'cd ~/ISP && docker compose exec -T backend python manage.py shell -c \" *)",
+      "Bash(./deploy_update.sh)",
+      "Bash(ssh pi@192.168.88.252 \"cd ~/ISP && docker compose exec -T backend python manage.py check 2>&1 | tail -5\")"
     ]
   }
 }

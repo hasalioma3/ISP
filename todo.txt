@@ -5,3 +5,4 @@
 5. intergrate for whatsapp/Telegram
 6. change provisioning to leave out port 2 and 5 and provision wifi(if available), ports 3 and 4 only
 7. be able to view the customer pppoe and portal passwords from the admin portal(only super admin)
+8. register an actual till number and put the app in production.
