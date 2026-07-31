@@ -202,11 +202,12 @@ def reactivate_session(request):
         customer.hotspot_mac_address = mac_address
         customer.save(update_fields=['hotspot_mac_address'])
 
-    result = network_automation.activate_customer(customer, subscription.plan)
-    if not result.get('success'):
-        logger.error(f"Reactivation failed for {customer.username}: {result.get('error')}")
+    try:
+        network_automation.activate_customer(customer, subscription.plan)
+    except Exception as e:
+        logger.error(f"Reactivation failed for {customer.username}: {e}")
         return Response({
-            'error': f"Could not reactivate your session: {result.get('error')}"
+            'error': f"Could not reactivate your session: {e}"
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return Response({

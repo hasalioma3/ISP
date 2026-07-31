@@ -239,6 +239,15 @@ MIKROTIK_PROVISION_BRIDGE_PORTS = [
 # if a router's actual WAN port differs, override per-deployment via env.
 MIKROTIK_WAN_INTERFACE = config('MIKROTIK_WAN_INTERFACE', default='ether1')
 
+# Rate-limit applied to the built-in "default" Hotspot/PPPoE profiles at
+# provisioning time. Whoever ends up on "default" isn't on a real billing
+# plan's profile -- either a session that was never (or failed to be)
+# assigned to their plan's profile, or a walled-garden/unrecognized dial-in.
+# Leaving it unlimited (RouterOS's own default) means any such gap silently
+# hands out full-speed, uncapped internet -- this is a deliberately
+# conservative throttle, not a real plan.
+MIKROTIK_DEFAULT_PROFILE_RATE_LIMIT = config('MIKROTIK_DEFAULT_PROFILE_RATE_LIMIT', default='1M/1M')
+
 # Extra hosts (beyond CAPTIVE_PORTAL_URL's own host, which is always
 # walled-gardened automatically during provisioning) that must stay
 # reachable to unauthenticated Hotspot clients. Usually not needed.

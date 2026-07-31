@@ -1,7 +1,7 @@
 # Deploy Runbook: Mac (dev) → Pi 5 (production)
 
 Workflow: debug and test on this Mac (`https://192.168.88.254`), and once you're
-confident it's right, push to the Pi (`https://192.168.88.253`).
+confident it's right, push to the Pi (`https://192.168.88.252`).
 
 ## Two deploy scripts — which one to use
 
@@ -48,7 +48,7 @@ reason it's slow, and routine changes don't need it.
 
 4. **Verify:**
    ```bash
-   curl -sk -o /dev/null -w "%{http_code}\n" https://192.168.88.253/
+   curl -sk -o /dev/null -w "%{http_code}\n" https://192.168.88.252/
    ```
    Expect `200`. Spot-check the admin portal and a subscriber lookup.
 
@@ -64,7 +64,7 @@ changes.
 the Pi's disk over many updates. Every so often (not every deploy), free up
 space with:
 ```bash
-ssh pi@192.168.88.253 "docker image prune -f"
+ssh pi@192.168.88.252 "docker image prune -f"
 ```
 That only removes untagged/dangling images — never anything a running
 container is actually using, so it's safe to run anytime, unlike
@@ -75,7 +75,7 @@ container is actually using, so it's safe to run anytime, unlike
 If a deploy goes bad:
 
 ```bash
-ssh pi@192.168.88.253 "cd ~/ISP && \
+ssh pi@192.168.88.252 "cd ~/ISP && \
     docker compose exec -T db psql -U isp_user -d isp_billing_prod < ~/isp_backups/pre_deploy_<timestamp>.sql"
 ```
 
@@ -151,7 +151,7 @@ start it once on the Pi and leave it running:
 docker compose -f docker-compose.monitoring.yml up -d
 ```
 
-Dashboard: `http://192.168.88.253:19999/`. It's on host networking (Netdata's
+Dashboard: `http://192.168.88.252:19999/`. It's on host networking (Netdata's
 own recommendation, for accurate numbers), so there's no port mapping to
 manage. `restart: unless-stopped` + Docker starting on boot means it survives
 reboots on its own. No login by default — see the note at the top of the

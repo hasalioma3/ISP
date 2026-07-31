@@ -10,13 +10,19 @@ logger = logging.getLogger(__name__)
 @receiver(post_save, sender=BillingPlan)
 def sync_plan_on_save(sender, instance, created, **kwargs):
     """
-    Trigger sync when plan details change
+    Trigger sync when plan details change -- including on creation. This
+    runs async (.delay()), so by the time a worker actually picks it up,
+    any M2M `routers` set via the same request's serializer.save() is
+    already committed; there's no real timing hazard to defer for. Skipping
+    this on creation used to mean a brand-new plan's PPP/Hotspot profile
+    never got pushed to any router until it was edited at least once --
+    silently breaking activation for every customer assigned to it in the
+    meantime (see sync_plan_to_routers' router-selection fallback for the
+    other half of this: a plan with no routers explicitly assigned needs
+    the same "fall back to all active routers" treatment activate_customer
+    already has).
     """
-    # We defer the actual sync to allow M2M relations to be set if this is a new object
-    # But for M2M updates, m2m_changed covers it.
-    # For simple field updates (price, speed), we need to sync to all associated routers.
-    if not created:
-        sync_plan_to_routers.delay(instance.id)
+    sync_plan_to_routers.delay(instance.id)
 
 @receiver(m2m_changed, sender=BillingPlan.routers.through)
 def sync_plan_on_routers_change(sender, instance, action, **kwargs):
@@ -48,7 +54,15 @@ def sync_subscription_on_save(sender, instance, created, **kwargs):
             instance.customer.status = 'active'
             instance.customer.save(update_fields=['status'])
     elif instance.status in ['expired', 'cancelled', 'suspended']:
-        network_automation.suspend_customer(instance.customer)
+        # Best-effort: the subscription is genuinely expired/cancelled
+        # regardless of whether the router happens to be reachable right
+        # now, so a suspend failure is logged, not raised -- letting it
+        # raise here would roll back this very save() and leave the
+        # subscription stuck 'active' forever, retried every minute by
+        # check_expired_subscriptions with no way to ever succeed.
+        result = network_automation.suspend_customer(instance.customer)
+        if not result.get('success'):
+            logger.error(f"Failed to suspend {instance.customer.username} on expiry: {result.get('error')}")
         if is_latest:
             new_status = 'suspended' if instance.status == 'cancelled' else instance.status
             if instance.customer.status != new_status:

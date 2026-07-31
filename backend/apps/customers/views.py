@@ -290,12 +290,18 @@ class SubscriberViewSet(
             customer.save(update_fields=['static_ip_address', 'service_type'])
 
         expiry_date = timezone.now() + timezone.timedelta(days=plan.duration_days)
-        subscription = Subscription.objects.create(
-            customer=customer,
-            plan=plan,
-            expiry_date=expiry_date,
-            status='active'
-        )
+        try:
+            subscription = Subscription.objects.create(
+                customer=customer,
+                plan=plan,
+                expiry_date=expiry_date,
+                status='active'
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Plan assigned locally failed to activate on the router: {e}'},
+                status=status.HTTP_502_BAD_GATEWAY
+            )
 
         Transaction.objects.create(
             customer=customer,

@@ -17,7 +17,12 @@
       "Bash(curl -sk -X POST https://192.168.88.254/api/billing/pppoe-import/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -F file=@/tmp/pppoe_test.csv)",
       "Bash(curl -sk -o /dev/null -w \"Frontend HTTP: %{http_code}\\\\n\" https://192.168.88.254/dashboard)",
       "Bash(chmod +x /Users/hassanomar/Documents/GitHub/ISP/deploy_update.sh)",
-      "Bash(bash -n /Users/hassanomar/Documents/GitHub/ISP/deploy_update.sh)"
+      "Bash(bash -n /Users/hassanomar/Documents/GitHub/ISP/deploy_update.sh)",
+      "Bash(dig +short portal.hasanet.net)",
+      "Bash(nslookup portal.hasanet.net)",
+      "Bash(curl -sv https://portal.hasanet.net/api/payments/callback/ -X GET -o /dev/null)",
+      "Bash(curl -s -o /dev/null -w \"Status: %{http_code}\\\\n\" https://portal.hasanet.net/api/payments/callback/)",
+      "Bash(curl -sk -o /dev/null -w \"Frontend still up on LAN IP -> %{http_code}\\\\n\" https://192.168.88.254/)"
     ]
   }
 }

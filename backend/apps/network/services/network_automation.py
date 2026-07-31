@@ -128,52 +128,55 @@ class NetworkAutomation:
             return {'success': False, 'error': str(e)}
 
     def activate_customer(self, customer, plan):
-        try:
-            # Determine target routers: either from plan or fallback to all active
-            target_routers = plan.routers.filter(is_active=True)
-            if not target_routers.exists():
-                # Fallback to default behavior: use the first active router (or all?)
-                # For now, let's just pick the first active one to be safe, or all active?
-                # Using all active routers is safer for consistency.
-                target_routers = Router.objects.filter(is_active=True)
-                
-            if not target_routers.exists():
-                return {'success': False, 'error': 'No active router configured'}
-                
-            results = {'errors': []}
-            
-            for router in target_routers:
-                mikrotik = MikroTikService(
-                    host=router.ip_address, username=router.username, 
-                    password=router.password, port=router.port, use_ssl=router.use_ssl
-                )
-                
-                try:
-                    # Determine overlapping services
-                    # Only activate if BOTH Customer and Plan support the service
-                    enable_pppoe = (customer.service_type in ['pppoe', 'both']) and (plan.service_type in ['pppoe', 'both'])
-                    enable_hotspot = (customer.service_type in ['hotspot', 'both']) and (plan.service_type in ['hotspot', 'both'])
-                    enable_static = (customer.service_type == 'static') and (plan.service_type == 'static')
+        """
+        Raises on failure (no active router, or a real push failure on any
+        target router) rather than returning a swallow-able error dict --
+        Subscription creation is the one moment that's actually supposed to
+        mean "this customer is now connected", so a caller creating one
+        needs to find out if that didn't actually happen. Callers that want
+        best-effort behavior (e.g. a payment already succeeded, activation
+        can be retried later) should wrap the call in their own try/except,
+        same as apps/payments/services/payment_processor.py already does.
+        """
+        # Determine target routers: either from plan or fallback to all active
+        target_routers = plan.routers.filter(is_active=True)
+        if not target_routers.exists():
+            target_routers = Router.objects.filter(is_active=True)
 
-                    if enable_pppoe:
-                        self._activate_pppoe(customer, plan, router, mikrotik)
+        if not target_routers.exists():
+            raise Exception('No active router configured')
 
-                    if enable_hotspot:
-                        self._activate_hotspot(customer, plan, router, mikrotik)
+        errors = []
 
-                    if enable_static:
-                        self._activate_static(customer, plan, router, mikrotik)
+        for router in target_routers:
+            mikrotik = MikroTikService(
+                host=router.ip_address, username=router.username,
+                password=router.password, port=router.port, use_ssl=router.use_ssl
+            )
 
-                except Exception as e:
-                    results['errors'].append(f"{router.name}: {str(e)}")
-                    
-            if results['errors']:
-                return {'success': False, 'error': ", ".join(results['errors'])}
-            return {'success': True}
-            
-        except Exception as e:
-            logger.error(f"Failed to activate customer {customer.username}: {str(e)}")
-            return {'success': False, 'error': str(e)}
+            try:
+                # Determine overlapping services
+                # Only activate if BOTH Customer and Plan support the service
+                enable_pppoe = (customer.service_type in ['pppoe', 'both']) and (plan.service_type in ['pppoe', 'both'])
+                enable_hotspot = (customer.service_type in ['hotspot', 'both']) and (plan.service_type in ['hotspot', 'both'])
+                enable_static = (customer.service_type == 'static') and (plan.service_type == 'static')
+
+                if enable_pppoe:
+                    self._activate_pppoe(customer, plan, router, mikrotik)
+
+                if enable_hotspot:
+                    self._activate_hotspot(customer, plan, router, mikrotik)
+
+                if enable_static:
+                    self._activate_static(customer, plan, router, mikrotik)
+
+            except Exception as e:
+                errors.append(f"{router.name}: {str(e)}")
+
+        if errors:
+            error_msg = ", ".join(errors)
+            logger.error(f"Failed to activate customer {customer.username}: {error_msg}")
+            raise Exception(error_msg)
     
     def _activate_pppoe(self, customer, plan, router, mikrotik):
         pppoe_secret, created = PPPoESecret.objects.get_or_create(
@@ -209,11 +212,12 @@ class NetworkAutomation:
                  needs_update = True
 
         success = False
+        error = None
         if not created:
             # Try updating first
             res = mikrotik.update_pppoe_secret(
-                username=pppoe_secret.username, 
-                profile=plan.mikrotik_profile, 
+                username=pppoe_secret.username,
+                profile=plan.mikrotik_profile,
                 password=customer.pppoe_password or customer.username,
                 disabled='no'
             )
@@ -221,23 +225,40 @@ class NetworkAutomation:
                 success = True
             elif 'not found' in res.get('error', '').lower():
                 # It's missing on router, so let's fall through to add it
-                created = True 
+                created = True
             else:
-                logger.error(f"Failed to update PPPoE secret: {res.get('error')}")
+                error = res.get('error')
+                logger.error(f"Failed to update PPPoE secret: {error}")
 
         if created:
-            mikrotik.add_pppoe_secret(
-                username=pppoe_secret.username, 
-                password=customer.pppoe_password or customer.username, 
+            res = mikrotik.add_pppoe_secret(
+                username=pppoe_secret.username,
+                password=customer.pppoe_password or customer.username,
                 profile=plan.mikrotik_profile
             )
+            if res['success']:
+                success = True
+            else:
+                error = res.get('error')
+                logger.error(f"Failed to add PPPoE secret: {error}")
 
-        # Ensure correct local state
+        # Only record the customer as synced -- and only overwrite the
+        # locally-recorded profile/password/status -- if the router actually
+        # confirmed it. Recording success regardless of what the router said
+        # is exactly how a customer ends up silently uncapped: their secret
+        # keeps referencing (or falls back to) a profile that was never
+        # actually applied, while the app believes activation succeeded.
+        if not success:
+            pppoe_secret.router = router
+            pppoe_secret.synced_to_router = False
+            pppoe_secret.save()
+            raise Exception(f"Failed to activate PPPoE for {customer.username}: {error}")
+
         if not created:
             pppoe_secret.profile = plan.mikrotik_profile
             pppoe_secret.password = customer.pppoe_password or customer.username
             pppoe_secret.status = 'enabled'
-        
+
         pppoe_secret.router = router
         pppoe_secret.synced_to_router = True
         pppoe_secret.save()
@@ -282,10 +303,11 @@ class NetworkAutomation:
                 needs_update = True
 
         success = False
+        error = None
         if not created:
              res = mikrotik.update_hotspot_user(
-                username=hotspot_user.username, 
-                profile=plan.mikrotik_profile, 
+                username=hotspot_user.username,
+                profile=plan.mikrotik_profile,
                 password=customer.hotspot_password or customer.username,
                 disabled='no',
                 mac_address=customer.hotspot_mac_address or ''
@@ -295,15 +317,33 @@ class NetworkAutomation:
              elif 'not found' in res.get('error', '').lower():
                  created = True
              else:
-                 logger.error(f"Failed to update Hotspot user: {res.get('error')}")
+                 error = res.get('error')
+                 logger.error(f"Failed to update Hotspot user: {error}")
 
         if created:
-            mikrotik.add_hotspot_user(
-                username=hotspot_user.username, 
-                password=hotspot_user.password, 
+            res = mikrotik.add_hotspot_user(
+                username=hotspot_user.username,
+                password=hotspot_user.password,
                 profile=plan.mikrotik_profile,
                 mac_address=hotspot_user.mac_address or ''
             )
+            if res['success']:
+                success = True
+            else:
+                error = res.get('error')
+                logger.error(f"Failed to add Hotspot user: {error}")
+
+        # Only record the customer as synced -- and only overwrite the
+        # locally-recorded profile/password/status -- if the router actually
+        # confirmed it. Recording success regardless of what the router said
+        # is exactly how a customer ends up silently uncapped: their user
+        # keeps referencing (or falls back to) a profile that was never
+        # actually applied, while the app believes activation succeeded.
+        if not success:
+            hotspot_user.router = router
+            hotspot_user.synced_to_router = False
+            hotspot_user.save()
+            raise Exception(f"Failed to activate Hotspot for {customer.username}: {error}")
 
         if not created:
             hotspot_user.profile = plan.mikrotik_profile
@@ -311,7 +351,7 @@ class NetworkAutomation:
             hotspot_user.status = 'enabled'
             if customer.hotspot_mac_address:
                 hotspot_user.mac_address = customer.hotspot_mac_address
-                
+
         hotspot_user.router = router
         hotspot_user.synced_to_router = True
         hotspot_user.save()
@@ -351,15 +391,20 @@ class NetworkAutomation:
         router = router or Router.objects.filter(is_active=True).first()
         if not router: return {'error': 'No active router configured'}
         mikrotik = MikroTikService(
-            host=router.ip_address, username=router.username, 
+            host=router.ip_address, username=router.username,
             password=router.password, port=router.port, use_ssl=router.use_ssl
         )
+        pppoe_gateway = None
+        try:
+            pppoe_gateway = str(ipaddress.ip_network(router.pppoe_subnet, strict=False)[1])
+        except ValueError:
+            logger.error(f"{router.name}: invalid pppoe_subnet {router.pppoe_subnet!r}, leaving PPPoE profiles' local-address unset")
         for plan in plans:
             rate_limit = f"{plan.upload_speed}M/{plan.download_speed}M"
             if plan.service_type in ['pppoe', 'both']:
-                res = mikrotik.update_pppoe_profile(plan.mikrotik_profile, rate_limit, remote_address='pppoe_pool')
+                res = mikrotik.update_pppoe_profile(plan.mikrotik_profile, rate_limit, remote_address='pppoe_pool', local_address=pppoe_gateway)
                 if not res['success'] and 'not found' in res.get('error', ''):
-                    res = mikrotik.add_pppoe_profile(plan.mikrotik_profile, rate_limit, remote_address='pppoe_pool')
+                    res = mikrotik.add_pppoe_profile(plan.mikrotik_profile, rate_limit, remote_address='pppoe_pool', local_address=pppoe_gateway)
                 if res['success']: results['success'].append(f"PPPoE: {plan.name}")
                 else: results['failed'].append(f"PPPoE: {plan.name} - {res.get('error')}")
             if plan.service_type in ['hotspot', 'both']:
@@ -384,13 +429,18 @@ class NetworkAutomation:
             customer = sub.customer
             plan = sub.plan
             try:
-                if customer.service_type in ['pppoe', 'both']:
+                # Both customer AND plan must support the service -- a
+                # customer.service_type='both' on a hotspot-ONLY plan must
+                # not attempt PPPoE activation using that plan's (hotspot)
+                # mikrotik_profile, same requirement activate_customer
+                # already enforces.
+                if customer.service_type in ['pppoe', 'both'] and plan.service_type in ['pppoe', 'both']:
                     self._activate_pppoe(customer, plan, router, mikrotik)
                     results['success'].append(f"PPPoE: {customer.username}")
-                if customer.service_type in ['hotspot', 'both']:
+                if customer.service_type in ['hotspot', 'both'] and plan.service_type in ['hotspot', 'both']:
                     self._activate_hotspot(customer, plan, router, mikrotik)
                     results['success'].append(f"Hotspot: {customer.username}")
-                if customer.service_type == 'static':
+                if customer.service_type == 'static' and plan.service_type == 'static':
                     self._activate_static(customer, plan, router, mikrotik)
                     results['success'].append(f"Static: {customer.username}")
             except Exception as e:
@@ -513,7 +563,7 @@ class NetworkAutomation:
         step('Hotspot DHCP server', mikrotik.add_dhcp_server, 'hotspot_dhcp', interface, 'hotspot_pool')
         step('Hotspot DHCP network', mikrotik.add_dhcp_network,
              str(hotspot_net), hotspot_gateway, dns_servers=router.dns_servers)
-        step('Hotspot default user profile', mikrotik.add_hotspot_profile, 'default')
+        step('Hotspot default user profile', mikrotik.add_hotspot_profile, 'default', settings.MIKROTIK_DEFAULT_PROFILE_RATE_LIMIT)
         step('Hotspot server profile', mikrotik.add_hotspot_server_profile,
              'hotspot_profile', hotspot_gateway)
         step('Hotspot server', mikrotik.add_hotspot_server,
@@ -523,7 +573,9 @@ class NetworkAutomation:
 
         # --- PPPoE: pool, default profile, server ---
         step('PPPoE IP pool', mikrotik.add_ip_pool, 'pppoe_pool', pppoe_pool_range)
-        step('PPPoE default profile', mikrotik.add_pppoe_profile, 'default', remote_address='pppoe_pool')
+        step('PPPoE default profile', mikrotik.add_pppoe_profile, 'default',
+             rate_limit=settings.MIKROTIK_DEFAULT_PROFILE_RATE_LIMIT, remote_address='pppoe_pool',
+             local_address=pppoe_gateway)
         step('PPPoE server', mikrotik.add_pppoe_server, 'pppoe-service', interface, default_profile='default')
 
         # --- NAT so both subnets can reach the internet ---

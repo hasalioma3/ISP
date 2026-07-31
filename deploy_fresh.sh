@@ -2,7 +2,7 @@
 set -e
 
 # Configuration
-PI_HOST="192.168.88.253"
+PI_HOST="192.168.88.252"
 PI_USER="pi"
 REMOTE_DIR="~/ISP"
 

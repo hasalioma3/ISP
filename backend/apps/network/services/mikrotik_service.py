@@ -180,10 +180,16 @@ class MikroTikService:
                 connection.disconnect()
                 return {'success': False, 'error': 'User not found'}
             
-            # Handle potential param mapping
-            if 'mac_address' in kwargs:
-                kwargs['mac-address'] = kwargs.pop('mac_address')
-                
+            # Handle potential param mapping. An empty mac-address isn't "no
+            # change" to RouterOS -- it's rejected outright ("invalid value
+            # of mac-address, mac address required"), so a customer with no
+            # MAC on file (very common -- it's often only learned once they
+            # actually connect) must have the key omitted entirely, not sent
+            # as ''.
+            mac_address = kwargs.pop('mac_address', None)
+            if mac_address:
+                kwargs['mac-address'] = mac_address
+
             hotspot_user.set(id=users[0]['id'], **kwargs)
             connection.disconnect()
             return {'success': True}
@@ -247,14 +253,15 @@ class MikroTikService:
 
     # Profile Management
     
-    def add_pppoe_profile(self, name, rate_limit=None, remote_address=None, on_up=None, on_down=None):
+    def add_pppoe_profile(self, name, rate_limit=None, remote_address=None, local_address=None, on_up=None, on_down=None):
         try:
             connection = self._get_connection()
             api = connection.get_api()
             ppp_profile = api.get_resource('/ppp/profile')
-            params = {'local-address': '10.0.0.1', 'dns-server': '8.8.8.8,8.8.4.4'}
+            params = {'dns-server': '8.8.8.8,8.8.4.4'}
             if rate_limit: params['rate-limit'] = rate_limit
             if remote_address: params['remote-address'] = remote_address
+            if local_address: params['local-address'] = local_address
             if on_up: params['on-up'] = on_up
             if on_down: params['on-down'] = on_down
             existing = ppp_profile.get(name=name)
@@ -268,7 +275,7 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def update_pppoe_profile(self, name, rate_limit=None, remote_address=None, on_up=None, on_down=None):
+    def update_pppoe_profile(self, name, rate_limit=None, remote_address=None, local_address=None, on_up=None, on_down=None):
         try:
             connection = self._get_connection()
             api = connection.get_api()
@@ -281,6 +288,7 @@ class MikroTikService:
             params = {}
             if rate_limit: params['rate-limit'] = rate_limit
             if remote_address: params['remote-address'] = remote_address
+            if local_address: params['local-address'] = local_address
             if on_up: params['on-up'] = on_up
             if on_down: params['on-down'] = on_down
             if params: ppp_profile.set(id=profile['id'], **params)

@@ -28,7 +28,7 @@ app.conf.beat_schedule = {
     },
     'collect-usage-statistics': {
         'task': 'apps.network.tasks.collect_usage_statistics',
-        'schedule': crontab(minute='*/5'),  # Run every 5 minutes
+        'schedule': crontab(minute='*'),  # Run every minute
     },
 }
 

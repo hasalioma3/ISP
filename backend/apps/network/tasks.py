@@ -1,5 +1,6 @@
 
 import re
+import ipaddress
 from celery import shared_task
 from django.db.models import F
 from django.utils import timezone
@@ -163,19 +164,43 @@ def sync_plan_to_routers(plan_id):
     """
     try:
         from apps.billing.models import BillingPlan
+        from apps.network.models import Router
         plan = BillingPlan.objects.get(id=plan_id)
-        
-        logger.info(f"Syncing plan {plan.name} to {plan.routers.count()} routers...")
-        
-        for router in plan.routers.filter(is_active=True):
+
+        # Same fallback as network_automation.activate_customer: a plan with
+        # no routers explicitly assigned applies to every active router, not
+        # zero. Without this, a plan created/left with routers blank (the
+        # UI's own "blank = all active routers" default) never got its
+        # profile pushed anywhere -- so any customer activated on it failed,
+        # since activate_customer WAS using this same "all active routers"
+        # fallback for activation, just not for this sync.
+        target_routers = plan.routers.filter(is_active=True)
+        if not target_routers.exists():
+            target_routers = Router.objects.filter(is_active=True)
+
+        logger.info(f"Syncing plan {plan.name} to {target_routers.count()} routers...")
+
+        for router in target_routers:
             try:
                 mikrotik = MikroTikService(
                     host=router.ip_address,
-                    username=router.username, 
+                    username=router.username,
                     password=router.password,
                     port=router.port,
                     use_ssl=router.use_ssl
                 )
+
+                # Same gateway this router was provisioned with (see
+                # provision_router) -- without it, a plan-specific PPPoE
+                # profile has no local-address/remote-address of its own, so
+                # a customer on it never actually draws an IP from the
+                # PPPoE pool.
+                pppoe_gateway = None
+                try:
+                    pppoe_net = ipaddress.ip_network(router.pppoe_subnet, strict=False)
+                    pppoe_gateway = str(pppoe_net[1])
+                except ValueError:
+                    logger.error(f"{router.name}: invalid pppoe_subnet {router.pppoe_subnet!r}, leaving PPPoE profile's local-address unset")
                 
                 # Create/Update Hotspot Profile
                 if plan.service_type in ['hotspot', 'both']:
@@ -193,48 +218,52 @@ def sync_plan_to_routers(plan_id):
                 # Create/Update PPPoE Profile
                 if plan.service_type in ['pppoe', 'both']:
                     rate_limit = f"{plan.upload_speed}M/{plan.download_speed}M"
-                  # PPPoE auto-bypass logic
-                # When user connects, add them to Hotspot IP binding as bypassed
-                # When user disconnects, remove them
-                on_up = (
-                    f'/ip hotspot ip-binding add mac-address=$"caller-id" '
-                    f'type=bypassed server=all comment="pppoe-$user";'
-                )
-                on_down = (
-                    f'/ip hotspot ip-binding remove [find comment="pppoe-$user"];'
-                )
-                
-                res_pppoe = mikrotik.add_pppoe_profile(
-                    name=plan.mikrotik_profile,
-                    rate_limit=rate_limit,
-                    on_up=on_up,
-                    on_down=on_down
-                )
-                
-                logger.info(f"Add PPPoE Profile Response: {res_pppoe}")
-                
-                if not res_pppoe['success']:
-                     # Try update if add failed (likely exists)
-                     res_pppoe = mikrotik.update_pppoe_profile(
-                        name=plan.mikrotik_profile, 
+                    # PPPoE auto-bypass logic: when a PPPoE user connects, add
+                    # them to the Hotspot IP binding as bypassed (so they
+                    # don't also get hit by the hotspot walled garden/login),
+                    # and remove that binding again when they disconnect.
+                    on_up = (
+                        f'/ip hotspot ip-binding add mac-address=$"caller-id" '
+                        f'type=bypassed server=all comment="pppoe-$user";'
+                    )
+                    on_down = (
+                        f'/ip hotspot ip-binding remove [find comment="pppoe-$user"];'
+                    )
+
+                    res_pppoe = mikrotik.add_pppoe_profile(
+                        name=plan.mikrotik_profile,
                         rate_limit=rate_limit,
+                        remote_address='pppoe_pool',
+                        local_address=pppoe_gateway,
                         on_up=on_up,
                         on_down=on_down
                     )
-                
-                if res_pppoe['success']:
-                    logger.info(f"{router.name}: PPPoE Profile {plan.mikrotik_profile} synced.")
+
+                    logger.info(f"Add PPPoE Profile Response: {res_pppoe}")
+
+                    if not res_pppoe['success']:
+                        # Try update if add failed (likely exists)
+                        res_pppoe = mikrotik.update_pppoe_profile(
+                            name=plan.mikrotik_profile,
+                            rate_limit=rate_limit,
+                            remote_address='pppoe_pool',
+                            local_address=pppoe_gateway,
+                            on_up=on_up,
+                            on_down=on_down
+                        )
+
+                    if res_pppoe['success']:
+                        logger.info(f"{router.name}: PPPoE Profile {plan.mikrotik_profile} synced.")
+                    else:
+                        logger.error(f"{router.name}: PPPoE Sync Failed: {res_pppoe.get('error')}")
                 else:
-                     logger.error(f"{router.name}: PPPoE Sync Failed: {res_pppoe.get('error')}")
+                    res_pppoe = {'success': True}  # Skip if not a PPPoE plan
 
                 if res_hotspot['success']:
                      logger.info(f"{router.name}: Hotspot Profile {plan.mikrotik_profile} synced.")
                 else:
                      logger.error(f"{router.name}: Hotspot Sync Failed: {res_hotspot.get('error')}")
-                
-                # Original line: mikrotik.add_pppoe_profile(plan.mikrotik_profile, rate_limit)
-                # This line is replaced by the new logic above.
-                    
+
                 logger.info(f"Synced plan {plan.name} to router {router.name}")
                 
             except Exception as e:

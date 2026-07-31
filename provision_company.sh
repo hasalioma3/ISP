@@ -11,7 +11,7 @@
 #   ./provision_company.sh acme "Acme Wireless" 8081
 set -e
 
-HOST_IP="192.168.88.253"
+HOST_IP="192.168.88.252"
 
 SLUG="$1"
 DISPLAY_NAME="$2"
