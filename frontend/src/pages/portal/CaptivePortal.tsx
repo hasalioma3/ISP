@@ -41,6 +41,7 @@ const CaptivePortal: React.FC = () => {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [processingPayment, setProcessingPayment] = useState(false);
     const [paymentSuccess, setPaymentSuccess] = useState(false);
+    const [pollTimedOut, setPollTimedOut] = useState(false);
 
     // Use relative path for API to support access via IP or Domain without CORS/DNS issues
     // Nginx is configured to proxy /api to the backend
@@ -50,6 +51,30 @@ const CaptivePortal: React.FC = () => {
         checkStatus();
         fetchPlans();
     }, [mac]);
+
+    // After a payment is initiated, keep re-checking automatically (rather
+    // than requiring a manual click) until either the subscription shows up
+    // (checkStatus flips status to 'active' and logs the device in itself)
+    // or we've retried for a while without luck -- 18 tries * 5s = 90s,
+    // long enough to cover a normal STK push + M-Pesa PIN entry + callback
+    // round trip, short enough not to leave someone staring at a spinner
+    // forever if something actually went wrong.
+    useEffect(() => {
+        if (!paymentSuccess || pollTimedOut || status === 'active') return;
+
+        let attempts = 0;
+        const MAX_ATTEMPTS = 18;
+        const interval = setInterval(async () => {
+            attempts += 1;
+            await checkStatus();
+            if (attempts >= MAX_ATTEMPTS) {
+                clearInterval(interval);
+                setPollTimedOut(true);
+            }
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [paymentSuccess, pollTimedOut, status]);
 
     const fetchPlans = async () => {
         try {
@@ -195,6 +220,7 @@ const CaptivePortal: React.FC = () => {
                 phone_number: phoneNumber,
                 mac_address: mac || undefined
             });
+            setPollTimedOut(false);
             setPaymentSuccess(true);
             toast.success('Payment request sent! Check your phone.');
         } catch (error: any) {
@@ -311,7 +337,7 @@ const CaptivePortal: React.FC = () => {
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-gray-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-700 relative animate-in fade-in zoom-in duration-200">
                         <button
-                            onClick={() => { setSelectedPlan(null); setPaymentSuccess(false); }}
+                            onClick={() => { setSelectedPlan(null); setPaymentSuccess(false); setPollTimedOut(false); }}
                             className="absolute top-4 right-4 text-gray-400 hover:text-white"
                         >
                             <X className="h-6 w-6" />
@@ -343,20 +369,48 @@ const CaptivePortal: React.FC = () => {
                                     </button>
                                 </form>
                             </>
-                        ) : (
+                        ) : !pollTimedOut ? (
                             <div className="text-center py-8">
                                 <div className="bg-green-600/20 text-green-500 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
                                     <Check className="h-10 w-10" />
                                 </div>
                                 <h2 className="text-2xl font-bold text-white mb-2">Check your phone!</h2>
-                                <p className="text-gray-400 mb-6">Enter your M-Pesa PIN to complete the payment.</p>
-                                <p className="text-sm text-gray-500">Your internet will activate automatically once received.</p>
+                                <p className="text-gray-400 mb-2">Enter your M-Pesa PIN to complete the payment.</p>
+                                <div className="flex items-center justify-center gap-2 text-sm text-gray-500 mb-6">
+                                    <Loader className="h-4 w-4 animate-spin" />
+                                    Connecting you automatically once it's received...
+                                </div>
                                 <button
-                                    onClick={() => { setSelectedPlan(null); setPaymentSuccess(false); checkStatus(); }}
-                                    className="mt-6 w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-lg transition"
+                                    onClick={() => { setSelectedPlan(null); setPaymentSuccess(false); setPollTimedOut(false); }}
+                                    className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-lg transition"
                                 >
-                                    Close & Wait for Connection
+                                    Close (keeps checking in the background)
                                 </button>
+                            </div>
+                        ) : (
+                            <div className="text-center py-8">
+                                <div className="bg-amber-600/20 text-amber-500 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
+                                    <Loader className="h-10 w-10" />
+                                </div>
+                                <h2 className="text-2xl font-bold text-white mb-2">Still waiting...</h2>
+                                <p className="text-gray-400 mb-6">
+                                    This is taking longer than usual. If you've already entered your M-Pesa PIN, check again below --
+                                    otherwise the STK prompt may have expired and you can try paying again.
+                                </p>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => { setPollTimedOut(false); checkStatus(); }}
+                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition"
+                                    >
+                                        Check Again
+                                    </button>
+                                    <button
+                                        onClick={() => { setSelectedPlan(null); setPaymentSuccess(false); setPollTimedOut(false); }}
+                                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-lg transition"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>

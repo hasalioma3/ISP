@@ -26,7 +26,10 @@
       "Bash(ssh pi@192.168.88.252 \"grep -c 'get_duration_timedelta' ~/ISP/backend/apps/billing/models.py 2>&1; grep -c 'raise Exception' ~/ISP/backend/apps/network/services/network_automation.py 2>&1; grep -n 'MIKROTIK_WAN_INTERFACE\\\\|MIKROTIK_DEFAULT_PROFILE_RATE_LIMIT' ~/ISP/backend/isp_billing/settings.py 2>&1\")",
       "Bash(ssh pi@192.168.88.252 'cd ~/ISP && docker compose exec -T backend python manage.py shell -c \" *)",
       "Bash(./deploy_update.sh)",
-      "Bash(ssh pi@192.168.88.252 \"cd ~/ISP && docker compose exec -T backend python manage.py check 2>&1 | tail -5\")"
+      "Bash(ssh pi@192.168.88.252 \"cd ~/ISP && docker compose exec -T backend python manage.py check 2>&1 | tail -5\")",
+      "Bash(curl -sk -o /dev/null -w \"Status: %{http_code}\\\\n\" \"https://192.168.88.254/api/network/hotspot/status/?mac=AA:BB:CC:DD:EE:FF\")",
+      "Bash(curl -sk -o /dev/null -w \"Pi Frontend HTTP: %{http_code}\\\\n\" https://192.168.88.252/)",
+      "WebFetch(domain:help.uisp.com)"
     ]
   }
 }
