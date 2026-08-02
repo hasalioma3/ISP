@@ -181,14 +181,17 @@ class PaymentProcessor:
     def process_c2b_confirmation(self, data):
         """
         Process a Safaricom C2B Confirmation callback -- a customer paid the
-        paybill directly from their M-Pesa menu (not through the portal/STK
-        push). The money has already moved by the time this arrives, so we
-        always record it; matching to a customer and auto-activation are
-        best-effort on top of that.
+        Buy Goods till directly from their M-Pesa menu (not through the
+        portal/STK push). The money has already moved by the time this
+        arrives, so we always record it; matching to a customer and
+        auto-activation are best-effort on top of that.
 
-        Matching: BillRefNumber (the "Account Number" the customer typed
-        into their M-Pesa menu) is checked against Customer.username first,
-        falling back to the paying MSISDN against Customer.phone_number.
+        Matching: the paying MSISDN is checked against Customer.phone_number
+        first (matched on the trailing 9 digits, format-agnostic), falling
+        back to BillRefNumber against Customer.username. MSISDN is primary
+        because this shortcode is a Buy Goods till, not a Paybill -- the
+        standard "Buy Goods" M-Pesa flow has no account-number prompt at
+        all, so BillRefNumber is rarely populated with anything useful here.
         Auto-activation only fires if the paid amount exactly matches an
         active plan's price for a matched customer.
         """
@@ -205,11 +208,23 @@ class PaymentProcessor:
         msisdn = data.get('MSISDN', '')
         amount = data.get('TransAmount')
 
+        # This shortcode is a Buy Goods till, not a Paybill -- the standard
+        # Lipa na M-Pesa "Buy Goods" flow never prompts for an account
+        # number at all, so BillRefNumber essentially never carries a real
+        # customer identifier here. MSISDN (the paying phone) is the only
+        # signal customers actually provide, so it's the primary match.
+        #
+        # Customer.phone_number has no enforced format across signup paths
+        # (07XXXXXXXX from web registration, sometimes 254XXXXXXXXX from
+        # guest checkout) while Safaricom's MSISDN is always 254XXXXXXXXX,
+        # so match on the trailing 9 digits (the actual subscriber number)
+        # rather than literal string equality, which would miss most
+        # real accounts.
         customer = None
-        if bill_ref_number:
+        if msisdn:
+            customer = Customer.objects.filter(phone_number__endswith=msisdn[-9:]).first()
+        if not customer and bill_ref_number:
             customer = Customer.objects.filter(username__iexact=bill_ref_number).first()
-        if not customer and msisdn:
-            customer = Customer.objects.filter(phone_number=msisdn).first()
 
         payment = C2BPayment.objects.create(
             transaction_id=trans_id,
