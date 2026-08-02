@@ -7,8 +7,9 @@ import logging
 from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction as db_transaction
-from apps.payments.models import PaymentRequest, PaymentCallback
-from apps.billing.models import Transaction, Subscription
+from apps.payments.models import PaymentRequest, PaymentCallback, C2BPayment
+from apps.billing.models import Transaction, Subscription, BillingPlan
+from apps.customers.models import Customer
 from apps.network.services.network_automation import network_automation
 
 logger = logging.getLogger('mpesa')
@@ -177,6 +178,139 @@ class PaymentProcessor:
             # Don't fail the payment processing if network activation fails
             # This can be retried manually
     
+    def process_c2b_confirmation(self, data):
+        """
+        Process a Safaricom C2B Confirmation callback -- a customer paid the
+        paybill directly from their M-Pesa menu (not through the portal/STK
+        push). The money has already moved by the time this arrives, so we
+        always record it; matching to a customer and auto-activation are
+        best-effort on top of that.
+
+        Matching: BillRefNumber (the "Account Number" the customer typed
+        into their M-Pesa menu) is checked against Customer.username first,
+        falling back to the paying MSISDN against Customer.phone_number.
+        Auto-activation only fires if the paid amount exactly matches an
+        active plan's price for a matched customer.
+        """
+        trans_id = data.get('TransID')
+
+        # Safaricom retries confirmations that don't get a clean response --
+        # if we've already recorded this TransID, just acknowledge it again
+        # rather than double-processing (and hitting the unique constraint).
+        existing = C2BPayment.objects.filter(transaction_id=trans_id).first()
+        if existing:
+            return {'success': True, 'message': 'Already processed', 'payment': existing}
+
+        bill_ref_number = (data.get('BillRefNumber') or '').strip()
+        msisdn = data.get('MSISDN', '')
+        amount = data.get('TransAmount')
+
+        customer = None
+        if bill_ref_number:
+            customer = Customer.objects.filter(username__iexact=bill_ref_number).first()
+        if not customer and msisdn:
+            customer = Customer.objects.filter(phone_number=msisdn).first()
+
+        payment = C2BPayment.objects.create(
+            transaction_id=trans_id,
+            transaction_type=data.get('TransactionType', ''),
+            transaction_time=self._parse_mpesa_date(data.get('TransTime')),
+            amount=amount,
+            business_short_code=data.get('BusinessShortCode', ''),
+            bill_ref_number=bill_ref_number,
+            invoice_number=data.get('InvoiceNumber', ''),
+            org_account_balance=data.get('OrgAccountBalance', ''),
+            third_party_trans_id=data.get('ThirdPartyTransID', ''),
+            msisdn=msisdn,
+            first_name=data.get('FirstName', ''),
+            middle_name=data.get('MiddleName', ''),
+            last_name=data.get('LastName', ''),
+            matched_customer=customer,
+            raw_data=data,
+            status='unmatched',
+        )
+
+        if not customer:
+            logger.warning(
+                f"C2B payment {trans_id}: no customer matched for "
+                f"BillRefNumber={bill_ref_number!r} MSISDN={msisdn}"
+            )
+            return {'success': True, 'message': 'Recorded, no customer match', 'payment': payment}
+
+        # Static IP plans require a technician to configure the fixed IP
+        # manually (see initiate_payment's same restriction for STK push),
+        # so they're never eligible for auto-activation here. When multiple
+        # remaining active plans share the same price -- a real case in
+        # this deployment's data -- prefer whichever matches the customer's
+        # own configured service_type before falling back to any match.
+        plan_candidates = BillingPlan.objects.filter(price=amount, is_active=True).exclude(service_type='static')
+        plan = plan_candidates.filter(service_type=customer.service_type).first() or plan_candidates.first()
+        if not plan:
+            payment.status = 'matched_no_plan'
+            payment.notes = f"Matched {customer.username} but no active plan costs KES {amount}"
+            payment.save(update_fields=['status', 'notes'])
+            logger.warning(
+                f"C2B payment {trans_id}: matched {customer.username} but "
+                f"amount {amount} matches no active plan"
+            )
+            return {'success': True, 'message': 'Recorded, no plan match', 'payment': payment}
+
+        # Note: Subscription.save() below triggers sync_subscription_on_save
+        # (apps/billing/signals.py), which itself calls
+        # network_automation.activate_customer and raises on failure -- same
+        # as ManualSubscriptionView/topup, no separate activation call here.
+        try:
+            with db_transaction.atomic():
+                transaction = Transaction.objects.create(
+                    customer=customer,
+                    transaction_id=trans_id,
+                    amount=amount,
+                    currency='KES',
+                    payment_method='mpesa',
+                    mpesa_receipt_number=trans_id,
+                    mpesa_phone_number=msisdn,
+                    mpesa_transaction_date=payment.transaction_time,
+                    status='completed'
+                )
+
+                expiry_delta = plan.get_duration_timedelta()
+                existing_sub = Subscription.objects.filter(
+                    customer=customer, plan=plan
+                ).order_by('-created_at').first()
+
+                if existing_sub and not existing_sub.is_expired and existing_sub.days_remaining > 0:
+                    existing_sub.expiry_date += expiry_delta
+                    existing_sub.status = 'active'
+                    existing_sub.save()
+                    subscription = existing_sub
+                else:
+                    subscription = Subscription.objects.create(
+                        customer=customer,
+                        plan=plan,
+                        expiry_date=timezone.now() + expiry_delta,
+                        status='active'
+                    )
+
+                transaction.subscription = subscription
+                transaction.save()
+
+                customer.status = 'active'
+                customer.save()
+
+                payment.subscription = subscription
+                payment.linked_transaction = transaction
+                payment.status = 'activated'
+                payment.save()
+        except Exception as e:
+            payment.status = 'error'
+            payment.notes = f"Matched {customer.username}/{plan.name} but failed to activate: {e}"
+            payment.save(update_fields=['status', 'notes'])
+            logger.error(f"C2B payment {trans_id}: activation failed: {e}", exc_info=True)
+            return {'success': True, 'message': 'Recorded, activation failed', 'payment': payment}
+
+        logger.info(f"C2B payment {trans_id}: activated {customer.username} on {plan.name}")
+        return {'success': True, 'message': 'Payment matched and activated', 'payment': payment}
+
     def _parse_mpesa_date(self, date_value):
         """
         Parse M-Pesa date format (YYYYMMDDHHmmss) to datetime
@@ -187,7 +321,8 @@ class PaymentProcessor:
         try:
             from datetime import datetime
             date_str = str(date_value)
-            return datetime.strptime(date_str, '%Y%m%d%H%M%S')
+            naive = datetime.strptime(date_str, '%Y%m%d%H%M%S')
+            return timezone.make_aware(naive)
         except:
             return None
 

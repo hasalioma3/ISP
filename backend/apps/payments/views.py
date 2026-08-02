@@ -1,13 +1,15 @@
+from django.conf import settings
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from django.http import Http404
 import logging
 import uuid
 
-from apps.payments.models import PaymentRequest, PaymentCallback
+from apps.payments.models import PaymentRequest, PaymentCallback, C2BPayment
 from apps.payments.serializers import (
     PaymentRequestSerializer, InitiatePaymentSerializer, PaymentCallbackSerializer
 )
@@ -243,6 +245,51 @@ def mpesa_callback(request):
             'ResultCode': 1,
             'ResultDesc': 'Failed'
         })
+
+
+def _check_c2b_token(token):
+    """
+    Safaricom's C2B webhooks can't send custom auth headers, so the shared
+    secret lives in the URL path itself. A wrong/missing token 404s rather
+    than 403s, so the endpoint's existence isn't confirmed to a prober.
+    """
+    if not settings.MPESA_C2B_SECRET or token != settings.MPESA_C2B_SECRET:
+        raise Http404
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def c2b_validation(request, token):
+    """
+    Safaricom calls this before completing a C2B payment. We always accept
+    -- the money is moving regardless of what we say here, and rejecting a
+    legitimate customer's payment over an account-number typo is worse than
+    just recording an unmatched payment for manual review later.
+    """
+    _check_c2b_token(token)
+    logger.info(f"C2B validation request: {request.data}")
+    return Response({'ResultCode': 0, 'ResultDesc': 'Accepted'})
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def c2b_confirmation(request, token):
+    """
+    Safaricom calls this after a C2B payment has completed. Always ack with
+    ResultCode 0 -- the payment already happened on their side; failing to
+    acknowledge just causes Safaricom to retry the same completed payment.
+    """
+    _check_c2b_token(token)
+    logger.info(f"C2B confirmation: {request.data}")
+
+    try:
+        payment_processor.process_c2b_confirmation(request.data)
+    except Exception as e:
+        logger.error(f"Error processing C2B confirmation: {e}", exc_info=True)
+
+    return Response({'ResultCode': 0, 'ResultDesc': 'Success'})
 
 
 @api_view(['GET'])

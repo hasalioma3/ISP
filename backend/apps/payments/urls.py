@@ -11,6 +11,8 @@ urlpatterns = [
     path('initiate/', views.initiate_payment, name='initiate'),
     path('reactivate/', views.reactivate_session, name='reactivate'),
     path('callback/', views.mpesa_callback, name='callback'),
+    path('c2b/<str:token>/validation/', views.c2b_validation, name='c2b-validation'),
+    path('c2b/<str:token>/confirmation/', views.c2b_confirmation, name='c2b-confirmation'),
     path('status/<int:payment_request_id>/', views.payment_status, name='status'),
     path('', include(router.urls)),
 ]

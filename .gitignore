@@ -2,3 +2,8 @@
 # these; the template (.env.template) is the only file in companies/ meant
 # to be tracked.
 companies/*.env
+vps
+.env
+.env.prod
+backend/.env
+frontend/.env

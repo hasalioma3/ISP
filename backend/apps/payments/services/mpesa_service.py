@@ -155,6 +155,46 @@ class MpesaService:
                 'error': str(e)
             }
     
+    def register_c2b_urls(self, validation_url, confirmation_url, response_type='Completed'):
+        """
+        One-time registration of the C2B ValidationURL/ConfirmationURL with
+        Safaricom -- required before they'll deliver C2B (direct paybill)
+        payment notifications at all. Re-running this simply overwrites the
+        previously registered URLs, so it's safe to call again if the URLs
+        change (e.g. moving off the Cloudflare Tunnel domain).
+        """
+        access_token = self.get_access_token()
+        if not access_token:
+            return {'success': False, 'error': 'Failed to get access token'}
+
+        url = f"{self.base_url}/mpesa/c2b/v1/registerurl"
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        payload = {
+            'ShortCode': self.shortcode,
+            'ResponseType': response_type,
+            'ConfirmationURL': confirmation_url,
+            'ValidationURL': validation_url,
+        }
+
+        try:
+            logger.info(f"Registering C2B URLs for shortcode {self.shortcode}")
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            logger.info(f"C2B URL registration response: {data}")
+            return {'success': True, 'data': data}
+        except requests.exceptions.RequestException as e:
+            logger.error(f"C2B URL registration failed: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    return {'success': False, 'error': e.response.json()}
+                except Exception:
+                    pass
+            return {'success': False, 'error': str(e)}
+
     def query_transaction_status(self, checkout_request_id):
         """
         Query the status of an STK Push transaction

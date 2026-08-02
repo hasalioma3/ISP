@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import PaymentRequest, PaymentCallback
+from .models import PaymentRequest, PaymentCallback, C2BPayment
+
+
+@admin.register(C2BPayment)
+class C2BPaymentAdmin(admin.ModelAdmin):
+    list_display = ['msisdn', 'bill_ref_number', 'amount', 'matched_customer', 'status', 'created_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['msisdn', 'bill_ref_number', 'transaction_id', 'matched_customer__username']
+    raw_id_fields = ['matched_customer', 'subscription', 'linked_transaction']
 
 
 @admin.register(PaymentRequest)

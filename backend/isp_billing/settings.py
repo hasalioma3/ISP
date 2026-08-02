@@ -206,6 +206,11 @@ MPESA_SHORTCODE = config('MPESA_SHORTCODE', default='174379')
 MPESA_PASSKEY = config('MPESA_PASSKEY', default='')
 MPESA_CALLBACK_URL = config('MPESA_CALLBACK_URL', default='https://isp.hasalioma.online/api/payments/callback/')
 
+# Shared secret embedded in the C2B validation/confirmation URL paths, since
+# Safaricom's webhooks can't send custom auth headers -- see
+# apps/payments/views.py::_check_c2b_token.
+MPESA_C2B_SECRET = config('MPESA_C2B_SECRET', default='')
+
 # M-Pesa API URLs
 if MPESA_ENVIRONMENT == 'production':
     MPESA_BASE_URL = 'https://api.safaricom.co.ke'

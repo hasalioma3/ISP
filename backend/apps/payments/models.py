@@ -58,6 +58,65 @@ class PaymentRequest(models.Model):
         return f"{self.phone_number} - KES {self.amount} - {self.status}"
 
 
+class C2BPayment(models.Model):
+    """
+    M-Pesa C2B (Customer-to-Business) payments -- customers paying the
+    paybill directly from their M-Pesa menu, bypassing the portal/STK push
+    flow entirely. Safaricom posts these to our ConfirmationURL after the
+    money has already moved, so every record here represents a real
+    completed payment regardless of whether we could match/activate it.
+    """
+    STATUS_CHOICES = [
+        ('activated', 'Activated'),        # matched customer + plan, subscription created
+        ('matched_no_plan', 'Matched, No Plan'),  # matched customer, amount didn't match any plan price
+        ('unmatched', 'Unmatched'),        # no customer found for the account number entered
+        ('error', 'Error'),                # matched but activation itself failed
+    ]
+
+    # Raw Safaricom C2B payload fields (see Daraja C2B Confirmation API)
+    transaction_id = models.CharField(max_length=100, unique=True)  # TransID
+    transaction_type = models.CharField(max_length=50, blank=True)
+    transaction_time = models.DateTimeField(blank=True, null=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    business_short_code = models.CharField(max_length=20, blank=True)
+    bill_ref_number = models.CharField(max_length=100, blank=True)  # account number entered
+    invoice_number = models.CharField(max_length=100, blank=True)
+    org_account_balance = models.CharField(max_length=50, blank=True)
+    third_party_trans_id = models.CharField(max_length=100, blank=True)
+    msisdn = models.CharField(max_length=15, blank=True)
+    first_name = models.CharField(max_length=100, blank=True)
+    middle_name = models.CharField(max_length=100, blank=True)
+    last_name = models.CharField(max_length=100, blank=True)
+
+    # Matching/activation outcome
+    matched_customer = models.ForeignKey(
+        Customer, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='c2b_payments'
+    )
+    subscription = models.ForeignKey(
+        'billing.Subscription', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='c2b_payments'
+    )
+    linked_transaction = models.ForeignKey(
+        'billing.Transaction', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='c2b_payment'
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='unmatched')
+    notes = models.TextField(blank=True)
+
+    raw_data = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'c2b_payments'
+        ordering = ['-created_at']
+        verbose_name = _('C2B Payment')
+        verbose_name_plural = _('C2B Payments')
+
+    def __str__(self):
+        return f"{self.msisdn} - KES {self.amount} - {self.status}"
+
+
 class PaymentCallback(models.Model):
     """
     M-Pesa payment callbacks
