@@ -203,6 +203,10 @@ MPESA_ENVIRONMENT = config('MPESA_ENVIRONMENT', default='sandbox')
 MPESA_CONSUMER_KEY = config('MPESA_CONSUMER_KEY', default='')
 MPESA_CONSUMER_SECRET = config('MPESA_CONSUMER_SECRET', default='')
 MPESA_SHORTCODE = config('MPESA_SHORTCODE', default='174379')
+# 'paybill' or 'till' -- determines whether STK Push requests use
+# CustomerPayBillOnline or CustomerBuyGoodsOnline as TransactionType.
+# Safaricom rejects the wrong one for a given shortcode's account type.
+MPESA_SHORTCODE_TYPE = config('MPESA_SHORTCODE_TYPE', default='paybill')
 MPESA_PASSKEY = config('MPESA_PASSKEY', default='')
 MPESA_CALLBACK_URL = config('MPESA_CALLBACK_URL', default='https://isp.hasalioma.online/api/payments/callback/')
 

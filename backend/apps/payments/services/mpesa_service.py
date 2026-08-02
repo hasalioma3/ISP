@@ -22,6 +22,7 @@ class MpesaService:
         self.consumer_key = settings.MPESA_CONSUMER_KEY
         self.consumer_secret = settings.MPESA_CONSUMER_SECRET
         self.shortcode = settings.MPESA_SHORTCODE
+        self.shortcode_type = getattr(settings, 'MPESA_SHORTCODE_TYPE', 'paybill')
         self.passkey = settings.MPESA_PASSKEY
         self.callback_url = settings.MPESA_CALLBACK_URL
         self.base_url = settings.MPESA_BASE_URL
@@ -114,7 +115,7 @@ class MpesaService:
             'BusinessShortCode': self.shortcode,
             'Password': password,
             'Timestamp': timestamp,
-            'TransactionType': 'CustomerPayBillOnline',
+            'TransactionType': 'CustomerBuyGoodsOnline' if self.shortcode_type == 'till' else 'CustomerPayBillOnline',
             'Amount': int(amount),
             'PartyA': phone_number,
             'PartyB': self.shortcode,
