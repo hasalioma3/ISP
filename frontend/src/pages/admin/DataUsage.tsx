@@ -115,12 +115,12 @@ export default function DataUsage() {
                     <PieIcon className="h-5 w-5 mr-2" /> Data Usage
                 </div>
 
-                <div className="flex border-b">
+                <div className="flex border-b overflow-x-auto">
                     {PERIODS.map(p => (
                         <button
                             key={p.key}
                             onClick={() => setPeriod(p.key)}
-                            className={`flex items-center px-6 py-3 text-sm font-medium border-b-2 transition-colors ${period === p.key
+                            className={`flex items-center shrink-0 px-4 sm:px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${period === p.key
                                 ? 'border-blue-500 text-blue-600 bg-blue-50'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                                 }`}

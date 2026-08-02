@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Receipt, History, Activity, Wifi, LogOut, Home, ChevronRight, CircleUserRound } from 'lucide-react';
+import { LayoutDashboard, Receipt, History, Activity, Wifi, LogOut, Home, ChevronRight, CircleUserRound, Menu } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useSiteSettings } from '../hooks/useSiteSettings';
 import AccountModal from './AccountModal';
@@ -19,6 +19,7 @@ export default function CustomerLayout() {
     const { user, logout } = useAuthStore();
     const { data: siteSettings } = useSiteSettings();
     const [accountModalTab, setAccountModalTab] = useState<'profile' | 'password' | null>(null);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     const handleLogout = () => {
         logout();
@@ -29,10 +30,21 @@ export default function CustomerLayout() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex">
+            {/* Mobile Sidebar Overlay */}
+            {isSidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
+
             {/* Sidebar */}
-            <div className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
+            <div className={`
+        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 flex flex-col shrink-0 transform transition-transform duration-200 ease-in-out
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
                 <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                    <Link to="/dashboard" className="flex items-center gap-2 min-w-0">
+                    <Link to="/dashboard" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-2 min-w-0">
                         {siteSettings?.logo ? (
                             <img src={siteSettings.logo} alt={siteSettings.company_name} className="h-8 w-8 rounded-full object-contain bg-blue-50 shrink-0" />
                         ) : null}
@@ -55,6 +67,7 @@ export default function CustomerLayout() {
                             <Link
                                 key={item.name}
                                 to={item.href}
+                                onClick={() => setIsSidebarOpen(false)}
                                 className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
                                     }`}
                             >
@@ -69,7 +82,7 @@ export default function CustomerLayout() {
                     <div className="bg-gray-900 rounded-xl p-4 text-white">
                         <p className="font-bold text-sm mb-1">Need more speed?</p>
                         <p className="text-gray-400 text-xs mb-3">Browse our other packages</p>
-                        <Link to="/plans" className="text-blue-400 text-xs font-semibold hover:text-blue-300">
+                        <Link to="/plans" onClick={() => setIsSidebarOpen(false)} className="text-blue-400 text-xs font-semibold hover:text-blue-300">
                             View Plans &rarr;
                         </Link>
                     </div>
@@ -85,12 +98,18 @@ export default function CustomerLayout() {
             {/* Main */}
             <div className="flex-1 min-w-0 flex flex-col">
                 <div className="px-4 sm:px-8 py-3 border-b border-gray-200 bg-white flex items-center gap-1.5 text-sm text-gray-500">
-                    <Home className="h-3.5 w-3.5" />
-                    <span>Home</span>
-                    <ChevronRight className="h-3 w-3" />
-                    <span>{user?.full_name || user?.username}</span>
-                    <ChevronRight className="h-3 w-3" />
-                    <span className="text-gray-900 font-medium">{currentPage}</span>
+                    <button
+                        onClick={() => setIsSidebarOpen(true)}
+                        className="p-1 -ml-1 mr-1 text-gray-500 hover:text-gray-900 lg:hidden shrink-0"
+                    >
+                        <Menu className="h-5 w-5" />
+                    </button>
+                    <Home className="h-3.5 w-3.5 shrink-0 hidden sm:block" />
+                    <span className="hidden sm:inline">Home</span>
+                    <ChevronRight className="h-3 w-3 shrink-0 hidden sm:block" />
+                    <span className="truncate hidden sm:inline">{user?.full_name || user?.username}</span>
+                    <ChevronRight className="h-3 w-3 shrink-0 hidden sm:block" />
+                    <span className="text-gray-900 font-medium truncate">{currentPage}</span>
                 </div>
 
                 <main className="flex-1 p-4 sm:p-8">

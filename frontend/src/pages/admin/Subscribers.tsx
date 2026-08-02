@@ -104,7 +104,7 @@ export default function Subscribers() {
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 {/* Banner */}
-                <div className="bg-blue-600 px-6 py-4 flex justify-between items-center">
+                <div className="bg-blue-600 px-4 sm:px-6 py-4 flex flex-wrap gap-3 justify-between items-center">
                     <h2 className="text-white font-bold text-lg">All Users</h2>
                     <Link
                         to="/admin/settings?tab=manual"

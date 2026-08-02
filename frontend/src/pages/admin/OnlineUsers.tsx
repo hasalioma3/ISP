@@ -57,7 +57,7 @@ export default function OnlineUsers() {
             <h1 className="text-2xl font-bold mb-6">Online Users</h1>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="bg-blue-600 px-6 py-4 flex items-center justify-between">
+                <div className="bg-blue-600 px-4 sm:px-6 py-4 flex flex-wrap gap-3 items-center justify-between">
                     <h3 className="text-white font-bold">Online Users</h3>
                     <button
                         onClick={() => syncMutation.mutate()}
@@ -69,12 +69,12 @@ export default function OnlineUsers() {
                     </button>
                 </div>
 
-                <div className="flex border-b">
+                <div className="flex border-b overflow-x-auto">
                     {TABS.map(t => (
                         <button
                             key={t.key}
                             onClick={() => setTab(t.key)}
-                            className={`flex items-center px-6 py-3 text-sm font-medium border-b-2 transition-colors ${tab === t.key
+                            className={`flex items-center shrink-0 px-4 sm:px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === t.key
                                 ? 'border-blue-500 text-blue-600 bg-blue-50'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                                 }`}

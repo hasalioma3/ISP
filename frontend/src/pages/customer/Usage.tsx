@@ -23,7 +23,7 @@ export default function Usage() {
                     <p className="mt-4">Loading usage data...</p>
                 </div>
             ) : usageRecords && usageRecords.length > 0 ? (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>

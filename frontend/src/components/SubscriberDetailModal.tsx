@@ -106,7 +106,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                         <div className="text-center py-8 text-gray-500">Loading...</div>
                     ) : tab === 'details' ? (
                         <form onSubmit={handleSave} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <Field label="First Name" value={form.first_name} onChange={v => setForm({ ...form, first_name: v })} />
                                 <Field label="Last Name" value={form.last_name} onChange={v => setForm({ ...form, last_name: v })} />
                                 <Field label="Username" value={form.username} onChange={v => setForm({ ...form, username: v })} />
@@ -189,7 +189,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                 <div className="mb-6">
                                     <UsageChartPanels chart={usageData?.chart} loading={false} />
                                 </div>
-                                <div className="grid grid-cols-3 gap-4 mb-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                                     <div className="bg-gray-50 rounded-lg p-4 text-center">
                                         <p className="text-xs text-gray-500 uppercase">All-Time Upload</p>
                                         <p className="text-xl font-bold">{usageData?.totals.upload_gb} GB</p>
@@ -204,35 +204,37 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                     </div>
                                 </div>
                                 <h4 className="text-sm font-bold mb-2">Session History</h4>
-                                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                                    <thead>
-                                        <tr className="text-left text-xs text-gray-500 uppercase">
-                                            <th className="py-2">Date</th>
-                                            <th className="py-2">IP</th>
-                                            <th className="py-2 text-right">Up (GB)</th>
-                                            <th className="py-2 text-right">Down (GB)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {usageData?.usage_records?.length === 0 ? (
-                                            <tr><td colSpan={4} className="py-6 text-center text-gray-400">No usage recorded yet.</td></tr>
-                                        ) : usageData?.usage_records?.map((u: any) => (
-                                            <tr key={u.id}>
-                                                <td className="py-2">{format(new Date(u.created_at), 'MMM d, yyyy HH:mm')}</td>
-                                                <td className="py-2 text-gray-500">{u.framed_ip_address || '-'}</td>
-                                                <td className="py-2 text-right">{(u.upload_bytes / (1024 ** 3)).toFixed(2)}</td>
-                                                <td className="py-2 text-right">{(u.download_bytes / (1024 ** 3)).toFixed(2)}</td>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                        <thead>
+                                            <tr className="text-left text-xs text-gray-500 uppercase">
+                                                <th className="py-2 pr-4">Date</th>
+                                                <th className="py-2 pr-4">IP</th>
+                                                <th className="py-2 text-right pr-4">Up (GB)</th>
+                                                <th className="py-2 text-right">Down (GB)</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {usageData?.usage_records?.length === 0 ? (
+                                                <tr><td colSpan={4} className="py-6 text-center text-gray-400">No usage recorded yet.</td></tr>
+                                            ) : usageData?.usage_records?.map((u: any) => (
+                                                <tr key={u.id}>
+                                                    <td className="py-2 pr-4 whitespace-nowrap">{format(new Date(u.created_at), 'MMM d, yyyy HH:mm')}</td>
+                                                    <td className="py-2 pr-4 text-gray-500">{u.framed_ip_address || '-'}</td>
+                                                    <td className="py-2 text-right pr-4">{(u.upload_bytes / (1024 ** 3)).toFixed(2)}</td>
+                                                    <td className="py-2 text-right">{(u.download_bytes / (1024 ** 3)).toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )
                     ) : (
                         <div className="space-y-6">
                             <div className="bg-gray-50 rounded-lg p-4">
                                 <h4 className="text-sm font-bold mb-3">Assign / Top Up Plan</h4>
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2">
                                     <select
                                         className="flex-1 border rounded-lg px-3 py-2 text-sm"
                                         value={topUpPlanId}
@@ -270,54 +272,58 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
 
                             <div>
                                 <h4 className="text-sm font-bold mb-2">Subscription History</h4>
-                                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                                    <thead>
-                                        <tr className="text-left text-xs text-gray-500 uppercase">
-                                            <th className="py-2">Plan</th>
-                                            <th className="py-2">Status</th>
-                                            <th className="py-2">Expiry</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {usageData?.subscriptions?.length === 0 ? (
-                                            <tr><td colSpan={3} className="py-4 text-center text-gray-400">No subscriptions yet.</td></tr>
-                                        ) : usageData?.subscriptions?.map((s: any) => (
-                                            <tr key={s.id}>
-                                                <td className="py-2 font-medium">{s.plan?.name}</td>
-                                                <td className="py-2 capitalize">{s.status}</td>
-                                                <td className="py-2 text-gray-500">{format(new Date(s.expiry_date), 'MMM d, yyyy')}</td>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                        <thead>
+                                            <tr className="text-left text-xs text-gray-500 uppercase">
+                                                <th className="py-2 pr-4">Plan</th>
+                                                <th className="py-2 pr-4">Status</th>
+                                                <th className="py-2">Expiry</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {usageData?.subscriptions?.length === 0 ? (
+                                                <tr><td colSpan={3} className="py-4 text-center text-gray-400">No subscriptions yet.</td></tr>
+                                            ) : usageData?.subscriptions?.map((s: any) => (
+                                                <tr key={s.id}>
+                                                    <td className="py-2 pr-4 font-medium whitespace-nowrap">{s.plan?.name}</td>
+                                                    <td className="py-2 pr-4 capitalize">{s.status}</td>
+                                                    <td className="py-2 text-gray-500 whitespace-nowrap">{format(new Date(s.expiry_date), 'MMM d, yyyy')}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
 
                             <div>
                                 <h4 className="text-sm font-bold mb-2">Recent Transactions</h4>
-                                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                                    <thead>
-                                        <tr className="text-left text-xs text-gray-500 uppercase">
-                                            <th className="py-2">Amount</th>
-                                            <th className="py-2">Method</th>
-                                            <th className="py-2">M-Pesa Code</th>
-                                            <th className="py-2">Status</th>
-                                            <th className="py-2">Date</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {usageData?.transactions?.length === 0 ? (
-                                            <tr><td colSpan={5} className="py-4 text-center text-gray-400">No transactions yet.</td></tr>
-                                        ) : usageData?.transactions?.map((t: any) => (
-                                            <tr key={t.id}>
-                                                <td className="py-2 font-medium">KES {Number(t.amount).toLocaleString()}</td>
-                                                <td className="py-2 uppercase">{t.payment_method}</td>
-                                                <td className="py-2 font-mono text-xs">{t.mpesa_receipt_number || '-'}</td>
-                                                <td className="py-2 capitalize">{t.status}</td>
-                                                <td className="py-2 text-gray-500">{format(new Date(t.created_at), 'MMM d, yyyy')}</td>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                        <thead>
+                                            <tr className="text-left text-xs text-gray-500 uppercase">
+                                                <th className="py-2 pr-4">Amount</th>
+                                                <th className="py-2 pr-4">Method</th>
+                                                <th className="py-2 pr-4">M-Pesa Code</th>
+                                                <th className="py-2 pr-4">Status</th>
+                                                <th className="py-2">Date</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {usageData?.transactions?.length === 0 ? (
+                                                <tr><td colSpan={5} className="py-4 text-center text-gray-400">No transactions yet.</td></tr>
+                                            ) : usageData?.transactions?.map((t: any) => (
+                                                <tr key={t.id}>
+                                                    <td className="py-2 pr-4 font-medium whitespace-nowrap">KES {Number(t.amount).toLocaleString()}</td>
+                                                    <td className="py-2 pr-4 uppercase">{t.payment_method}</td>
+                                                    <td className="py-2 pr-4 font-mono text-xs">{t.mpesa_receipt_number || '-'}</td>
+                                                    <td className="py-2 pr-4 capitalize">{t.status}</td>
+                                                    <td className="py-2 text-gray-500 whitespace-nowrap">{format(new Date(t.created_at), 'MMM d, yyyy')}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     )}

@@ -124,9 +124,9 @@ export default function BillingPlans() {
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
                 <h1 className="text-2xl font-bold">Billing Plans</h1>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     <button
                         onClick={handleDownloadTemplate}
                         className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
@@ -180,13 +180,13 @@ export default function BillingPlans() {
                             </button>
                         </div>
                         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                                     <input required className="w-full border rounded-lg px-3 py-2 text-sm" value={form.name}
                                         onChange={e => setForm({ ...form, name: e.target.value })} />
                                 </div>
-                                <div className="col-span-2">
+                                <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                                     <textarea className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} value={form.description}
                                         onChange={e => setForm({ ...form, description: e.target.value })} />
@@ -240,7 +240,7 @@ export default function BillingPlans() {
                                         <option value="months">Months</option>
                                     </select>
                                 </div>
-                                <div className="col-span-2">
+                                <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Apply to Routers (blank = all active routers)</label>
                                     <div className="flex flex-wrap gap-2">
                                         {routers?.map((r: any) => (
@@ -253,7 +253,7 @@ export default function BillingPlans() {
                                         ))}
                                     </div>
                                 </div>
-                                <div className="col-span-2 flex items-center gap-2">
+                                <div className="sm:col-span-2 flex items-center gap-2">
                                     <input type="checkbox" id="is_active" checked={form.is_active}
                                         onChange={e => setForm({ ...form, is_active: e.target.checked })} />
                                     <label htmlFor="is_active" className="text-sm text-gray-700">Active (visible to customers)</label>

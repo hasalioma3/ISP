@@ -61,11 +61,11 @@ export default function VoucherManager() {
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
                 <h1 className="text-2xl font-bold">Voucher Management</h1>
                 <button
                     onClick={() => setIsGenerating(!isGenerating)}
-                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                 >
                     <Plus className="h-4 w-4 mr-2" />
                     Generate Vouchers
@@ -76,7 +76,7 @@ export default function VoucherManager() {
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6 max-w-lg">
                     <h3 className="text-lg font-bold mb-4">Generate New Batch</h3>
                     <form onSubmit={handleGenerate} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
                                 <input
@@ -124,7 +124,7 @@ export default function VoucherManager() {
                 </div>
             )}
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>

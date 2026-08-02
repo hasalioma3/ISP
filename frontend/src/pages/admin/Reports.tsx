@@ -63,8 +63,8 @@ export default function Reports() {
         <div>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl font-bold">Financial Reports</h1>
-                <div className="flex gap-2">
-                    <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border shadow-sm">
+                <div className="flex flex-wrap gap-2">
+                    <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border shadow-sm flex-wrap">
                         <Calendar className="h-4 w-4 text-gray-400" />
                         <input
                             type="date"

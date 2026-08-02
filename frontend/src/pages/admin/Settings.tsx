@@ -29,10 +29,10 @@ export default function Settings() {
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[500px]">
                 {/* Tabs */}
-                <div className="flex border-b">
+                <div className="flex border-b overflow-x-auto">
                     <button
                         onClick={() => setActiveTab('branding')}
-                        className={`flex items-center px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'branding'
+                        className={`flex items-center shrink-0 px-4 sm:px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'branding'
                             ? 'border-blue-500 text-blue-600'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                             }`}
@@ -42,7 +42,7 @@ export default function Settings() {
                     </button>
                     <button
                         onClick={() => setActiveTab('staff')}
-                        className={`flex items-center px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'staff'
+                        className={`flex items-center shrink-0 px-4 sm:px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'staff'
                             ? 'border-blue-500 text-blue-600'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                             }`}
@@ -52,7 +52,7 @@ export default function Settings() {
                     </button>
                     <button
                         onClick={() => setActiveTab('manual')}
-                        className={`flex items-center px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'manual'
+                        className={`flex items-center shrink-0 px-4 sm:px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'manual'
                             ? 'border-blue-500 text-blue-600'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                             }`}
@@ -62,7 +62,7 @@ export default function Settings() {
                     </button>
                     <button
                         onClick={() => setActiveTab('bulk-import')}
-                        className={`flex items-center px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'bulk-import'
+                        className={`flex items-center shrink-0 px-4 sm:px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'bulk-import'
                             ? 'border-blue-500 text-blue-600'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                             }`}
@@ -73,7 +73,7 @@ export default function Settings() {
                 </div>
 
                 {/* Content */}
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                     {activeTab === 'branding' && <BrandingTab />}
                     {activeTab === 'staff' && <StaffTab />}
                     {activeTab === 'manual' && <ManualUserTab />}
@@ -267,7 +267,7 @@ function StaffTab() {
                             <X className="h-4 w-4" />
                         </button>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input required disabled={!!editingId} placeholder="Username" className="border rounded-lg px-3 py-2 text-sm disabled:bg-gray-100"
                             value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} />
                         <input type="email" placeholder="Email" className="border rounded-lg px-3 py-2 text-sm"
@@ -282,7 +282,7 @@ function StaffTab() {
                             {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                         </select>
                         <input type="password" placeholder={editingId ? 'New Password (optional)' : 'Password'} required={!editingId}
-                            className="border rounded-lg px-3 py-2 text-sm col-span-2"
+                            className="border rounded-lg px-3 py-2 text-sm sm:col-span-2"
                             value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
                     </div>
                     <button
@@ -299,12 +299,12 @@ function StaffTab() {
             <div className="space-y-3">
                 {staff?.length === 0 && <p className="text-gray-500 text-center py-4">No staff members yet.</p>}
                 {staff?.map((user: any) => (
-                    <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div>
-                            <p className="font-bold">{user.username} {user.first_name && `(${user.first_name} ${user.last_name})`}</p>
-                            <p className="text-sm text-gray-500">{user.email || 'No email'} &middot; {user.phone_number || 'No phone'}</p>
+                    <div key={user.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border rounded-lg">
+                        <div className="min-w-0">
+                            <p className="font-bold truncate">{user.username} {user.first_name && `(${user.first_name} ${user.last_name})`}</p>
+                            <p className="text-sm text-gray-500 truncate">{user.email || 'No email'} &middot; {user.phone_number || 'No phone'}</p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                             {user.is_superuser ? (
                                 <span className="flex items-center px-2 py-1 bg-gray-800 text-white rounded text-xs">
                                     <ShieldCheck className="h-3 w-3 mr-1" /> Superuser
@@ -390,7 +390,7 @@ function ManualUserTab() {
                 already exist, a new account is created and login credentials are issued below.
             </p>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
                         <input
@@ -551,7 +551,7 @@ function BulkImportTab() {
                 fresh subscription starting today, or set it to preserve a migrated customer's real
                 remaining time.
             </p>
-            <div className="flex gap-2 mb-6">
+            <div className="flex flex-col sm:flex-row gap-2 mb-6">
                 <button
                     onClick={handleDownloadTemplate}
                     className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium"

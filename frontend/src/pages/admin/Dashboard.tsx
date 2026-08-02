@@ -199,7 +199,7 @@ export default function Dashboard() {
 
             {/* Router View */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-                <div className="bg-blue-600 px-6 py-4 flex items-center justify-between">
+                <div className="bg-blue-600 px-4 sm:px-6 py-4 flex flex-wrap gap-3 items-center justify-between">
                     <div className="flex items-center text-white font-bold">
                         <RouterIcon className="h-5 w-5 mr-2" />
                         Router View

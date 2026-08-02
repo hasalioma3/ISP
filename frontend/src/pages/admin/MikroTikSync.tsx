@@ -250,7 +250,7 @@ export default function MikroTikSync() {
 
     return (
         <div className="max-w-5xl mx-auto">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
                 <h1 className="text-2xl font-bold">MikroTik Routers</h1>
                 {canManage && (
                     <button
@@ -363,13 +363,13 @@ export default function MikroTikSync() {
                             </button>
                         </div>
                         <div className="p-5 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
                                 </div>
-                                <div className="col-span-2">
+                                <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">IP Address</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.ip_address}
                                         onChange={(e) => setFormData({ ...formData, ip_address: e.target.value })} />
@@ -406,12 +406,12 @@ export default function MikroTikSync() {
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.pppoe_subnet}
                                         onChange={(e) => setFormData({ ...formData, pppoe_subnet: e.target.value })} />
                                 </div>
-                                <div className="col-span-2">
+                                <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">DNS Servers</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.dns_servers}
                                         onChange={(e) => setFormData({ ...formData, dns_servers: e.target.value })} />
                                 </div>
-                                <div className="col-span-2">
+                                <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Captive Portal URL</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.portal_url}
                                         onChange={(e) => setFormData({ ...formData, portal_url: e.target.value })} />
@@ -419,7 +419,7 @@ export default function MikroTikSync() {
                                         Where the router's Hotspot login page redirects unauthenticated clients.
                                     </p>
                                 </div>
-                                <div className="col-span-2">
+                                <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.location}
                                         onChange={(e) => setFormData({ ...formData, location: e.target.value })} />
