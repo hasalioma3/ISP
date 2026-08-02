@@ -24,6 +24,18 @@ class Command(BaseCommand):
                 "MPESA_CALLBACK_URL if not given."
             ),
         )
+        parser.add_argument(
+            '--shortcode',
+            default=None,
+            help=(
+                "Shortcode to register the URLs under -- defaults to "
+                "MPESA_SHORTCODE (the head-office/API shortcode). Override "
+                "this to test registering under a different linked "
+                "shortcode, e.g. a store number, for tills that don't "
+                "receive C2B callbacks when registered under the head "
+                "office number."
+            ),
+        )
 
     def handle(self, *args, **options):
         if not settings.MPESA_C2B_SECRET:
@@ -46,11 +58,12 @@ class Command(BaseCommand):
             base_url + '/', f"api/payments/c2b/{settings.MPESA_C2B_SECRET}/confirmation/"
         )
 
-        self.stdout.write(f"Registering against {settings.MPESA_BASE_URL} for shortcode {settings.MPESA_SHORTCODE}")
+        target_shortcode = options['shortcode'] or settings.MPESA_SHORTCODE
+        self.stdout.write(f"Registering against {settings.MPESA_BASE_URL} for shortcode {target_shortcode}")
         self.stdout.write(f"  ValidationURL:   {validation_url}")
         self.stdout.write(f"  ConfirmationURL: {confirmation_url}")
 
-        result = mpesa_service.register_c2b_urls(validation_url, confirmation_url)
+        result = mpesa_service.register_c2b_urls(validation_url, confirmation_url, shortcode=options['shortcode'])
 
         if result['success']:
             self.stdout.write(self.style.SUCCESS(f"Registered: {result['data']}"))

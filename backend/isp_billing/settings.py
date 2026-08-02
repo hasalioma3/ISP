@@ -202,11 +202,20 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 MPESA_ENVIRONMENT = config('MPESA_ENVIRONMENT', default='sandbox')
 MPESA_CONSUMER_KEY = config('MPESA_CONSUMER_KEY', default='')
 MPESA_CONSUMER_SECRET = config('MPESA_CONSUMER_SECRET', default='')
+# The shortcode your Daraja app is actually authorized/API-enabled under
+# (used for BusinessShortCode + STK password generation + C2B
+# registration). For a till linked under a head-office/organization
+# shortcode, this is the HEAD OFFICE number, not the till customers dial.
 MPESA_SHORTCODE = config('MPESA_SHORTCODE', default='174379')
 # 'paybill' or 'till' -- determines whether STK Push requests use
 # CustomerPayBillOnline or CustomerBuyGoodsOnline as TransactionType.
 # Safaricom rejects the wrong one for a given shortcode's account type.
 MPESA_SHORTCODE_TYPE = config('MPESA_SHORTCODE_TYPE', default='paybill')
+# Only needed when MPESA_SHORTCODE_TYPE=till and the till number customers
+# actually pay to differs from MPESA_SHORTCODE (the head-office/API
+# shortcode) -- used as PartyB in STK Push requests. Defaults to
+# MPESA_SHORTCODE, which is correct whenever they're the same number.
+MPESA_TILL_NUMBER = config('MPESA_TILL_NUMBER', default='')
 MPESA_PASSKEY = config('MPESA_PASSKEY', default='')
 MPESA_CALLBACK_URL = config('MPESA_CALLBACK_URL', default='https://isp.hasalioma.online/api/payments/callback/')
 

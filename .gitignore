@@ -3,6 +3,7 @@
 # to be tracked.
 companies/*.env
 vps
+teststk.py
 .env
 .env.prod
 backend/.env

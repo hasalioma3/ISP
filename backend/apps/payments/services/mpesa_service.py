@@ -23,6 +23,10 @@ class MpesaService:
         self.consumer_secret = settings.MPESA_CONSUMER_SECRET
         self.shortcode = settings.MPESA_SHORTCODE
         self.shortcode_type = getattr(settings, 'MPESA_SHORTCODE_TYPE', 'paybill')
+        # PartyB in STK Push requests: the till number for a Buy Goods
+        # account linked under a head-office shortcode, which can differ
+        # from self.shortcode (BusinessShortCode). Same value otherwise.
+        self.party_b = getattr(settings, 'MPESA_TILL_NUMBER', '') or settings.MPESA_SHORTCODE
         self.passkey = settings.MPESA_PASSKEY
         self.callback_url = settings.MPESA_CALLBACK_URL
         self.base_url = settings.MPESA_BASE_URL
@@ -118,7 +122,7 @@ class MpesaService:
             'TransactionType': 'CustomerBuyGoodsOnline' if self.shortcode_type == 'till' else 'CustomerPayBillOnline',
             'Amount': int(amount),
             'PartyA': phone_number,
-            'PartyB': self.shortcode,
+            'PartyB': self.party_b,
             'PhoneNumber': phone_number,
             'CallBackURL': self.callback_url,
             'AccountReference': account_reference,
@@ -156,32 +160,38 @@ class MpesaService:
                 'error': str(e)
             }
     
-    def register_c2b_urls(self, validation_url, confirmation_url, response_type='Completed'):
+    def register_c2b_urls(self, validation_url, confirmation_url, response_type='Completed', shortcode=None):
         """
         One-time registration of the C2B ValidationURL/ConfirmationURL with
         Safaricom -- required before they'll deliver C2B (direct paybill)
         payment notifications at all. Re-running this simply overwrites the
         previously registered URLs, so it's safe to call again if the URLs
         change (e.g. moving off the Cloudflare Tunnel domain).
+
+        shortcode defaults to self.shortcode (the head-office/API shortcode)
+        but can be overridden -- for a till linked under an organization
+        with a distinct store number, C2B delivery may need to be
+        registered under the store shortcode instead.
         """
         access_token = self.get_access_token()
         if not access_token:
             return {'success': False, 'error': 'Failed to get access token'}
 
-        url = f"{self.base_url}/mpesa/c2b/v1/registerurl"
+        target_shortcode = shortcode or self.shortcode
+        url = f"{self.base_url}/mpesa/c2b/v2/registerurl"
         headers = {
             'Authorization': f'Bearer {access_token}',
             'Content-Type': 'application/json'
         }
         payload = {
-            'ShortCode': self.shortcode,
+            'ShortCode': target_shortcode,
             'ResponseType': response_type,
             'ConfirmationURL': confirmation_url,
             'ValidationURL': validation_url,
         }
 
         try:
-            logger.info(f"Registering C2B URLs for shortcode {self.shortcode}")
+            logger.info(f"Registering C2B URLs for shortcode {target_shortcode}")
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             data = response.json()
