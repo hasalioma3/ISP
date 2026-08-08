@@ -5,6 +5,7 @@ import { authAPI, billingAPI, paymentAPI } from '../../services/api';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Smartphone, CreditCard, CheckCircle, XCircle, Loader, Wallet } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { filterSelfServicePlans } from '../../utils/plans';
 
 export default function Payment() {
     const [searchParams] = useSearchParams();
@@ -12,6 +13,7 @@ export default function Payment() {
     const planId = searchParams.get('plan');
     const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
     const updateUser = useAuthStore((state) => state.updateUser);
+    const userServiceType = useAuthStore((state) => state.user?.service_type);
 
     const [phoneNumber, setPhoneNumber] = useState('');
     const [selectedPlanId, setSelectedPlanId] = useState(planId || '');
@@ -21,14 +23,12 @@ export default function Payment() {
     const [paymentStatus, setPaymentStatus] = useState<'idle' | 'pending' | 'success' | 'failed'>('idle');
 
     const { data: plans } = useQuery({
-        queryKey: ['plans'],
+        queryKey: ['plans', userServiceType],
         queryFn: async () => {
             const response = await billingAPI.getPlans();
             // DRF returns paginated response: {count, next, previous, results}
             const allPlans = response.data.results || response.data;
-            // Static IP plans require a technician to configure the fixed IP first,
-            // so they aren't available for self-service purchase.
-            return allPlans.filter((p: any) => p.service_type !== 'static');
+            return filterSelfServicePlans(allPlans, userServiceType);
         },
     });
 

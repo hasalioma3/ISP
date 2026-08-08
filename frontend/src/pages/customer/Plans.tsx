@@ -2,17 +2,19 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { billingAPI } from '../../services/api';
 import { ArrowLeft, Wifi, Zap } from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
+import { filterSelfServicePlans } from '../../utils/plans';
 
 export default function Plans() {
+    const userServiceType = useAuthStore((state) => state.user?.service_type);
+
     const { data: plans, isLoading, error } = useQuery({
-        queryKey: ['plans'],
+        queryKey: ['plans', userServiceType],
         queryFn: async () => {
             const response = await billingAPI.getPlans();
             // DRF returns paginated response: {count, next, previous, results}
             const allPlans = response.data.results || response.data;
-            // Static IP plans require a technician to configure the fixed IP first,
-            // so they aren't available for self-service purchase.
-            return allPlans.filter((p: any) => p.service_type !== 'static');
+            return filterSelfServicePlans(allPlans, userServiceType);
         },
     });
 
