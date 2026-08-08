@@ -83,7 +83,10 @@ class C2BPayment(models.Model):
     invoice_number = models.CharField(max_length=100, blank=True)
     org_account_balance = models.CharField(max_length=50, blank=True)
     third_party_trans_id = models.CharField(max_length=100, blank=True)
-    msisdn = models.CharField(max_length=15, blank=True)
+    # Safaricom now sends a SHA-256 hash instead of the raw phone number on
+    # some C2B confirmations (Buy Goods/Till), hence the generous length --
+    # this is no longer guaranteed to be a real MSISDN.
+    msisdn = models.CharField(max_length=100, blank=True)
     first_name = models.CharField(max_length=100, blank=True)
     middle_name = models.CharField(max_length=100, blank=True)
     last_name = models.CharField(max_length=100, blank=True)
