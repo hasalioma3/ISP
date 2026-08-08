@@ -53,7 +53,20 @@ def initiate_payment(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
     # Determine Customer
-    if request.user.is_authenticated:
+    #
+    # A hotspot plan bought while logged in as an existing PPPoE-only
+    # customer must NOT reuse that customer record -- network_automation's
+    # enable_hotspot check requires customer.service_type in
+    # ['hotspot', 'both'], so activation would silently no-op for a
+    # service_type='pppoe' customer even though the payment succeeded.
+    # Fall through to the device-specific guest flow instead, which gets/
+    # creates a proper hotspot account, leaving the PPPoE customer's own
+    # record untouched.
+    reuse_authenticated_user = (
+        request.user.is_authenticated
+        and not (plan.service_type == 'hotspot' and request.user.service_type == 'pppoe')
+    )
+    if reuse_authenticated_user:
         customer = request.user
     else:
         # GUEST FLOW
