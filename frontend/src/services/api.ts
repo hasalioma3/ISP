@@ -124,6 +124,10 @@ export const adminAPI = {
     getSubscriberUsage: (id: number) => api.get(`/customers/subscribers/${id}/usage/`),
     topUpSubscriber: (id: number, planId: number, staticIpAddress?: string) =>
         api.post(`/customers/subscribers/${id}/topup/`, { plan_id: planId, static_ip_address: staticIpAddress }),
+    addSubscriberBalance: (id: number, amount: number) =>
+        api.post(`/customers/subscribers/${id}/add_balance/`, { amount }),
+    switchSubscriberPlan: (id: number, planId: number) =>
+        api.post(`/customers/subscribers/${id}/switch_plan/`, { plan_id: planId }),
 
     // Staff
     getStaff: () => api.get('/customers/staff/'),

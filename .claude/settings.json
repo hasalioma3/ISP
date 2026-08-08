@@ -29,7 +29,8 @@
       "Bash(ssh pi@192.168.88.252 \"cd ~/ISP && docker compose exec -T backend python manage.py check 2>&1 | tail -5\")",
       "Bash(curl -sk -o /dev/null -w \"Status: %{http_code}\\\\n\" \"https://192.168.88.254/api/network/hotspot/status/?mac=AA:BB:CC:DD:EE:FF\")",
       "Bash(curl -sk -o /dev/null -w \"Pi Frontend HTTP: %{http_code}\\\\n\" https://192.168.88.252/)",
-      "WebFetch(domain:help.uisp.com)"
+      "WebFetch(domain:help.uisp.com)",
+      "Bash(venv/bin/python3 manage.py makemigrations billing)"
     ]
   }
 }

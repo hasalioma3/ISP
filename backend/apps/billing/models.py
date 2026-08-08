@@ -176,6 +176,7 @@ class Transaction(models.Model):
         ('mpesa', 'M-Pesa'),
         ('cash', 'Cash'),
         ('bank', 'Bank Transfer'),
+        ('balance', 'Account Balance'),
         ('other', 'Other'),
     ]
     

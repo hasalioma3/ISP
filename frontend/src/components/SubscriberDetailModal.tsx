@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, billingAPI } from '../services/api';
-import { X, Save, PlusCircle, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { X, Save, PlusCircle, Eye, EyeOff, KeyRound, Wallet, ArrowLeftRight } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import UsageChartPanels from './UsageChartPanels';
@@ -12,6 +12,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
     const [form, setForm] = useState<any | null>(null);
     const [topUpPlanId, setTopUpPlanId] = useState('');
     const [topUpStaticIp, setTopUpStaticIp] = useState('');
+    const [balanceAmount, setBalanceAmount] = useState('');
     const [showPasswords, setShowPasswords] = useState(false);
     const isSuperuser = useAuthStore((state) => state.user?.is_superuser);
     const queryClient = useQueryClient();
@@ -65,6 +66,30 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
             queryClient.invalidateQueries({ queryKey: ['online-users'] });
         },
         onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to assign plan')
+    });
+
+    const addBalanceMutation = useMutation({
+        mutationFn: () => adminAPI.addSubscriberBalance(id, parseFloat(balanceAmount)),
+        onSuccess: (res) => {
+            toast.success(res.data.message || 'Balance added');
+            setBalanceAmount('');
+            queryClient.invalidateQueries({ queryKey: ['admin-subscribers'] });
+            queryClient.invalidateQueries({ queryKey: ['subscriber', id] });
+        },
+        onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to add balance')
+    });
+
+    const switchPlanMutation = useMutation({
+        mutationFn: () => adminAPI.switchSubscriberPlan(id, parseInt(topUpPlanId)),
+        onSuccess: (res) => {
+            toast.success(res.data.message || 'Plan switched');
+            setTopUpPlanId('');
+            queryClient.invalidateQueries({ queryKey: ['admin-subscribers'] });
+            queryClient.invalidateQueries({ queryKey: ['subscriber', id] });
+            queryClient.invalidateQueries({ queryKey: ['subscriber-usage', id] });
+            queryClient.invalidateQueries({ queryKey: ['online-users'] });
+        },
+        onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to switch plan')
     });
 
     const handleSave = (e: React.FormEvent) => {
@@ -232,8 +257,29 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                         )
                     ) : (
                         <div className="space-y-6">
+                            <div className="bg-blue-50 rounded-lg p-4">
+                                <h4 className="text-sm font-bold mb-1 flex items-center gap-2"><Wallet className="h-4 w-4" /> Account Balance</h4>
+                                <p className="text-2xl font-bold text-blue-700 mb-3">KES {Number(subscriber?.account_balance || 0).toLocaleString()}</p>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <input
+                                        type="number" min="0" step="0.01" placeholder="Amount to add"
+                                        className="flex-1 border rounded-lg px-3 py-2 text-sm"
+                                        value={balanceAmount}
+                                        onChange={e => setBalanceAmount(e.target.value)}
+                                    />
+                                    <button
+                                        disabled={!balanceAmount || addBalanceMutation.isPending}
+                                        onClick={() => addBalanceMutation.mutate()}
+                                        className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+                                    >
+                                        <PlusCircle className="h-4 w-4 mr-2" />
+                                        {addBalanceMutation.isPending ? 'Adding...' : 'Add to Balance'}
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="bg-gray-50 rounded-lg p-4">
-                                <h4 className="text-sm font-bold mb-3">Assign / Top Up Plan</h4>
+                                <h4 className="text-sm font-bold mb-3">Assign / Top Up / Switch Plan</h4>
                                 <div className="flex flex-col sm:flex-row gap-2">
                                     <select
                                         className="flex-1 border rounded-lg px-3 py-2 text-sm"
@@ -248,10 +294,20 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                     <button
                                         disabled={!topUpPlanId || topUpMutation.isPending}
                                         onClick={() => topUpMutation.mutate()}
+                                        title="Record a fresh cash payment for this plan"
                                         className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium"
                                     >
                                         <PlusCircle className="h-4 w-4 mr-2" />
-                                        {topUpMutation.isPending ? 'Assigning...' : 'Confirm'}
+                                        {topUpMutation.isPending ? 'Assigning...' : 'Confirm (Cash)'}
+                                    </button>
+                                    <button
+                                        disabled={!topUpPlanId || switchPlanMutation.isPending}
+                                        onClick={() => switchPlanMutation.mutate()}
+                                        title="Pay for this plan from the customer's existing account balance instead"
+                                        className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
+                                    >
+                                        <ArrowLeftRight className="h-4 w-4 mr-2" />
+                                        {switchPlanMutation.isPending ? 'Switching...' : 'Switch (Use Balance)'}
                                     </button>
                                 </div>
                                 {plans?.find((p: any) => String(p.id) === topUpPlanId)?.service_type === 'static' && !subscriber?.static_ip_address && (

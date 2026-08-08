@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -70,7 +72,11 @@ class Customer(AbstractUser):
 
 
     # Account Information
-    account_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    # Decimal default, not float -- a float default stays a raw Python
+    # float in memory (not converted to Decimal) until the row is reloaded
+    # from the DB, which breaks Decimal arithmetic (e.g. balance credits)
+    # against a customer created earlier in the same request/process.
+    account_balance = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

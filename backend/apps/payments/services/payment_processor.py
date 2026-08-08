@@ -8,7 +8,8 @@ from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction as db_transaction
 from apps.payments.models import PaymentRequest, PaymentCallback, C2BPayment
-from apps.billing.models import Transaction, Subscription, BillingPlan
+from apps.billing.models import Transaction, BillingPlan
+from apps.billing.services import apply_subscription
 from apps.customers.models import Customer
 from apps.network.services.network_automation import network_automation
 from apps.payments.services.phone_hash import is_msisdn_hash
@@ -124,39 +125,14 @@ class PaymentProcessor:
             status='completed'
         )
         
-        # Get or create subscription
-        try:
-            subscription = Subscription.objects.filter(
-                customer=customer,
-                plan=plan
-            ).latest('created_at')
-            
-            expiry_delta = plan.get_duration_timedelta()
+        # Get-or-renew-or-switch the customer's one active subscription for
+        # this service_type (see apps.billing.services -- never creates a
+        # second concurrently-active row; a plan switch prorates the old
+        # plan's unused value into account_balance instead of losing it).
+        subscription, credited = apply_subscription(customer, plan)
+        if credited:
+            logger.info(f"Prorated KES {credited} credited to {customer.username}'s balance from a plan switch")
 
-            # Check if subscription is expired or about to expire
-            if subscription.is_expired or subscription.days_remaining <= 0:
-                # Renew from now
-                subscription.start_date = timezone.now()
-                subscription.expiry_date = timezone.now() + expiry_delta
-            else:
-                # Extend existing subscription
-                subscription.expiry_date += expiry_delta
-            
-            subscription.status = 'active'
-            subscription.save()
-            
-        except Subscription.DoesNotExist:
-            expiry_delta = plan.get_duration_timedelta()
-
-            # Create new subscription
-            subscription = Subscription.objects.create(
-                customer=customer,
-                plan=plan,
-                start_date=timezone.now(),
-                expiry_date=timezone.now() + expiry_delta,
-                status='active'
-            )
-        
         # Link transaction to subscription
         transaction.subscription = subscription
         transaction.save()
@@ -293,23 +269,9 @@ class PaymentProcessor:
                     status='completed'
                 )
 
-                expiry_delta = plan.get_duration_timedelta()
-                existing_sub = Subscription.objects.filter(
-                    customer=customer, plan=plan
-                ).order_by('-created_at').first()
-
-                if existing_sub and not existing_sub.is_expired and existing_sub.days_remaining > 0:
-                    existing_sub.expiry_date += expiry_delta
-                    existing_sub.status = 'active'
-                    existing_sub.save()
-                    subscription = existing_sub
-                else:
-                    subscription = Subscription.objects.create(
-                        customer=customer,
-                        plan=plan,
-                        expiry_date=timezone.now() + expiry_delta,
-                        status='active'
-                    )
+                subscription, credited = apply_subscription(customer, plan)
+                if credited:
+                    logger.info(f"Prorated KES {credited} credited to {customer.username}'s balance from a plan switch")
 
                 transaction.subscription = subscription
                 transaction.save()

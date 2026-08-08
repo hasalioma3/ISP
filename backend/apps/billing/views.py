@@ -474,14 +474,8 @@ class ManualSubscriptionView(APIView):
             customer.service_type = 'static'
             customer.save(update_fields=['static_ip_address', 'service_type'])
 
-        expiry_delta = plan.get_duration_timedelta()
-
-        subscription = Subscription.objects.create(
-            customer=customer,
-            plan=plan,
-            expiry_date=timezone.now() + expiry_delta,
-            status='active'
-        )
+        from apps.billing.services import apply_subscription
+        subscription, credited = apply_subscription(customer, plan)
 
         Transaction.objects.create(
             customer=customer,
@@ -493,9 +487,13 @@ class ManualSubscriptionView(APIView):
             notes=f"Manual activation by {request.user.username}"
         )
 
+        message = f'Subscription activated for {customer.username}'
+        if credited:
+            message += f' (KES {credited} credited to their balance from the previous plan)'
+
         response_data = {
             'success': True,
-            'message': f'Subscription activated for {customer.username}',
+            'message': message,
             'subscription_id': subscription.id,
         }
         if created_new:
