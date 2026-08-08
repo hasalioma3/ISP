@@ -14,5 +14,6 @@ urlpatterns = [
     path('c2b/<str:token>/validation/', views.c2b_validation, name='c2b-validation'),
     path('c2b/<str:token>/confirmation/', views.c2b_confirmation, name='c2b-confirmation'),
     path('status/<int:payment_request_id>/', views.payment_status, name='status'),
+    path('c2b/<int:payment_id>/assign/', views.assign_c2b_payment, name='c2b-assign'),
     path('', include(router.urls)),
 ]

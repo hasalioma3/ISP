@@ -537,8 +537,10 @@ class RecentPaymentsView(APIView):
         rows = []
         for t in transactions:
             rows.append({
+                'c2b_payment_id': None,
                 'transaction_id': t.transaction_id,
                 'customer': t.customer.username,
+                'matched': True,
                 'amount': float(t.amount),
                 'method': 'stk',
                 'status': 'utilized' if t.status == 'completed' else 'open',
@@ -546,11 +548,13 @@ class RecentPaymentsView(APIView):
             })
         for c in c2b_payments:
             rows.append({
+                'c2b_payment_id': c.id,
                 'transaction_id': c.transaction_id,
                 # Unmatched/non-customer payers only ever get the hashed
                 # MSISDN Safaricom sent -- see apps.payments.services.phone_hash
                 # for why we never attempt to reverse it back to a real number.
                 'customer': c.matched_customer.username if c.matched_customer else c.msisdn,
+                'matched': c.matched_customer_id is not None,
                 'amount': float(c.amount),
                 'method': 'c2b',
                 'status': 'utilized' if c.status == 'activated' else 'open',

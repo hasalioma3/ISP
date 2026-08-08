@@ -16,6 +16,7 @@ from apps.payments.serializers import (
 from apps.payments.services.mpesa_service import mpesa_service
 from apps.payments.services.payment_processor import payment_processor
 from apps.billing.models import BillingPlan
+from apps.customers.permissions import RoleAllowed
 
 logger = logging.getLogger('mpesa')
 
@@ -332,6 +333,63 @@ class PaymentRequestViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = PaymentRequestSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         return PaymentRequest.objects.filter(customer=self.request.user)
+
+
+@api_view(['POST'])
+@permission_classes([RoleAllowed('admin')])
+def assign_c2b_payment(request, payment_id):
+    """
+    Manually attribute an unmatched C2B payment to a customer -- the admin
+    fallback for when Safaricom's hashed MSISDN (or a missing/mistyped
+    BillRefNumber) couldn't be auto-matched to anyone at confirmation time.
+    The money already moved, so it's credited to the customer's
+    account_balance in full (same treatment as the "no plan matched"
+    wallet-credit path in process_c2b_confirmation) -- from there the admin
+    can use the existing top-up/switch-plan actions to apply it to a plan.
+    """
+    from apps.customers.models import Customer
+    from apps.billing.models import Transaction
+
+    payment = C2BPayment.objects.filter(id=payment_id).first()
+    if not payment:
+        return Response({'error': 'Payment not found'}, status=status.HTTP_404_NOT_FOUND)
+    if payment.matched_customer_id:
+        return Response(
+            {'error': f'This payment is already matched to {payment.matched_customer.username}'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    customer = Customer.objects.filter(id=request.data.get('customer_id')).first()
+    if not customer:
+        return Response({'error': 'Invalid customer ID'}, status=status.HTTP_400_BAD_REQUEST)
+
+    customer.account_balance += payment.amount
+    customer.save(update_fields=['account_balance'])
+
+    transaction = Transaction.objects.create(
+        customer=customer,
+        transaction_id=payment.transaction_id,
+        amount=payment.amount,
+        currency='KES',
+        payment_method='mpesa',
+        mpesa_receipt_number=payment.transaction_id,
+        mpesa_phone_number=payment.msisdn,
+        mpesa_transaction_date=payment.transaction_time,
+        status='completed',
+        notes=f"C2B payment manually assigned to {customer.username} by {request.user.username}; credited to balance",
+    )
+
+    payment.matched_customer = customer
+    payment.linked_transaction = transaction
+    payment.status = 'matched_no_plan'
+    payment.notes = f"Manually assigned to {customer.username} by {request.user.username}; KES {payment.amount} credited to balance"
+    payment.save(update_fields=['matched_customer', 'linked_transaction', 'status', 'notes'])
+
+    return Response({
+        'success': True,
+        'message': f"Payment assigned to {customer.username}; KES {payment.amount} credited to their balance",
+        'account_balance': customer.account_balance,
+    })

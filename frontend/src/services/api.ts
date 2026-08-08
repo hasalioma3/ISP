@@ -157,6 +157,10 @@ export const adminAPI = {
 
     // Manual Actions
     manualSubscribe: (data: any) => api.post('/billing/manual-subscribe/', data),
+
+    // Payments
+    assignC2BPayment: (paymentId: number, customerId: number) =>
+        api.post(`/payments/c2b/${paymentId}/assign/`, { customer_id: customerId }),
 };
 
 // Site Settings (branding: company name + logo)

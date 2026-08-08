@@ -82,7 +82,10 @@ const CaptivePortal: React.FC = () => {
             // Handle DRF pagination (response.data.results) or flat list (response.data)
             const data = response.data.results ? response.data.results : response.data;
             if (Array.isArray(data)) {
-                setPlans(data);
+                // Only Hotspot plans belong here -- PPPoE requires a wired/
+                // configured router login, not a WiFi captive-portal guest,
+                // and Static IP is technician-assigned only.
+                setPlans(data.filter((p: any) => p.service_type === 'hotspot'));
             } else {
                 console.error('Invalid plans format:', data);
                 setPlans([]);
