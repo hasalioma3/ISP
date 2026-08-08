@@ -4,12 +4,13 @@ Handles payment callback processing and account crediting
 """
 
 import logging
+from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction as db_transaction
 from apps.payments.models import PaymentRequest, PaymentCallback, C2BPayment
 from apps.billing.models import Transaction, BillingPlan
-from apps.billing.services import apply_subscription
+from apps.billing.services import purchase_plan
 from apps.customers.models import Customer
 from apps.network.services.network_automation import network_automation
 from apps.payments.services.phone_hash import is_msisdn_hash
@@ -125,35 +126,47 @@ class PaymentProcessor:
             status='completed'
         )
         
-        # Get-or-renew-or-switch the customer's one active subscription for
-        # this service_type (see apps.billing.services -- never creates a
-        # second concurrently-active row; a plan switch prorates the old
-        # plan's unused value into account_balance instead of losing it).
-        subscription, credited = apply_subscription(customer, plan)
-        if credited:
-            logger.info(f"Prorated KES {credited} credited to {customer.username}'s balance from a plan switch")
+        # Wallet model: credit the payment to account_balance first, then
+        # spend plan.price out of it to renew/switch/create the customer's
+        # one active subscription for this service_type (see
+        # apps.billing.services -- never creates a second concurrently-
+        # active row; a plan switch also prorates the old plan's unused
+        # value into balance). amount always equals plan.price for STK (the
+        # customer paid for this exact plan), so `applied` should always be
+        # True here -- handled defensively regardless.
+        subscription, switch_credited, applied = purchase_plan(customer, plan, Decimal(str(payment_callback.amount)))
+        if switch_credited:
+            logger.info(f"Prorated KES {switch_credited} credited to {customer.username}'s balance from a plan switch")
+        if not applied:
+            logger.warning(
+                f"STK payment for {customer.username} credited KES {payment_callback.amount} to balance "
+                f"but didn't cover {plan.name} (KES {plan.price}) -- left unapplied, balance={customer.account_balance}"
+            )
 
-        # Link transaction to subscription
+        # Link transaction to subscription (if the plan was actually applied)
         transaction.subscription = subscription
         transaction.save()
-        
-        # Update customer status
-        customer.status = 'active'
-        customer.save()
-        
+
         # Mark callback as processed
         payment_callback.processed = True
         payment_callback.processed_at = timezone.now()
         payment_callback.save()
-        
-        # Activate network access
-        try:
-            network_automation.activate_customer(customer, plan)
-            logger.info(f"Network access activated for {customer.username}")
-        except Exception as e:
-            logger.error(f"Failed to activate network for {customer.username}: {str(e)}")
-            # Don't fail the payment processing if network activation fails
-            # This can be retried manually
+
+        if applied:
+            # Update customer status
+            customer.status = 'active'
+            customer.save()
+
+            # Activate network access -- apply_subscription's own save()
+            # already triggers this via signal, but keep the explicit call
+            # for its independent error handling/logging below.
+            try:
+                network_automation.activate_customer(customer, plan)
+                logger.info(f"Network access activated for {customer.username}")
+            except Exception as e:
+                logger.error(f"Failed to activate network for {customer.username}: {str(e)}")
+                # Don't fail the payment processing if network activation fails --
+                # this can be retried manually
     
     def process_c2b_confirmation(self, data):
         """
@@ -242,14 +255,35 @@ class PaymentProcessor:
         plan_candidates = BillingPlan.objects.filter(price=amount, is_active=True).exclude(service_type='static')
         plan = plan_candidates.filter(service_type=customer.service_type).first() or plan_candidates.first()
         if not plan:
-            payment.status = 'matched_no_plan'
-            payment.notes = f"Matched {customer.username} but no active plan costs KES {amount}"
-            payment.save(update_fields=['status', 'notes'])
-            logger.warning(
-                f"C2B payment {trans_id}: matched {customer.username} but "
-                f"amount {amount} matches no active plan"
-            )
-            return {'success': True, 'message': 'Recorded, no plan match', 'payment': payment}
+            # Wallet model: no plan costs exactly this amount, but the
+            # money still moved -- credit it to account_balance rather than
+            # leaving it stuck with nothing to show for it. It's spendable
+            # later via a top-up/switch once it (plus any future payment)
+            # covers a plan's price.
+            with db_transaction.atomic():
+                customer.account_balance += Decimal(str(amount))
+                customer.save(update_fields=['account_balance'])
+
+                transaction = Transaction.objects.create(
+                    customer=customer,
+                    transaction_id=trans_id,
+                    amount=amount,
+                    currency='KES',
+                    payment_method='mpesa',
+                    mpesa_receipt_number=trans_id,
+                    mpesa_phone_number=msisdn,
+                    mpesa_transaction_date=payment.transaction_time,
+                    status='completed',
+                    notes=f"C2B payment credited to {customer.username}'s balance (no plan costs KES {amount})",
+                )
+
+                payment.linked_transaction = transaction
+                payment.status = 'matched_no_plan'
+                payment.notes = f"Matched {customer.username}; KES {amount} credited to balance (no plan costs this amount)"
+                payment.save(update_fields=['linked_transaction', 'status', 'notes'])
+
+            logger.info(f"C2B payment {trans_id}: KES {amount} credited to {customer.username}'s balance, no plan matched")
+            return {'success': True, 'message': 'Recorded, credited to balance', 'payment': payment}
 
         # Note: Subscription.save() below triggers sync_subscription_on_save
         # (apps/billing/signals.py), which itself calls
@@ -269,19 +303,27 @@ class PaymentProcessor:
                     status='completed'
                 )
 
-                subscription, credited = apply_subscription(customer, plan)
-                if credited:
-                    logger.info(f"Prorated KES {credited} credited to {customer.username}'s balance from a plan switch")
+                # Wallet model: credit this payment to account_balance, then
+                # spend plan.price out of it (see purchase_plan). amount was
+                # matched to exactly plan.price above, so this always has
+                # enough to apply -- handled defensively regardless.
+                subscription, switch_credited, applied = purchase_plan(customer, plan, Decimal(str(amount)))
+                if switch_credited:
+                    logger.info(f"Prorated KES {switch_credited} credited to {customer.username}'s balance from a plan switch")
 
                 transaction.subscription = subscription
                 transaction.save()
 
-                customer.status = 'active'
-                customer.save()
-
                 payment.subscription = subscription
                 payment.linked_transaction = transaction
-                payment.status = 'activated'
+
+                if applied:
+                    customer.status = 'active'
+                    customer.save()
+                    payment.status = 'activated'
+                else:
+                    payment.status = 'matched_no_plan'
+                    payment.notes = f"Matched {customer.username}; KES {amount} credited to balance but didn't cover {plan.name}"
                 payment.save()
         except Exception as e:
             payment.status = 'error'

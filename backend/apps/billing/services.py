@@ -1,11 +1,21 @@
 """
-Central subscription-assignment logic. Every activation path (STK push
-callback, C2B confirmation, admin manual top-up/assign, plan switch) must
-go through apply_subscription() rather than creating a Subscription row
-directly -- this is what enforces "at most one active subscription per
-service_type" consistently. Before this existed, each call site duplicated
-its own reuse-or-create logic (inconsistently), which is how a customer
-could end up with two simultaneously "Active" PPPoE subscriptions.
+Central subscription-assignment and wallet logic.
+
+apply_subscription() enforces "at most one active subscription per
+service_type" -- every activation path (STK push callback, C2B
+confirmation, admin manual top-up/assign, plan switch) must go through it
+rather than creating a Subscription row directly. Before this existed, each
+call site duplicated its own reuse-or-create logic (inconsistently), which
+is how a customer could end up with two simultaneously "Active" PPPoE
+subscriptions.
+
+purchase_plan() is the wallet-model entry point for a fresh payment (STK/
+C2B): account_balance is a real running ledger, not just an edge-case
+credit -- every payment lands in it first, and the plan's price is then
+deducted from it. This makes any leftover (a payment that doesn't exactly
+cover the plan, or exceeds it) visible and spendable rather than silently
+absorbed or lost, and it composes with apply_subscription's own proration
+credit on a plan switch for free (both just move account_balance).
 """
 from decimal import Decimal
 
@@ -104,3 +114,31 @@ def apply_subscription(customer, plan):
         status='active',
     )
     return subscription, credited
+
+
+def purchase_plan(customer, plan, payment_amount):
+    """
+    Wallet-model purchase for a fresh payment: credit payment_amount to
+    account_balance, then, if the balance now covers plan.price, deduct it
+    and apply the plan via apply_subscription (renew/switch/create).
+
+    If the balance doesn't cover plan.price (a partial C2B payment, or one
+    smaller than any plan), the payment is still credited and kept as
+    balance rather than lost -- no plan is applied yet; the customer (or an
+    admin, via switch_plan) can complete the purchase once there's enough.
+
+    Returns (subscription_or_None, switch_credited, applied). `applied` is
+    False when the plan wasn't purchased (insufficient balance) --
+    switch_credited is always Decimal('0') in that case, since
+    apply_subscription never ran.
+    """
+    customer.account_balance += payment_amount
+    customer.save(update_fields=['account_balance'])
+
+    if customer.account_balance < plan.price:
+        return None, Decimal('0'), False
+
+    subscription, switch_credited = apply_subscription(customer, plan)
+    customer.account_balance -= plan.price
+    customer.save(update_fields=['account_balance'])
+    return subscription, switch_credited, True

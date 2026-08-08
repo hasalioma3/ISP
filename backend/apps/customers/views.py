@@ -180,9 +180,15 @@ class SubscriberViewSet(
         from django.utils import timezone
         from apps.billing.models import Subscription, UsageRecord
 
-        latest_active_expiry = Subscription.objects.filter(
-            customer=OuterRef('pk'), status='active'
-        ).order_by('-created_at').values('expiry_date')[:1]
+        # An active, not-yet-expired subscription always wins for display
+        # purposes -- e.g. a still-active plan bought a while ago must not
+        # lose to a more-recently-created but already-expired one (that
+        # comparison is only "most recent" by created_at, not by what's
+        # actually current). Falls back to the plain most-recent-by-
+        # created_at subscription only when there's no active one at all.
+        active_subscription = Subscription.objects.filter(
+            customer=OuterRef('pk'), status='active', expiry_date__gt=timezone.now()
+        ).order_by('-created_at')
 
         latest_subscription = Subscription.objects.filter(
             customer=OuterRef('pk')
@@ -193,9 +199,18 @@ class SubscriberViewSet(
         ).order_by('-created_at').values('framed_ip_address')[:1]
 
         qs = Customer.objects.annotate(
-            calculated_expiry=Subquery(latest_active_expiry),
-            current_plan_name=Subquery(latest_subscription.values('plan__name')[:1]),
-            current_plan_status=Subquery(latest_subscription.values('status')[:1]),
+            calculated_expiry=Coalesce(
+                Subquery(active_subscription.values('expiry_date')[:1]),
+                Subquery(latest_subscription.values('expiry_date')[:1]),
+            ),
+            current_plan_name=Coalesce(
+                Subquery(active_subscription.values('plan__name')[:1]),
+                Subquery(latest_subscription.values('plan__name')[:1]),
+            ),
+            current_plan_status=Coalesce(
+                Subquery(active_subscription.values('status')[:1]),
+                Subquery(latest_subscription.values('status')[:1]),
+            ),
             latest_subscription_at=Coalesce(
                 Subquery(latest_subscription.values('created_at')[:1]), 'created_at'
             ),
