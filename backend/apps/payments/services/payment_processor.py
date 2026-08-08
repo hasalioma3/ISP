@@ -11,6 +11,7 @@ from apps.payments.models import PaymentRequest, PaymentCallback, C2BPayment
 from apps.billing.models import Transaction, Subscription, BillingPlan
 from apps.customers.models import Customer
 from apps.network.services.network_automation import network_automation
+from apps.payments.services.phone_hash import is_msisdn_hash
 
 logger = logging.getLogger('mpesa')
 
@@ -186,14 +187,19 @@ class PaymentProcessor:
         arrives, so we always record it; matching to a customer and
         auto-activation are best-effort on top of that.
 
-        Matching: the paying MSISDN is checked against Customer.phone_number
-        first (matched on the trailing 9 digits, format-agnostic), falling
-        back to BillRefNumber against Customer.username. MSISDN is primary
-        because this shortcode is a Buy Goods till, not a Paybill -- the
-        standard "Buy Goods" M-Pesa flow has no account-number prompt at
-        all, so BillRefNumber is rarely populated with anything useful here.
-        Auto-activation only fires if the paid amount exactly matches an
-        active plan's price for a matched customer.
+        Matching: Safaricom hashes the paying MSISDN on C2B confirmations
+        (SHA-256 of 254XXXXXXXXX, data-minimization rollout complete since
+        2026-03-24) rather than sending the real number, so we match by
+        hashing our own customers' numbers the same way and comparing --
+        see apps.payments.services.phone_hash. We never attempt to reverse
+        Safaricom's hash: for a non-customer payer that's someone else's
+        personal data we'd be reconstructing without consent, which is the
+        merchant's liability to avoid under the Data Protection Act 2019.
+        Falls back to BillRefNumber against Customer.username, though that's
+        rarely populated -- this shortcode is a Buy Goods till, and the
+        standard "Buy Goods" M-Pesa flow never prompts for an account number
+        at all. Auto-activation only fires if the paid amount exactly
+        matches an active plan's price for a matched customer.
         """
         trans_id = data.get('TransID')
 
@@ -212,17 +218,16 @@ class PaymentProcessor:
         # Lipa na M-Pesa "Buy Goods" flow never prompts for an account
         # number at all, so BillRefNumber essentially never carries a real
         # customer identifier here. MSISDN (the paying phone) is the only
-        # signal customers actually provide, so it's the primary match.
-        #
-        # Customer.phone_number has no enforced format across signup paths
-        # (07XXXXXXXX from web registration, sometimes 254XXXXXXXXX from
-        # guest checkout) while Safaricom's MSISDN is always 254XXXXXXXXX,
-        # so match on the trailing 9 digits (the actual subscriber number)
-        # rather than literal string equality, which would miss most
-        # real accounts.
+        # signal customers actually provide, so it's the primary match --
+        # via phone_hash when Safaricom sent a hash (the normal case now),
+        # or the older trailing-digits match on the rare occasion a real
+        # number still comes through.
         customer = None
         if msisdn:
-            customer = Customer.objects.filter(phone_number__endswith=msisdn[-9:]).first()
+            if is_msisdn_hash(msisdn):
+                customer = Customer.objects.filter(phone_hash=msisdn.lower()).first()
+            else:
+                customer = Customer.objects.filter(phone_number__endswith=msisdn[-9:]).first()
         if not customer and bill_ref_number:
             customer = Customer.objects.filter(username__iexact=bill_ref_number).first()
 

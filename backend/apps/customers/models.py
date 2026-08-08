@@ -2,6 +2,8 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from apps.payments.services.phone_hash import hash_phone
+
 
 class Customer(AbstractUser):
     """
@@ -33,6 +35,11 @@ class Customer(AbstractUser):
 
     # Personal Information
     phone_number = models.CharField(max_length=15, unique=False, db_index=True)
+    # SHA-256 of phone_number in 254XXXXXXXXX form -- Safaricom's C2B
+    # confirmations send the paying MSISDN hashed the same way (data
+    # minimization rollout, complete since 2026-03-24), so this is how C2B
+    # payments get matched back to a customer. Kept in sync in save().
+    phone_hash = models.CharField(max_length=64, blank=True, db_index=True)
     id_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True)
     
@@ -79,7 +86,11 @@ class Customer(AbstractUser):
     
     def __str__(self):
         return f"{self.username} - {self.phone_number}"
-    
+
+    def save(self, *args, **kwargs):
+        self.phone_hash = hash_phone(self.phone_number) if self.phone_number else ''
+        super().save(*args, **kwargs)
+
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip() or self.username

@@ -206,7 +206,10 @@ class Transaction(models.Model):
     
     # M-Pesa Specific Fields
     mpesa_receipt_number = models.CharField(max_length=100, blank=True, null=True)
-    mpesa_phone_number = models.CharField(max_length=15, blank=True, null=True)
+    # 100 chars because a C2B payment's mpesa_phone_number may be the raw
+    # SHA-256 hash Safaricom sends instead of a real MSISDN (see
+    # apps.payments.services.phone_hash), not just a phone number.
+    mpesa_phone_number = models.CharField(max_length=100, blank=True, null=True)
     mpesa_transaction_date = models.DateTimeField(blank=True, null=True)
     
     # Status

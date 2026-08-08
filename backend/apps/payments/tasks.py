@@ -27,6 +27,6 @@ def cleanup_pending_payments():
     )
     
     count = timed_out_payments.update(status='timeout')
-    
+
     logger.info(f"Marked {count} payments as timed out")
     return count
