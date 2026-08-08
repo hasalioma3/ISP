@@ -168,8 +168,11 @@ class SubscriberViewSet(
     pagination_class = SubscriberPagination
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['username', 'phone_number', 'first_name', 'last_name', 'pppoe_username']
-    ordering_fields = ['account_balance', 'calculated_expiry', 'created_at', 'username']
-    ordering = ['-created_at']
+    ordering_fields = ['account_balance', 'calculated_expiry', 'created_at', 'username', 'latest_subscription_at']
+    # Default: most recently subscribed first, not most recently registered --
+    # a customer who signed up long ago but just renewed should surface
+    # above one who registered yesterday and hasn't subscribed since.
+    ordering = ['-latest_subscription_at']
 
     def get_queryset(self):
         from django.db.models import OuterRef, Subquery, CharField, Q
@@ -193,6 +196,9 @@ class SubscriberViewSet(
             calculated_expiry=Subquery(latest_active_expiry),
             current_plan_name=Subquery(latest_subscription.values('plan__name')[:1]),
             current_plan_status=Subquery(latest_subscription.values('status')[:1]),
+            latest_subscription_at=Coalesce(
+                Subquery(latest_subscription.values('created_at')[:1]), 'created_at'
+            ),
             router_name=Coalesce(
                 'pppoe_secret__router__name', 'hotspot_user__router__name',
                 output_field=CharField()

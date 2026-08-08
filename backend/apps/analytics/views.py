@@ -13,6 +13,7 @@ from apps.billing.models import Transaction, Subscription, UsageRecord, BillingP
 from apps.customers.models import Customer
 from apps.network.models import Router, ActiveSession, PPPoESecret, HotspotUser
 from apps.customers.permissions import RoleAllowed
+from apps.payments.models import C2BPayment
 
 
 def can_see_income(user):
@@ -499,4 +500,76 @@ class DataUsageView(APIView):
             },
             'top_users': results[:10],
             'users': results,
+        })
+
+
+class RecentPaymentsView(APIView):
+    """
+    Unified feed of M-Pesa payments -- STK push (Transaction) and direct
+    C2B till payments (C2BPayment) -- for the admin Payments page. Admin
+    only, not the usual admin/sales income split: this exposes raw payer
+    data (including unmatched payers' phone hashes), not just totals.
+    """
+    permission_classes = [RoleAllowed('admin')]
+
+    def get(self, request):
+        page = max(int(request.query_params.get('page', 1) or 1), 1)
+        page_size = min(int(request.query_params.get('page_size', 20) or 20), 100)
+
+        # Transaction and C2BPayment are separate tables, so they can't be
+        # ordered together in one query -- pull enough of each (already
+        # ordered, most recent first) to cover every row up to this page,
+        # merge, then paginate in Python. `count` below is a real DB count
+        # so page numbers stay accurate; only the row *content* on very deep
+        # pages beyond fetch_limit could be incomplete. Fine at this
+        # project's payment volume -- would need a real DB-side UNION if
+        # that ever changes.
+        fetch_limit = min(page * page_size, 1000)
+
+        transactions = Transaction.objects.filter(
+            payment_method='mpesa'
+        ).select_related('customer').order_by('-created_at')[:fetch_limit]
+
+        c2b_payments = C2BPayment.objects.select_related(
+            'matched_customer'
+        ).order_by('-created_at')[:fetch_limit]
+
+        rows = []
+        for t in transactions:
+            rows.append({
+                'transaction_id': t.transaction_id,
+                'customer': t.customer.username,
+                'amount': float(t.amount),
+                'method': 'stk',
+                'status': 'utilized' if t.status == 'completed' else 'open',
+                'paid_at': t.mpesa_transaction_date or t.created_at,
+            })
+        for c in c2b_payments:
+            rows.append({
+                'transaction_id': c.transaction_id,
+                # Unmatched/non-customer payers only ever get the hashed
+                # MSISDN Safaricom sent -- see apps.payments.services.phone_hash
+                # for why we never attempt to reverse it back to a real number.
+                'customer': c.matched_customer.username if c.matched_customer else c.msisdn,
+                'amount': float(c.amount),
+                'method': 'c2b',
+                'status': 'utilized' if c.status == 'activated' else 'open',
+                'paid_at': c.transaction_time or c.created_at,
+            })
+
+        rows.sort(key=lambda r: r['paid_at'], reverse=True)
+        start = (page - 1) * page_size
+        page_rows = rows[start:start + page_size]
+
+        total = (
+            Transaction.objects.filter(payment_method='mpesa').count()
+            + C2BPayment.objects.count()
+        )
+
+        return Response({
+            'results': page_rows,
+            'count': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': max((total + page_size - 1) // page_size, 1),
         })

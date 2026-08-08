@@ -2,6 +2,7 @@ from django.urls import path
 from .views import (
     DashboardStatsView, IncomeReportView, UsageReportView, UsageChartView,
     DashboardExtraView, ExpiringTodayView, RecentActivityView, DataUsageView,
+    RecentPaymentsView,
 )
 
 urlpatterns = [
@@ -13,4 +14,5 @@ urlpatterns = [
     path('data-usage/', DataUsageView.as_view(), name='data-usage'),
     path('expiring-today/', ExpiringTodayView.as_view(), name='expiring-today'),
     path('recent-activity/', RecentActivityView.as_view(), name='recent-activity'),
+    path('recent-payments/', RecentPaymentsView.as_view(), name='recent-payments'),
 ]

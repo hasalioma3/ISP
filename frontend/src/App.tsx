@@ -26,6 +26,7 @@ import MikroTikSync from './pages/admin/MikroTikSync';
 import OnlineUsers from './pages/admin/OnlineUsers';
 import BillingPlans from './pages/admin/BillingPlans';
 import DataUsage from './pages/admin/DataUsage';
+import Payments from './pages/admin/Payments';
 
 const queryClient = new QueryClient();
 
@@ -109,6 +110,7 @@ function App() {
             <Route path="subscribers" element={<Subscribers />} />
             <Route path="online-users" element={<OnlineUsers />} />
             <Route path="data-usage" element={<DataUsage />} />
+            <Route path="payments" element={<Payments />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="vouchers" element={<VoucherManager />} />

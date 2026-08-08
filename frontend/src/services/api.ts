@@ -106,6 +106,8 @@ export const analyticsAPI = {
     getExpiringToday: (page: number, pageSize?: number) =>
         api.get('/analytics/expiring-today/', { params: { page, page_size: pageSize } }),
     getRecentActivity: () => api.get('/analytics/recent-activity/'),
+    getRecentPayments: (page: number, pageSize?: number) =>
+        api.get('/analytics/recent-payments/', { params: { page, page_size: pageSize } }),
     getDataUsage: (params: {
         period?: string; date?: string; search?: string; router?: string;
         type?: string; sort?: string; limit?: number;
