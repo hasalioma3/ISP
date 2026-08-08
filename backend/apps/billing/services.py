@@ -142,3 +142,40 @@ def purchase_plan(customer, plan, payment_amount):
     customer.account_balance -= plan.price
     customer.save(update_fields=['account_balance'])
     return subscription, switch_credited, True
+
+
+class InsufficientBalance(Exception):
+    """Raised by purchase_plan_from_balance -- carries the numbers so callers can build a clear error message."""
+    def __init__(self, available, required):
+        self.available = available
+        self.required = required
+        super().__init__(f"KES {available} available, KES {required} required")
+
+
+def purchase_plan_from_balance(customer, plan):
+    """
+    Pay for `plan` entirely out of the customer's EXISTING account_balance
+    (no fresh payment involved) -- shared by the admin 'switch plan' action
+    and the customer self-service purchase/renew/upgrade flow. Works
+    equally for a first-time purchase (no active subscription yet), a
+    same-plan renewal, or a switch to a different plan.
+
+    Affordability -- including any proration credit from switching away
+    from a different active plan -- is checked BEFORE apply_subscription
+    runs: its save() synchronously triggers real network activation via a
+    signal, which can't be undone by a later rollback, so we can't "try it
+    and roll back" on insufficient funds.
+
+    Raises InsufficientBalance if the balance (plus any proration credit)
+    doesn't cover plan.price -- nothing is changed in that case. Returns
+    (subscription, credited_amount) on success.
+    """
+    _, projected_credit = preview_plan_switch(customer, plan)
+    projected_balance = customer.account_balance + projected_credit
+    if projected_balance < plan.price:
+        raise InsufficientBalance(projected_balance, plan.price)
+
+    subscription, credited = apply_subscription(customer, plan)
+    customer.account_balance -= plan.price
+    customer.save(update_fields=['account_balance'])
+    return subscription, credited

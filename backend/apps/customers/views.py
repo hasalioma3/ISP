@@ -386,19 +386,14 @@ class SubscriberViewSet(
     @action(detail=True, methods=['post'])
     def switch_plan(self, request, pk=None):
         """
-        Upgrade or downgrade this customer's active subscription for a
-        service_type, paid entirely out of their existing account_balance
-        rather than a fresh payment: any unused value on the current plan
-        is prorated and credited first, then the new plan's price is
-        deducted. Affordability is checked BEFORE anything is applied --
-        apply_subscription's save() synchronously triggers real network
-        activation via a signal, which can't be undone by a later DB
-        rollback, so we can't "try it and roll back" on insufficient funds.
+        Assign/renew/switch this customer's subscription, paid entirely out
+        of their existing account_balance rather than a fresh payment --
+        see apps.billing.services.purchase_plan_from_balance.
         """
         import random
         import string
         from apps.billing.models import BillingPlan, Transaction
-        from apps.billing.services import apply_subscription, preview_plan_switch
+        from apps.billing.services import purchase_plan_from_balance, InsufficientBalance
 
         customer = self.get_object()
         try:
@@ -412,32 +407,17 @@ class SubscriberViewSet(
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        current, projected_credit = preview_plan_switch(customer, plan)
-        if current and current.plan_id == plan.id:
-            return Response({'error': f'{customer.username} is already on {plan.name}'}, status=status.HTTP_400_BAD_REQUEST)
-
-        projected_balance = customer.account_balance + projected_credit
-        if projected_balance < plan.price:
-            return Response({
-                'error': (
-                    f"Insufficient balance: KES {projected_balance} available"
-                    + (f" (including KES {projected_credit} to be credited from the current plan)" if projected_credit else "")
-                    + f", KES {plan.price} required for {plan.name}."
-                )
-            }, status=status.HTTP_400_BAD_REQUEST)
-
         try:
-            subscription, credited = apply_subscription(customer, plan)
+            subscription, credited = purchase_plan_from_balance(customer, plan)
+        except InsufficientBalance as e:
+            return Response({
+                'error': f"Insufficient balance: KES {e.available} available, KES {e.required} required for {plan.name}."
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response(
                 {'error': f'Plan switch failed to activate on the router: {e}'},
                 status=status.HTTP_502_BAD_GATEWAY
             )
-
-        # apply_subscription already saved any prorated credit onto this
-        # same customer object -- account_balance here already reflects it.
-        customer.account_balance -= plan.price
-        customer.save(update_fields=['account_balance'])
 
         Transaction.objects.create(
             customer=customer,

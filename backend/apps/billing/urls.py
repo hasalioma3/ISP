@@ -16,6 +16,7 @@ urlpatterns = [
     path('vouchers/generate/', views.VoucherGenerationView.as_view(), name='voucher-generate'),
     path('vouchers/redeem/', views.VoucherRedeemView.as_view(), name='voucher-redeem'),
     path('manual-subscribe/', views.ManualSubscriptionView.as_view(), name='manual-subscribe'),
+    path('purchase-with-balance/', views.PurchaseWithBalanceView.as_view(), name='purchase-with-balance'),
     path('pppoe-import-template/', views.PPPoEImportTemplateView.as_view(), name='pppoe-import-template'),
     path('pppoe-import/', views.PPPoEBulkImportView.as_view(), name='pppoe-import'),
 ]

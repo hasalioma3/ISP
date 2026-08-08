@@ -1,18 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { billingAPI, paymentAPI } from '../../services/api';
+import { authAPI, billingAPI, paymentAPI } from '../../services/api';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Smartphone, CreditCard, CheckCircle, XCircle, Loader } from 'lucide-react';
+import { ArrowLeft, Smartphone, CreditCard, CheckCircle, XCircle, Loader, Wallet } from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
 
 export default function Payment() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const planId = searchParams.get('plan');
+    const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+    const updateUser = useAuthStore((state) => state.updateUser);
 
     const [phoneNumber, setPhoneNumber] = useState('');
     const [selectedPlanId, setSelectedPlanId] = useState(planId || '');
     const [loading, setLoading] = useState(false);
+    const [balanceLoading, setBalanceLoading] = useState(false);
     const [paymentRequestId, setPaymentRequestId] = useState<number | null>(null);
     const [paymentStatus, setPaymentStatus] = useState<'idle' | 'pending' | 'success' | 'failed'>('idle');
 
@@ -28,7 +32,38 @@ export default function Payment() {
         },
     });
 
+    // Fresh balance, not the persisted-store value -- it can go stale
+    // across sessions/tabs, and this is money.
+    const { data: profile } = useQuery({
+        queryKey: ['self-profile'],
+        queryFn: async () => (await authAPI.getProfile()).data,
+        enabled: isAuthenticated,
+    });
+    const accountBalance = Number(profile?.account_balance ?? 0);
+
     const selectedPlan = plans?.find((p: any) => p.id === parseInt(selectedPlanId));
+    const canPayFromBalance = isAuthenticated && !!selectedPlan && accountBalance >= Number(selectedPlan.price);
+
+    const handlePayFromBalance = async () => {
+        if (!selectedPlanId) {
+            toast.error('Please select a plan');
+            return;
+        }
+        setBalanceLoading(true);
+        try {
+            const response = await billingAPI.purchaseWithBalance(parseInt(selectedPlanId));
+            if (response.data.success) {
+                updateUser({ account_balance: response.data.account_balance });
+                setPaymentStatus('success');
+                toast.success(response.data.message || 'Plan activated');
+                setTimeout(() => navigate('/dashboard'), 2000);
+            }
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Could not pay from balance');
+        } finally {
+            setBalanceLoading(false);
+        }
+    };
 
     // Poll payment status
     useEffect(() => {
@@ -139,6 +174,49 @@ export default function Payment() {
                                         Speed: {selectedPlan.download_speed}/{selectedPlan.upload_speed} Mbps
                                     </p>
                                     <p className="text-2xl font-bold text-blue-600">KES {selectedPlan.price}</p>
+                                </div>
+                            )}
+
+                            {isAuthenticated && (
+                                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Wallet className="h-4 w-4 text-indigo-700" />
+                                        <span className="text-sm font-medium text-indigo-900">
+                                            Account Balance: KES {accountBalance.toLocaleString()}
+                                        </span>
+                                    </div>
+                                    {selectedPlan && (
+                                        canPayFromBalance ? (
+                                            <button
+                                                type="button"
+                                                onClick={handlePayFromBalance}
+                                                disabled={balanceLoading}
+                                                className="w-full mt-2 bg-indigo-600 text-white py-2.5 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                                            >
+                                                {balanceLoading ? (
+                                                    <>
+                                                        <Loader className="w-4 h-4 animate-spin" />
+                                                        Activating...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Wallet className="w-4 h-4" />
+                                                        Pay KES {selectedPlan.price} from Balance
+                                                    </>
+                                                )}
+                                            </button>
+                                        ) : (
+                                            <p className="text-xs text-indigo-700 mt-1">
+                                                Not enough balance for this plan -- top up or pay via M-Pesa below.
+                                            </p>
+                                        )
+                                    )}
+                                </div>
+                            )}
+
+                            {isAuthenticated && selectedPlan && (
+                                <div className="flex items-center gap-3 text-xs text-gray-400 font-medium">
+                                    <div className="flex-1 h-px bg-gray-200" /> OR PAY VIA M-PESA <div className="flex-1 h-px bg-gray-200" />
                                 </div>
                             )}
 

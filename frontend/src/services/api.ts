@@ -54,6 +54,7 @@ export const billingAPI = {
     updatePlan: (id: number, data: any) => api.patch(`/billing/plans/${id}/`, data),
     deletePlan: (id: number) => api.delete(`/billing/plans/${id}/`),
     getCurrentSubscription: () => api.get('/billing/subscriptions/current/'),
+    purchaseWithBalance: (planId: number) => api.post('/billing/purchase-with-balance/', { plan_id: planId }),
     getSubscriptions: () => api.get('/billing/subscriptions/'),
     getTransactions: () => api.get('/billing/transactions/'),
     getUsage: () => api.get('/billing/usage/'),

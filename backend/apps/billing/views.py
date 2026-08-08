@@ -509,6 +509,64 @@ class ManualSubscriptionView(APIView):
         return Response(response_data)
 
 
+class PurchaseWithBalanceView(APIView):
+    """
+    Self-service counterpart to SubscriberViewSet.switch_plan (admin-only):
+    a logged-in customer buys/renews/upgrades/downgrades their own
+    subscription paid entirely out of their own account_balance, with no
+    M-Pesa STK push involved -- see apps.billing.services.purchase_plan_from_balance.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        import random
+        import string
+        from apps.billing.services import purchase_plan_from_balance, InsufficientBalance
+
+        customer = request.user
+        try:
+            plan = BillingPlan.objects.get(id=request.data.get('plan_id'), is_active=True)
+        except (BillingPlan.DoesNotExist, TypeError, ValueError):
+            return Response({'error': 'Invalid plan ID'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if plan.service_type == 'static':
+            return Response(
+                {'error': 'This plan requires setup by our team. Please contact support.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            subscription, credited = purchase_plan_from_balance(customer, plan)
+        except InsufficientBalance as e:
+            return Response({
+                'error': f"Insufficient balance: KES {e.available} available, KES {e.required} required for {plan.name}."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response(
+                {'error': f'Could not activate this plan: {e}'},
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+
+        Transaction.objects.create(
+            customer=customer,
+            subscription=subscription,
+            transaction_id='SELFBAL-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=10)),
+            amount=plan.price,
+            payment_method='balance',
+            status='completed',
+            notes=(
+                f"Self-service purchase from balance"
+                + (f" (KES {credited} credited from previous plan)" if credited else "")
+            ),
+        )
+
+        return Response({
+            'success': True,
+            'message': f'You are now on {plan.name}',
+            'account_balance': customer.account_balance,
+        })
+
+
 class PPPoEImportTemplateView(APIView):
     """Downloadable CSV template for bulk-importing PPPoE customers."""
     permission_classes = [RoleAllowed('admin', 'sales')]
