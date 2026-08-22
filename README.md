@@ -12,6 +12,7 @@ A comprehensive ISP automation system with real-time M-Pesa payments, automated 
 - **Network Access Control**: Automatic activation/suspension based on payment status
 - **Background Tasks**: Celery tasks for expiry checking and payment cleanup
 - **RADIUS Support**: Optional RADIUS integration for authentication
+- **Notifications**: SMS (Africa's Talking/Twilio), WhatsApp (Meta Cloud API/Twilio) and Telegram alerts for customers and admins
 
 ### Frontend (React + Vite)
 - **Customer Portal**: Dashboard, subscription status, payment interface
@@ -119,6 +120,58 @@ MIKROTIK_PASSWORD=jazino
 MIKROTIK_PORT=8728
 ```
 
+
+### Notifications Configuration (SMS / WhatsApp / Telegram)
+
+Customers are notified on: welcome/registration, payment received, payment
+failed, subscription expiring soon (default 24h before, hourly Celery Beat
+check), and subscription expired/suspended. Admins (staff users with role
+`admin`, plus any extra recipients configured in `.env`) are notified on:
+new registration, payment received, and a summary when subscriptions expire.
+Every send is recorded in **Django admin → Notification Logs** with status
+and provider error, and failed sends can be re-queued from there. An admin
+test endpoint is available: `POST /api/notifications/test/` with
+`{"channel": "sms|whatsapp|telegram", "recipient": "...", "message": "..."}`.
+
+Each channel is off until you enable it in `.env`:
+
+```env
+# Master switches
+NOTIFY_SMS_ENABLED=True
+NOTIFY_WHATSAPP_ENABLED=True
+NOTIFY_TELEGRAM_ENABLED=True
+
+# SMS via Africa's Talking (or SMS_PROVIDER=twilio)
+SMS_PROVIDER=africastalking
+AFRICASTALKING_USERNAME=your_username     # 'sandbox' for testing
+AFRICASTALKING_API_KEY=your_api_key
+AFRICASTALKING_SENDER_ID=YOURBRAND        # optional
+
+# WhatsApp via Meta WhatsApp Cloud API (or WHATSAPP_PROVIDER=twilio)
+WHATSAPP_PROVIDER=meta
+WHATSAPP_ACCESS_TOKEN=your_meta_access_token
+WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id
+
+# Telegram bot (create one with @BotFather)
+TELEGRAM_BOT_TOKEN=123456:ABC...
+TELEGRAM_WEBHOOK_SECRET=any-random-string
+
+# Extra admin recipients beyond staff admins' phone numbers
+ADMIN_NOTIFY_PHONES=+2547XXXXXXXX
+ADMIN_TELEGRAM_CHAT_IDS=123456789
+```
+
+**Telegram linking**: register the webhook once —
+`https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<your-domain>/api/notifications/telegram/webhook/&secret_token=<TELEGRAM_WEBHOOK_SECRET>`
+— then customers link their account by messaging the bot
+`/start <username or phone>`. Admins can get their own chat ID the same way
+(it is logged) or via @userinfobot.
+
+**WhatsApp caveat**: with the Meta Cloud API, free-form text messages are
+only delivered within 24 hours of the customer last messaging your WhatsApp
+number. For alerts outside that window Meta requires pre-approved template
+messages — either have customers send one opt-in message to your number, or
+use `WHATSAPP_PROVIDER=twilio` and configure Twilio content templates.
 
 ## 📊 System Flow
 

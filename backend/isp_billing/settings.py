@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'apps.network',
     'apps.analytics',
     'apps.sitesettings',
+    'apps.notifications',
 ]
 
 if DEBUG:
@@ -243,6 +244,52 @@ MIKROTIK_WALLED_GARDEN_HOSTS = [
 # adding/provisioning a router -- set this per environment (a LAN IP while
 # testing, the real domain once one is actually deployed and reachable).
 CAPTIVE_PORTAL_URL = config('CAPTIVE_PORTAL_URL', default='')
+
+# ---------------------------------------------------------------------------
+# Notifications (SMS / WhatsApp / Telegram)
+# ---------------------------------------------------------------------------
+# Master switches -- a channel that is disabled here is never used, no matter
+# what per-customer preferences say.
+NOTIFY_SMS_ENABLED = config('NOTIFY_SMS_ENABLED', default=False, cast=bool)
+NOTIFY_WHATSAPP_ENABLED = config('NOTIFY_WHATSAPP_ENABLED', default=False, cast=bool)
+NOTIFY_TELEGRAM_ENABLED = config('NOTIFY_TELEGRAM_ENABLED', default=False, cast=bool)
+
+# Used to normalize local numbers (07XX...) to E.164 (+2547XX...)
+NOTIFY_DEFAULT_COUNTRY_CODE = config('NOTIFY_DEFAULT_COUNTRY_CODE', default='254')
+
+# Customers get a renewal reminder this many hours before expiry
+NOTIFY_EXPIRY_REMINDER_HOURS = config('NOTIFY_EXPIRY_REMINDER_HOURS', default=24, cast=int)
+
+# SMS: 'africastalking' or 'twilio'
+SMS_PROVIDER = config('SMS_PROVIDER', default='africastalking')
+AFRICASTALKING_USERNAME = config('AFRICASTALKING_USERNAME', default='')
+AFRICASTALKING_API_KEY = config('AFRICASTALKING_API_KEY', default='')
+AFRICASTALKING_SENDER_ID = config('AFRICASTALKING_SENDER_ID', default='')
+
+# Twilio (used when SMS_PROVIDER/WHATSAPP_PROVIDER is 'twilio')
+TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
+TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
+TWILIO_SMS_FROM = config('TWILIO_SMS_FROM', default='')
+TWILIO_WHATSAPP_FROM = config('TWILIO_WHATSAPP_FROM', default='')
+
+# WhatsApp: 'meta' (WhatsApp Cloud API) or 'twilio'
+WHATSAPP_PROVIDER = config('WHATSAPP_PROVIDER', default='meta')
+WHATSAPP_ACCESS_TOKEN = config('WHATSAPP_ACCESS_TOKEN', default='')
+WHATSAPP_PHONE_NUMBER_ID = config('WHATSAPP_PHONE_NUMBER_ID', default='')
+WHATSAPP_API_VERSION = config('WHATSAPP_API_VERSION', default='v19.0')
+
+# Telegram bot
+TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
+TELEGRAM_WEBHOOK_SECRET = config('TELEGRAM_WEBHOOK_SECRET', default='')
+
+# Admin recipients: staff users with role=admin are notified on their
+# phone_number automatically; these add extra recipients on top.
+ADMIN_NOTIFY_PHONES = [
+    p.strip() for p in config('ADMIN_NOTIFY_PHONES', default='').split(',') if p.strip()
+]
+ADMIN_TELEGRAM_CHAT_IDS = [
+    c.strip() for c in config('ADMIN_TELEGRAM_CHAT_IDS', default='').split(',') if c.strip()
+]
 
 # RADIUS Configuration (Optional)
 RADIUS_SERVER = config('RADIUS_SERVER', default='127.0.0.1')

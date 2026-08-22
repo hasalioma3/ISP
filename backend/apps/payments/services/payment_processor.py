@@ -10,6 +10,7 @@ from django.db import transaction as db_transaction
 from apps.payments.models import PaymentRequest, PaymentCallback
 from apps.billing.models import Transaction, Subscription
 from apps.network.services.network_automation import network_automation
+from apps.notifications.services import notify_customer, notify_admins
 
 logger = logging.getLogger('mpesa')
 
@@ -84,7 +85,11 @@ class PaymentProcessor:
                 # Payment failed
                 payment_request.status = 'failed'
                 payment_request.save()
-                
+
+                notify_customer(payment_request.customer, 'payment_failed', {
+                    'reason': result_desc or 'the payment was not completed',
+                })
+
                 logger.warning(f"Payment failed: {merchant_request_id}, reason: {result_desc}")
                 return {
                     'success': False,
@@ -202,6 +207,19 @@ class PaymentProcessor:
             logger.error(f"Failed to activate network for {customer.username}: {str(e)}")
             # Don't fail the payment processing if network activation fails
             # This can be retried manually
+
+        # Notify the customer and the admin team (never blocks the payment flow)
+        payment_context = {
+            'amount': payment_callback.amount,
+            'currency': 'KES',
+            'receipt': payment_callback.mpesa_receipt_number or transaction.transaction_id,
+            'plan': plan.name,
+            'expiry': timezone.localtime(subscription.expiry_date).strftime('%d %b %Y %H:%M'),
+            'phone': customer.phone_number,
+            '_customer': customer,
+        }
+        notify_customer(customer, 'payment_received', payment_context)
+        notify_admins('payment_received', payment_context)
     
     def _parse_mpesa_date(self, date_value):
         """

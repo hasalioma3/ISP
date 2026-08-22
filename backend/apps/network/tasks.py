@@ -269,25 +269,39 @@ def check_expired_subscriptions():
             expiry_date__lte=timezone.now()
         )
         
+        from apps.notifications.services import notify_customer, notify_admins
+
         count = 0
+        suspended_names = []
         for sub in expired_subs:
             logger.info(f"Suspending expired subscription for {sub.customer.username}")
-            
+
             # 1. Update DB Status
             sub.status = 'expired'
             sub.save()
-            
+
             # 2. Trigger Network Suspension
-            # Handled by the Subscription signal we just added? 
+            # Handled by the Subscription signal we just added?
             # SIGNAL CHECK: We added a signal that calls suspend_customer if status is 'expired'.
             # So sub.save() above should trigger the signal.
-            
+
             # Use manual trigger just in case signal fails or to be explicit?
             # Signal is cleaner, but let's trust the signal for now since we just verified/added it.
             # Wait, signals run synchronously in save(). So it will run.
-            
+
+            # 3. Tell the customer why they just went offline
+            notify_customer(sub.customer, 'subscription_expired', {'plan': sub.plan.name})
+            suspended_names.append(sub.customer.username)
+
             count += 1
-            
+
+        if count:
+            # One summary to the admin team instead of one message per customer
+            notify_admins('subscription_expired', {
+                'count': count,
+                'customers': ', '.join(suspended_names[:20]) + ('...' if count > 20 else ''),
+            })
+
         logger.info(f"Expiration check completed. Suspended {count} subscriptions.")
         return count
         

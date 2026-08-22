@@ -15,6 +15,7 @@ urlpatterns = [
     path('api/analytics/', include('apps.analytics.urls')),
     path('api/network/', include('apps.network.urls')),
     path('api/settings/', include('apps.sitesettings.urls')),
+    path('api/notifications/', include('apps.notifications.urls')),
 ]
 
 # Debug toolbar (development only)

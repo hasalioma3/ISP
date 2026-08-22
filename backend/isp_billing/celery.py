@@ -30,6 +30,10 @@ app.conf.beat_schedule = {
         'task': 'apps.network.tasks.collect_usage_statistics',
         'schedule': crontab(minute='*/5'),  # Run every 5 minutes
     },
+    'send-expiry-reminders': {
+        'task': 'apps.notifications.tasks.send_expiry_reminders',
+        'schedule': crontab(minute=15),  # Run hourly at :15
+    },
 }
 
 @app.task(bind=True)

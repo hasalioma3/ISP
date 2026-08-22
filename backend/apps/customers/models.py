@@ -67,6 +67,13 @@ class Customer(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    # Notification preferences. SMS/WhatsApp use phone_number; Telegram needs
+    # the chat ID captured by the bot webhook (see apps.notifications.views).
+    telegram_chat_id = models.CharField(max_length=32, blank=True, default='')
+    notify_sms = models.BooleanField(default=True)
+    notify_whatsapp = models.BooleanField(default=True)
+    notify_telegram = models.BooleanField(default=True)
+
     # Metadata
     notes = models.TextField(blank=True)
     is_verified = models.BooleanField(default=False)

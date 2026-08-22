@@ -57,7 +57,8 @@ class CustomerSerializer(serializers.ModelSerializer):
                   'pppoe_username', 'hotspot_username', 'hotspot_mac_address', 'static_ip_address',
                   'address', 'id_number', 'notes', 'created_at', 'is_staff', 'is_superuser',
                   'role', 'calculated_expiry', 'current_plan_name', 'current_plan_status',
-                  'router_name', 'last_ip']
+                  'router_name', 'last_ip',
+                  'telegram_chat_id', 'notify_sms', 'notify_whatsapp', 'notify_telegram']
         read_only_fields = ['id', 'status', 'account_balance', 'is_verified', 'created_at', 'is_staff', 'is_superuser']
 
 class StaffSerializer(serializers.ModelSerializer):

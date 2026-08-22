@@ -18,7 +18,18 @@ def register(request):
     serializer = CustomerRegistrationSerializer(data=request.data)
     if serializer.is_valid():
         customer = serializer.save()
-        
+
+        # Welcome the customer and alert the admin team (fire-and-forget)
+        from apps.notifications.services import notify_customer, notify_admins
+        notify_customer(customer, 'welcome')
+        notify_admins('new_registration', {
+            'name': customer.full_name,
+            'username': customer.username,
+            'phone': customer.phone_number,
+            'service_type': customer.get_service_type_display(),
+            '_customer': customer,
+        })
+
         # Generate JWT tokens
         refresh = RefreshToken.for_user(customer)
         
