@@ -20,6 +20,7 @@ import {
     UserCog,
     KeyRound,
     CreditCard,
+    Activity,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useSiteSettings } from '../hooks/useSiteSettings';
@@ -46,6 +47,7 @@ export default function AdminLayout() {
         { name: 'Subscribers', href: '/admin/subscribers', icon: Users },
         { name: 'Online Users', href: '/admin/online-users', icon: Radio, roles: ['admin', 'technician'] },
         { name: 'Data Usage', href: '/admin/data-usage', icon: Database },
+        { name: 'Network Ops', href: '/admin/network-ops', icon: Activity, roles: ['admin', 'technician'] },
         { name: 'Payments', href: '/admin/payments', icon: CreditCard, roles: ['admin'] },
         { name: 'Reports', href: '/admin/reports', icon: BarChart, roles: ['admin', 'sales'] },
         { name: 'Vouchers', href: '/admin/vouchers', icon: Ticket, roles: ['admin', 'sales'] },

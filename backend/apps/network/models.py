@@ -34,6 +34,14 @@ class Router(models.Model):
     )
     dns_servers = models.CharField(max_length=100, default='8.8.8.8,8.8.4.4')
 
+    # Optional -- lets the Router Bandwidth Trend report (apps.analytics)
+    # show headroom % against actual usage. Left blank, the report still
+    # shows raw usage trend, just without a capacity comparison.
+    uplink_mbps = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Optional: this router's uplink capacity in Mbps, for headroom % in the Router Bandwidth Trend report."
+    )
+
     # External captive portal (the React app's /portal page) that this
     # router's Hotspot login.html redirects unauthenticated clients to,
     # passing along MAC/login-link so the portal can log them back in.

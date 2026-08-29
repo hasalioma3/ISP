@@ -49,6 +49,7 @@ const emptyForm = {
     pppoe_subnet: '10.5.60.0/24',
     dns_servers: '8.8.8.8,8.8.4.4',
     portal_url: DEFAULT_PORTAL_URL,
+    uplink_mbps: '',
     location: '',
     notes: '',
     is_active: true,
@@ -147,6 +148,7 @@ export default function MikroTikSync() {
             pppoe_subnet: router.pppoe_subnet ?? '10.5.60.0/24',
             dns_servers: router.dns_servers ?? '8.8.8.8,8.8.4.4',
             portal_url: router.portal_url ?? DEFAULT_PORTAL_URL,
+            uplink_mbps: router.uplink_mbps != null ? String(router.uplink_mbps) : '',
             location: router.location ?? '',
             notes: router.notes ?? '',
             is_active: router.is_active ?? true,
@@ -186,6 +188,7 @@ export default function MikroTikSync() {
         setFormSaving(true);
         try {
             const payload: any = { ...formData };
+            payload.uplink_mbps = formData.uplink_mbps === '' ? null : Number(formData.uplink_mbps);
             if (editingId && !payload.password) {
                 delete payload.password; // keep existing password on edit if left blank
             }
@@ -410,6 +413,14 @@ export default function MikroTikSync() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">DNS Servers</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.dns_servers}
                                         onChange={(e) => setFormData({ ...formData, dns_servers: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Uplink Capacity (Mbps)</label>
+                                    <input type="number" min="1" placeholder="e.g. 100" className="w-full border rounded px-3 py-2 text-sm" value={formData.uplink_mbps}
+                                        onChange={(e) => setFormData({ ...formData, uplink_mbps: e.target.value })} />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Optional -- enables headroom % on the Network Ops bandwidth trend report.
+                                    </p>
                                 </div>
                                 <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Captive Portal URL</label>

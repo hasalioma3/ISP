@@ -30,6 +30,10 @@ app.conf.beat_schedule = {
         'task': 'apps.network.tasks.collect_usage_statistics',
         'schedule': crontab(minute='*'),  # Run every minute
     },
+    'send-expiry-reminders': {
+        'task': 'apps.notifications.tasks.send_expiry_reminders',
+        'schedule': crontab(hour=8, minute=0),  # Once daily -- covers both the 3-day and day-of stages
+    },
 }
 
 @app.task(bind=True)

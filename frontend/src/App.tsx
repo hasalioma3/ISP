@@ -27,6 +27,7 @@ import OnlineUsers from './pages/admin/OnlineUsers';
 import BillingPlans from './pages/admin/BillingPlans';
 import DataUsage from './pages/admin/DataUsage';
 import Payments from './pages/admin/Payments';
+import NetworkOps from './pages/admin/NetworkOps';
 
 const queryClient = new QueryClient();
 
@@ -110,6 +111,7 @@ function App() {
             <Route path="subscribers" element={<Subscribers />} />
             <Route path="online-users" element={<OnlineUsers />} />
             <Route path="data-usage" element={<DataUsage />} />
+            <Route path="network-ops" element={<NetworkOps />} />
             <Route path="payments" element={<Payments />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />

@@ -14,6 +14,7 @@ from apps.customers.models import Customer
 from apps.network.models import Router, ActiveSession, PPPoESecret, HotspotUser
 from apps.customers.permissions import RoleAllowed
 from apps.payments.models import C2BPayment
+from apps.analytics.utils import report_window
 
 
 def can_see_income(user):
@@ -387,26 +388,6 @@ class DataUsageView(APIView):
     """
     permission_classes = [permissions.IsAdminUser]
 
-    def _window(self, period, ref_date):
-        if period == 'weekly':
-            start = ref_date - dt.timedelta(days=ref_date.weekday())
-            end = start + dt.timedelta(days=6)
-            prev_start = start - dt.timedelta(days=7)
-            prev_end = start - dt.timedelta(days=1)
-        elif period == 'monthly':
-            start = ref_date.replace(day=1)
-            if start.month == 12:
-                end = start.replace(year=start.year + 1, month=1, day=1) - dt.timedelta(days=1)
-            else:
-                end = start.replace(month=start.month + 1, day=1) - dt.timedelta(days=1)
-            prev_month_end = start - dt.timedelta(days=1)
-            prev_start = prev_month_end.replace(day=1)
-            prev_end = prev_month_end
-        else:  # daily
-            start = end = ref_date
-            prev_start = prev_end = ref_date - dt.timedelta(days=1)
-        return start, end, prev_start, prev_end
-
     def get(self, request):
         period = request.query_params.get('period', 'daily')
         date_str = request.query_params.get('date')
@@ -422,7 +403,7 @@ class DataUsageView(APIView):
         except ValueError:
             ref_date = timezone.now().date()
 
-        start, end, prev_start, prev_end = self._window(period, ref_date)
+        start, end, prev_start, prev_end = report_window(period, ref_date)
 
         qs = UsageRecord.objects.filter(created_at__date__gte=start, created_at__date__lte=end)
         if search:
@@ -576,4 +557,131 @@ class RecentPaymentsView(APIView):
             'page': page,
             'page_size': page_size,
             'total_pages': max((total + page_size - 1) // page_size, 1),
+        })
+
+
+class RouterBandwidthTrendView(APIView):
+    """
+    Per-router bandwidth usage trend, for the admin Network Ops page.
+
+    CAVEAT (also returned in the response so the frontend renders it
+    visibly, not just here as a code comment): UsageRecord has no direct
+    Router FK -- only via the customer's CURRENT PPPoESecret/HotspotUser.router
+    (both apps.network.models). A customer who has since switched routers
+    will have their historical usage attributed to their new router, not
+    the one actually carrying that traffic at the time. Fine for the common
+    case (customers rarely change routers), but not exact.
+    """
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        router_id = request.query_params.get('router')
+        if not router_id:
+            return Response({'error': 'router is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        router = Router.objects.filter(id=router_id).first()
+        if not router:
+            return Response({'error': 'Router not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        period = request.query_params.get('period', 'daily')
+        date_str = request.query_params.get('date')
+        try:
+            ref_date = dt.date.fromisoformat(date_str) if date_str else timezone.now().date()
+        except ValueError:
+            ref_date = timezone.now().date()
+
+        start, end, _, _ = report_window(period, ref_date)
+
+        customer_ids = set(PPPoESecret.objects.filter(router=router).values_list('customer_id', flat=True))
+        customer_ids |= set(HotspotUser.objects.filter(router=router).values_list('customer_id', flat=True))
+
+        daily = UsageRecord.objects.filter(
+            customer_id__in=customer_ids, created_at__date__gte=start, created_at__date__lte=end
+        ).annotate(date=TruncDate('created_at')).values('date').annotate(
+            up=Sum('upload_bytes'), down=Sum('download_bytes')
+        ).order_by('date')
+
+        series = []
+        peak_mbps = 0
+        for row in daily:
+            day_bytes = (row['up'] or 0) + (row['down'] or 0)
+            # bits/day -> Mbps (decimal, matching how BillingPlan.download_speed is stated)
+            avg_mbps = round(day_bytes * 8 / 1_000_000 / 86400, 2)
+            peak_mbps = max(peak_mbps, avg_mbps)
+
+            entry = {'date': row['date'].isoformat(), 'avg_mbps': avg_mbps}
+            if router.uplink_mbps:
+                if avg_mbps >= router.uplink_mbps:
+                    entry['headroom_pct'] = 0
+                    entry['over_capacity'] = True
+                else:
+                    entry['headroom_pct'] = round((1 - avg_mbps / router.uplink_mbps) * 100, 1)
+            series.append(entry)
+
+        return Response({
+            'router': {'id': router.id, 'name': router.name, 'uplink_mbps': router.uplink_mbps},
+            'period': period,
+            'start': start,
+            'end': end,
+            'series': series,
+            'peak_mbps': peak_mbps,
+            'caveat': (
+                "Attribution is based on each customer's CURRENT router assignment, applied "
+                "retroactively -- historical usage for a customer who has since switched "
+                "routers will show under their new router, not the one they actually used "
+                "at the time."
+            ),
+        })
+
+
+class ChurnForecastView(APIView):
+    """
+    Subscriptions expiring soon + a renewal-rate metric, for the admin
+    Network Ops page. Admin/sales only, like IncomeReportView -- this is a
+    revenue-retention metric, not operational capacity data.
+    """
+    permission_classes = [RoleAllowed('admin', 'sales')]
+
+    def get(self, request):
+        days = min(max(int(request.query_params.get('days', 30) or 30), 1), 90)
+        today = timezone.now().date()
+        end_date = today + timedelta(days=days)
+
+        expiring_qs = Subscription.objects.filter(
+            status='active', expiry_date__date__gte=today, expiry_date__date__lte=end_date
+        ).select_related('customer', 'plan').order_by('expiry_date')
+
+        expiring = [
+            {
+                'username': s.customer.username,
+                'plan': s.plan.name,
+                'expires_on': s.expiry_date,
+                'days_left': (s.expiry_date.date() - today).days,
+            }
+            for s in expiring_qs
+        ]
+
+        # Of subscriptions that lapsed more than `days` ago (long enough to
+        # have had a real chance to renew by now), what fraction of those
+        # customers have a newer Subscription since. O(N) .exists() calls --
+        # fine at this WISP's data volume (hundreds-low thousands of
+        # subscriptions); rewrite with Exists/OuterRef as a single query if
+        # this ever needs to run over 10k+ lapsed subscriptions.
+        cutoff = timezone.now() - timedelta(days=days)
+        lapsed = list(Subscription.objects.filter(expiry_date__lt=cutoff).select_related('customer'))
+        renewed_count = sum(
+            1 for sub in lapsed
+            if Subscription.objects.filter(customer=sub.customer, created_at__gt=sub.expiry_date).exists()
+        )
+        lapsed_count = len(lapsed)
+
+        return Response({
+            'days': days,
+            'expiring': expiring,
+            'expiring_count': len(expiring),
+            'renewal_rate': {
+                'lapsed_count': lapsed_count,
+                'renewed_count': renewed_count,
+                'renewal_rate_pct': round(renewed_count / lapsed_count * 100, 1) if lapsed_count else None,
+            },
         })

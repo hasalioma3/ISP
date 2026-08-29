@@ -14,6 +14,7 @@ from apps.billing.services import purchase_plan
 from apps.customers.models import Customer
 from apps.network.services.network_automation import network_automation
 from apps.payments.services.phone_hash import is_msisdn_hash
+from apps.notifications.tasks import send_payment_confirmation_sms
 
 logger = logging.getLogger('mpesa')
 
@@ -142,6 +143,14 @@ class PaymentProcessor:
                 f"STK payment for {customer.username} credited KES {payment_callback.amount} to balance "
                 f"but didn't cover {plan.name} (KES {plan.price}) -- left unapplied, balance={customer.account_balance}"
             )
+            # SMS deferred to on_commit -- this whole method runs inside the
+            # atomic() block opened by process_callback, so a worker must
+            # never pick this up before the balance credit is committed.
+            db_transaction.on_commit(
+                lambda: send_payment_confirmation_sms.delay(
+                    customer.id, 'balance_credit', str(payment_callback.amount), None
+                )
+            )
 
         # Link transaction to subscription (if the plan was actually applied)
         transaction.subscription = subscription
@@ -167,7 +176,13 @@ class PaymentProcessor:
                 logger.error(f"Failed to activate network for {customer.username}: {str(e)}")
                 # Don't fail the payment processing if network activation fails --
                 # this can be retried manually
-    
+
+            db_transaction.on_commit(
+                lambda: send_payment_confirmation_sms.delay(
+                    customer.id, 'payment_confirmation', str(payment_callback.amount), subscription.id
+                )
+            )
+
     def process_c2b_confirmation(self, data):
         """
         Process a Safaricom C2B Confirmation callback -- a customer paid the
@@ -282,6 +297,10 @@ class PaymentProcessor:
                 payment.notes = f"Matched {customer.username}; KES {amount} credited to balance (no plan costs this amount)"
                 payment.save(update_fields=['linked_transaction', 'status', 'notes'])
 
+                db_transaction.on_commit(
+                    lambda: send_payment_confirmation_sms.delay(customer.id, 'balance_credit', str(amount), None)
+                )
+
             logger.info(f"C2B payment {trans_id}: KES {amount} credited to {customer.username}'s balance, no plan matched")
             return {'success': True, 'message': 'Recorded, credited to balance', 'payment': payment}
 
@@ -321,9 +340,17 @@ class PaymentProcessor:
                     customer.status = 'active'
                     customer.save()
                     payment.status = 'activated'
+                    db_transaction.on_commit(
+                        lambda: send_payment_confirmation_sms.delay(
+                            customer.id, 'payment_confirmation', str(amount), subscription.id
+                        )
+                    )
                 else:
                     payment.status = 'matched_no_plan'
                     payment.notes = f"Matched {customer.username}; KES {amount} credited to balance but didn't cover {plan.name}"
+                    db_transaction.on_commit(
+                        lambda: send_payment_confirmation_sms.delay(customer.id, 'balance_credit', str(amount), None)
+                    )
                 payment.save()
         except Exception as e:
             payment.status = 'error'

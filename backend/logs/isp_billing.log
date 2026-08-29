@@ -27278,3 +27278,14 @@ INFO 2026-08-08 16:31:00,009 tasks Starting usage statistics collection...
 INFO 2026-08-08 16:31:00,010 tasks Expiration check completed. Suspended 0 subscriptions.
 WARNING 2026-08-08 16:31:00,397 tasks Usage collection: Customer not found for huawei
 INFO 2026-08-08 16:31:00,400 tasks Usage statistics collection completed. 0 sessions updated.
+INFO 2026-08-29 19:01:41,887 payment_processor Processing callback for HM1, result: 0
+INFO 2026-08-29 19:01:41,893 payment_processor Network access activated for test_hook_user
+INFO 2026-08-29 19:01:41,893 payment_processor Payment processed successfully: HM1
+ERROR 2026-08-29 19:06:01,130 mikrotik_service Failed to update PPPoE secret test_netops_c2: timed out
+ERROR 2026-08-29 19:06:16,132 mikrotik_service Failed to disconnect PPPoE session test_netops_c2: timed out
+ERROR 2026-08-29 19:06:16,133 network_automation Suspend customer test_netops_c2 errors: ['PPPoE Disable: timed out', 'PPPoE Disconnect: timed out']
+ERROR 2026-08-29 19:06:16,133 signals Failed to suspend test_netops_c2 on expiry: PPPoE Disable: timed out, PPPoE Disconnect: timed out
+ERROR 2026-08-29 19:06:31,139 mikrotik_service Failed to update PPPoE secret test_netops_c3: timed out
+ERROR 2026-08-29 19:06:46,140 mikrotik_service Failed to disconnect PPPoE session test_netops_c3: timed out
+ERROR 2026-08-29 19:06:46,141 network_automation Suspend customer test_netops_c3 errors: ['PPPoE Disable: timed out', 'PPPoE Disconnect: timed out']
+ERROR 2026-08-29 19:06:46,141 signals Failed to suspend test_netops_c3 on expiry: PPPoE Disable: timed out, PPPoE Disconnect: timed out

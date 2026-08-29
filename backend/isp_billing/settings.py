@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'apps.customers',
     'apps.billing',
     'apps.payments',
+    'apps.notifications',
     'apps.network',
     'apps.analytics',
     'apps.sitesettings',
@@ -229,6 +230,21 @@ if MPESA_ENVIRONMENT == 'production':
     MPESA_BASE_URL = 'https://api.safaricom.co.ke'
 else:
     MPESA_BASE_URL = 'https://sandbox.safaricom.co.ke'
+
+# Africa's Talking SMS Configuration
+AFRICASTALKING_ENVIRONMENT = config('AFRICASTALKING_ENVIRONMENT', default='sandbox')
+# Sandbox apps are always literally named "sandbox" regardless of your real
+# AT account username -- set AFRICASTALKING_USERNAME=sandbox when testing.
+AFRICASTALKING_USERNAME = config('AFRICASTALKING_USERNAME', default='sandbox')
+AFRICASTALKING_API_KEY = config('AFRICASTALKING_API_KEY', default='')
+# Optional alphanumeric Sender ID registered with AT -- omitted from the
+# request entirely when blank, so AT falls back to its shared shortcode.
+AFRICASTALKING_SENDER_ID = config('AFRICASTALKING_SENDER_ID', default='')
+
+if AFRICASTALKING_ENVIRONMENT == 'production':
+    AFRICASTALKING_BASE_URL = 'https://api.africastalking.com'
+else:
+    AFRICASTALKING_BASE_URL = 'https://api.sandbox.africastalking.com'
 
 # MikroTik Configuration
 MIKROTIK_HOST = config('MIKROTIK_HOST', default='192.168.88.1')

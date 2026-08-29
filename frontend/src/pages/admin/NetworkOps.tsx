@@ -1,0 +1,205 @@
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+} from 'recharts';
+import { analyticsAPI, adminAPI } from '../../services/api';
+import { Activity, Calendar, Gauge, TrendingDown, Users2 } from 'lucide-react';
+import { format } from 'date-fns';
+import { useAuthStore } from '../../store/authStore';
+
+const PERIODS = [
+    { key: 'daily', label: 'Daily' },
+    { key: 'weekly', label: 'Weekly' },
+    { key: 'monthly', label: 'Monthly' },
+] as const;
+
+const CHURN_WINDOWS = [7, 14, 30] as const;
+
+export default function NetworkOps() {
+    const user = useAuthStore((state) => state.user);
+    const canSeeChurn = !!user?.is_superuser || user?.role === 'admin' || user?.role === 'sales';
+
+    const [routerId, setRouterId] = useState('');
+    const [period, setPeriod] = useState<typeof PERIODS[number]['key']>('daily');
+    const [date] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [churnDays, setChurnDays] = useState<typeof CHURN_WINDOWS[number]>(30);
+
+    const { data: routers } = useQuery({
+        queryKey: ['routers'],
+        queryFn: async () => {
+            const res = await adminAPI.getRouters();
+            return res.data.results || res.data;
+        },
+    });
+
+    const { data: trend, isLoading: trendLoading } = useQuery({
+        queryKey: ['router-bandwidth-trend', routerId, period, date],
+        queryFn: async () => {
+            const res = await analyticsAPI.getRouterBandwidthTrend({ router: Number(routerId), period, date });
+            return res.data;
+        },
+        enabled: !!routerId,
+    });
+
+    const { data: churn, isLoading: churnLoading } = useQuery({
+        queryKey: ['churn-forecast', churnDays],
+        queryFn: async () => {
+            const res = await analyticsAPI.getChurnForecast(churnDays);
+            return res.data;
+        },
+        enabled: canSeeChurn,
+    });
+
+    return (
+        <div className="space-y-6">
+            <h1 className="text-2xl font-bold">Network Ops</h1>
+
+            {/* Router Bandwidth Trend */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="bg-blue-600 px-6 py-4 flex items-center text-white font-bold">
+                    <Activity className="h-5 w-5 mr-2" /> Router Bandwidth Trend
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 p-6 border-b">
+                    <select
+                        value={routerId}
+                        onChange={(e) => setRouterId(e.target.value)}
+                        className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="">Select a router...</option>
+                        {routers?.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                    </select>
+                    <div className="flex border rounded-lg overflow-hidden">
+                        {PERIODS.map((p) => (
+                            <button
+                                key={p.key}
+                                onClick={() => setPeriod(p.key)}
+                                className={`flex items-center px-3 py-2 text-sm font-medium transition-colors ${period === p.key
+                                    ? 'bg-blue-50 text-blue-600'
+                                    : 'text-gray-500 hover:bg-gray-50'
+                                    }`}
+                            >
+                                <Calendar className="h-3.5 w-3.5 mr-1.5" /> {p.label}
+                            </button>
+                        ))}
+                    </div>
+                    {trend?.router && (
+                        <span className="text-sm text-gray-500">
+                            Peak: <strong className="text-gray-900">{trend.peak_mbps} Mbps</strong>
+                            {trend.router.uplink_mbps ? ` of ${trend.router.uplink_mbps} Mbps capacity` : ' (no capacity set)'}
+                        </span>
+                    )}
+                </div>
+
+                <div className="p-6">
+                    {!routerId ? (
+                        <div className="h-72 flex items-center justify-center text-gray-400 text-sm">
+                            Select a router to see its bandwidth trend.
+                        </div>
+                    ) : trendLoading ? (
+                        <div className="h-72 flex items-center justify-center text-gray-400 text-sm">Loading...</div>
+                    ) : (trend?.series?.length ?? 0) === 0 ? (
+                        <div className="h-72 flex items-center justify-center text-gray-400 text-sm">No usage recorded for this period.</div>
+                    ) : (
+                        <div className="h-72">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={trend.series} margin={{ left: 0, right: 10 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v} Mbps`} />
+                                    <Tooltip formatter={(v: number) => `${v} Mbps`} />
+                                    <Area type="monotone" dataKey="avg_mbps" stroke="#3b82f6" fill="#93c5fd" name="Avg Mbps" />
+                                    {trend.router?.uplink_mbps && (
+                                        <ReferenceLine
+                                            y={trend.router.uplink_mbps}
+                                            stroke="#ef4444"
+                                            strokeDasharray="4 4"
+                                            label={{ value: 'Capacity', position: 'insideTopRight', fontSize: 11, fill: '#ef4444' }}
+                                        />
+                                    )}
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    )}
+                    {trend?.caveat && (
+                        <p className="text-xs text-gray-400 mt-3 flex items-start gap-1.5">
+                            <Gauge className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {trend.caveat}
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {/* Churn / Expiry Forecast -- admin/sales only */}
+            {canSeeChurn && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="bg-indigo-600 px-6 py-4 flex items-center text-white font-bold">
+                        <TrendingDown className="h-5 w-5 mr-2" /> Churn &amp; Expiry Forecast
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 p-6 border-b">
+                        <span className="text-sm text-gray-500 mr-1">Window:</span>
+                        {CHURN_WINDOWS.map((d) => (
+                            <button
+                                key={d}
+                                onClick={() => setChurnDays(d)}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${churnDays === d
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                            >
+                                {d} days
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-6">
+                        <div className="border-l-4 border-l-amber-500 bg-gray-50 rounded-r-lg px-4 py-3">
+                            <p className="text-xl font-bold text-gray-900">{churn?.expiring_count ?? '-'}</p>
+                            <p className="text-xs text-gray-500 uppercase tracking-wide mt-1">Expiring in {churnDays} days</p>
+                        </div>
+                        <div className="border-l-4 border-l-emerald-500 bg-gray-50 rounded-r-lg px-4 py-3">
+                            <p className="text-xl font-bold text-gray-900">
+                                {churn?.renewal_rate?.renewal_rate_pct ?? 'N/A'}{churn?.renewal_rate?.renewal_rate_pct != null ? '%' : ''}
+                            </p>
+                            <p className="text-xs text-gray-500 uppercase tracking-wide mt-1">Renewal rate ({churnDays}d+ lapsed)</p>
+                        </div>
+                        <div className="border-l-4 border-l-purple-500 bg-gray-50 rounded-r-lg px-4 py-3">
+                            <p className="text-xl font-bold text-gray-900">{churn?.renewal_rate?.lapsed_count ?? '-'}</p>
+                            <p className="text-xs text-gray-500 uppercase tracking-wide mt-1">Lapsed subscriptions</p>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto border-t">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                        <Users2 className="h-3.5 w-3.5 inline mr-1" /> Customer
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expires</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Days Left</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {churnLoading ? (
+                                    <tr><td colSpan={4} className="text-center py-8 text-gray-500">Loading...</td></tr>
+                                ) : (churn?.expiring?.length ?? 0) === 0 ? (
+                                    <tr><td colSpan={4} className="text-center py-8 text-gray-500">Nothing expiring in this window.</td></tr>
+                                ) : churn?.expiring?.map((s: any) => (
+                                    <tr key={`${s.username}-${s.expires_on}`} className="hover:bg-gray-50">
+                                        <td className="px-6 py-3 text-sm font-medium text-gray-900">{s.username}</td>
+                                        <td className="px-6 py-3 text-sm text-gray-500">{s.plan}</td>
+                                        <td className="px-6 py-3 text-sm text-gray-500">{format(new Date(s.expires_on), 'MMM d, yyyy')}</td>
+                                        <td className="px-6 py-3 text-sm text-right text-gray-900">{s.days_left}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

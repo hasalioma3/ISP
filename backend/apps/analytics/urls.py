@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     DashboardStatsView, IncomeReportView, UsageReportView, UsageChartView,
     DashboardExtraView, ExpiringTodayView, RecentActivityView, DataUsageView,
-    RecentPaymentsView,
+    RecentPaymentsView, RouterBandwidthTrendView, ChurnForecastView,
 )
 
 urlpatterns = [
@@ -15,4 +15,6 @@ urlpatterns = [
     path('expiring-today/', ExpiringTodayView.as_view(), name='expiring-today'),
     path('recent-activity/', RecentActivityView.as_view(), name='recent-activity'),
     path('recent-payments/', RecentPaymentsView.as_view(), name='recent-payments'),
+    path('router-bandwidth/', RouterBandwidthTrendView.as_view(), name='router-bandwidth-trend'),
+    path('churn-forecast/', ChurnForecastView.as_view(), name='churn-forecast'),
 ]

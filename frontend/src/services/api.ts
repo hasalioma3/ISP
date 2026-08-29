@@ -109,6 +109,10 @@ export const analyticsAPI = {
     getRecentActivity: () => api.get('/analytics/recent-activity/'),
     getRecentPayments: (page: number, pageSize?: number) =>
         api.get('/analytics/recent-payments/', { params: { page, page_size: pageSize } }),
+    getRouterBandwidthTrend: (params: { router: number; period?: string; date?: string }) =>
+        api.get('/analytics/router-bandwidth/', { params }),
+    getChurnForecast: (days?: number) =>
+        api.get('/analytics/churn-forecast/', { params: { days } }),
     getDataUsage: (params: {
         period?: string; date?: string; search?: string; router?: string;
         type?: string; sort?: string; limit?: number;
