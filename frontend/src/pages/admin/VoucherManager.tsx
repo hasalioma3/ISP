@@ -1,16 +1,29 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { voucherAPI, billingAPI } from '../../services/api';
-import { Plus, Eye, X, Copy } from 'lucide-react';
+import { Plus, Eye, X, Copy, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 export default function VoucherManager() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [genParams, setGenParams] = useState({ quantity: 10, plan_id: '' });
     const [viewingBatch, setViewingBatch] = useState<any>(null);
+    const [sendingVoucherId, setSendingVoucherId] = useState<number | null>(null);
+    const [sendForm, setSendForm] = useState({ recipient: '', channel: 'sms' as 'sms' | 'whatsapp' | 'telegram' });
 
     const queryClient = useQueryClient();
+
+    const sendMutation = useMutation({
+        mutationFn: ({ id, data }: { id: number; data: typeof sendForm }) => voucherAPI.send(id, data),
+        onSuccess: () => {
+            toast.success('Voucher code queued for delivery');
+            setSendingVoucherId(null);
+            setSendForm({ recipient: '', channel: 'sms' });
+        },
+        onError: (err: any) => toast.error(getErrorMessage(err, 'Failed to send voucher')),
+    });
 
     const { data: batches, isLoading, isError, error } = useQuery({
         queryKey: ['voucher-batches'],
@@ -65,7 +78,7 @@ export default function VoucherManager() {
                 <h1 className="text-2xl font-bold">Voucher Management</h1>
                 <button
                     onClick={() => setIsGenerating(!isGenerating)}
-                    className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    className="flex items-center justify-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition"
                 >
                     <Plus className="h-4 w-4 mr-2" />
                     Generate Vouchers
@@ -73,12 +86,12 @@ export default function VoucherManager() {
             </div>
 
             {isGenerating && (
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6 max-w-lg">
+                <div className="bg-card p-6 rounded-xl shadow-sm border border-border mb-6 max-w-lg">
                     <h3 className="text-lg font-bold mb-4">Generate New Batch</h3>
                     <form onSubmit={handleGenerate} className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                                <label className="block text-sm font-medium text-foreground/80 mb-1">Quantity</label>
                                 <input
                                     type="number"
                                     min="1" max="100"
@@ -88,7 +101,7 @@ export default function VoucherManager() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Billing Plan</label>
+                                <label className="block text-sm font-medium text-foreground/80 mb-1">Billing Plan</label>
                                 <select
                                     className="w-full border rounded-lg px-3 py-2"
                                     value={genParams.plan_id}
@@ -108,7 +121,7 @@ export default function VoucherManager() {
                             <button
                                 type="button"
                                 onClick={() => setIsGenerating(false)}
-                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                                className="px-4 py-2 text-muted-foreground hover:bg-accent rounded-lg"
                             >
                                 Cancel
                             </button>
@@ -124,32 +137,32 @@ export default function VoucherManager() {
                 </div>
             )}
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+            <div className="bg-card rounded-2xl shadow-sm border border-border overflow-x-auto">
+                <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-secondary">
                         <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch ID</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created Date</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan / Value</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Batch ID</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Created Date</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Quantity</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plan / Value</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-card divide-y divide-border">
                         {isLoading ? (
                             <tr><td colSpan={5} className="text-center py-8">Loading...</td></tr>
                         ) : isError ? (
                             <tr><td colSpan={5} className="text-center py-8 text-red-600">Error loading batches: {(error as Error).message}</td></tr>
                         ) : batches?.map((batch: any) => (
-                            <tr key={batch.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 text-sm font-medium text-gray-900">#{batch.id}</td>
-                                <td className="px-6 py-4 text-sm text-gray-500">
+                            <tr key={batch.id} className="hover:bg-secondary">
+                                <td className="px-6 py-4 text-sm font-medium text-foreground">#{batch.id}</td>
+                                <td className="px-6 py-4 text-sm text-muted-foreground">
                                     {format(new Date(batch.created_at), 'MMM d, yyyy HH:mm')}
                                 </td>
-                                <td className="px-6 py-4 text-sm text-gray-900">{batch.quantity}</td>
-                                <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                                <td className="px-6 py-4 text-sm text-foreground">{batch.quantity}</td>
+                                <td className="px-6 py-4 text-sm font-medium text-foreground">
                                     {batch.plan_name ? (
-                                        <span className="text-blue-600 font-medium">{batch.plan_name}</span>
+                                        <span className="text-primary font-medium">{batch.plan_name}</span>
                                     ) : (
                                         <span className="text-green-600">KES {batch.value}</span>
                                     )}
@@ -157,7 +170,7 @@ export default function VoucherManager() {
                                 <td className="px-6 py-4 text-right text-sm font-medium">
                                     <button
                                         onClick={() => setViewingBatch(batch)}
-                                        className="text-blue-600 hover:text-blue-900 flex items-center justify-end w-full"
+                                        className="text-primary hover:text-primary flex items-center justify-end w-full"
                                     >
                                         <Eye className="h-4 w-4 mr-1" /> View Codes
                                     </button>
@@ -170,38 +183,76 @@ export default function VoucherManager() {
 
             {viewingBatch && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+                    <div className="bg-card rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
                         <div className="flex justify-between items-center p-6 border-b">
                             <div>
                                 <h3 className="text-lg font-bold">Batch #{viewingBatch.id} Codes</h3>
-                                <p className="text-sm text-gray-500">
+                                <p className="text-sm text-muted-foreground">
                                     {viewingBatch.plan_name || `KES ${viewingBatch.value}`} &middot; {viewingBatch.quantity} vouchers
                                 </p>
                             </div>
-                            <button onClick={() => setViewingBatch(null)} className="p-1 text-gray-400 hover:text-gray-600">
+                            <button onClick={() => setViewingBatch(null)} className="p-1 text-muted-foreground hover:text-muted-foreground">
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
 
-                        <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
+                        <div className="overflow-y-auto flex-1 divide-y divide-border">
                             {(viewingBatch.vouchers || []).map((v: any) => (
-                                <div key={v.id} className="flex items-center justify-between px-6 py-3">
-                                    <div>
-                                        <p className="font-mono font-medium text-gray-900">{v.code}</p>
-                                        <p className="text-xs text-gray-400">
-                                            {v.expiry_date ? `Expires ${format(new Date(v.expiry_date), 'MMM d, yyyy')}` : 'No expiry'}
-                                        </p>
+                                <div key={v.id} className="px-6 py-3">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-mono font-medium text-foreground">{v.code}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {v.expiry_date ? `Expires ${format(new Date(v.expiry_date), 'MMM d, yyyy')}` : 'No expiry'}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize
+                                                ${v.status === 'active' ? 'bg-green-100 text-green-800' :
+                                                    v.status === 'used' ? 'bg-gray-100 text-muted-foreground' : 'bg-red-100 text-red-800'}`}>
+                                                {v.status}
+                                            </span>
+                                            <button onClick={() => handleCopyCode(v.code)} className="text-muted-foreground hover:text-primary">
+                                                <Copy className="h-4 w-4" />
+                                            </button>
+                                            {v.status === 'active' && (
+                                                <button
+                                                    onClick={() => setSendingVoucherId(sendingVoucherId === v.id ? null : v.id)}
+                                                    className="text-muted-foreground hover:text-primary"
+                                                    title="Send code to a customer"
+                                                >
+                                                    <Send className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize
-                                            ${v.status === 'active' ? 'bg-green-100 text-green-800' :
-                                                v.status === 'used' ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-800'}`}>
-                                            {v.status}
-                                        </span>
-                                        <button onClick={() => handleCopyCode(v.code)} className="text-gray-400 hover:text-blue-600">
-                                            <Copy className="h-4 w-4" />
-                                        </button>
-                                    </div>
+                                    {sendingVoucherId === v.id && (
+                                        <div className="mt-2 flex flex-col sm:flex-row gap-2 bg-secondary border rounded-lg p-2">
+                                            <input
+                                                type="text"
+                                                placeholder="Phone or Telegram chat ID"
+                                                className="flex-1 border rounded-lg px-2 py-1.5 text-sm"
+                                                value={sendForm.recipient}
+                                                onChange={e => setSendForm({ ...sendForm, recipient: e.target.value })}
+                                            />
+                                            <select
+                                                className="border rounded-lg px-2 py-1.5 text-sm"
+                                                value={sendForm.channel}
+                                                onChange={e => setSendForm({ ...sendForm, channel: e.target.value as any })}
+                                            >
+                                                <option value="sms">SMS</option>
+                                                <option value="whatsapp">WhatsApp</option>
+                                                <option value="telegram">Telegram</option>
+                                            </select>
+                                            <button
+                                                disabled={!sendForm.recipient || sendMutation.isPending}
+                                                onClick={() => sendMutation.mutate({ id: v.id, data: sendForm })}
+                                                className="px-3 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 whitespace-nowrap"
+                                            >
+                                                {sendMutation.isPending ? 'Sending...' : 'Send'}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -209,13 +260,13 @@ export default function VoucherManager() {
                         <div className="p-4 border-t flex justify-end gap-2">
                             <button
                                 onClick={() => handleCopyAll(viewingBatch)}
-                                className="flex items-center px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium"
+                                className="flex items-center px-4 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/10 text-sm font-medium"
                             >
                                 <Copy className="h-4 w-4 mr-2" /> Copy All Codes
                             </button>
                             <button
                                 onClick={() => setViewingBatch(null)}
-                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium"
+                                className="px-4 py-2 text-muted-foreground hover:bg-accent rounded-lg text-sm font-medium"
                             >
                                 Close
                             </button>

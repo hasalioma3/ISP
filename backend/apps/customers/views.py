@@ -5,8 +5,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
+from django.db import transaction
 from apps.customers.models import Customer
 from apps.customers.serializers import CustomerRegistrationSerializer, CustomerSerializer
+from apps.notifications.tasks import send_welcome_notification
 
 
 @api_view(['POST'])
@@ -18,7 +20,10 @@ def register(request):
     serializer = CustomerRegistrationSerializer(data=request.data)
     if serializer.is_valid():
         customer = serializer.save()
-        
+        transaction.on_commit(
+            lambda: send_welcome_notification.delay(customer.id, request.data.get('password'))
+        )
+
         # Generate JWT tokens
         refresh = RefreshToken.for_user(customer)
 

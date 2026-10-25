@@ -5,6 +5,10 @@ import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { LogIn } from 'lucide-react';
 import { useSiteSettings } from '../hooks/useSiteSettings';
+import { Card } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 
 export default function Login() {
     const navigate = useNavigate();
@@ -44,67 +48,59 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <div className="min-h-screen bg-secondary flex items-center justify-center p-4">
+            <Card className="shadow-lg p-8 w-full max-w-md">
                 <div className="text-center mb-8">
                     {siteSettings?.logo ? (
                         <img
                             src={siteSettings.logo}
                             alt={siteSettings.company_name}
-                            className="w-16 h-16 rounded-full object-contain bg-blue-50 mx-auto mb-4"
+                            className="w-16 h-16 rounded-2xl object-contain bg-accent mx-auto mb-4"
                         />
                     ) : (
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                            <LogIn className="w-8 h-8 text-blue-600" />
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-2xl mb-4">
+                            <LogIn className="w-8 h-8 text-primary" />
                         </div>
                     )}
-                    <h1 className="text-3xl font-bold text-gray-900">{siteSettings?.company_name || 'ISP Billing'}</h1>
-                    <p className="text-gray-600 mt-2">Login to your account</p>
+                    <h1 className="text-2xl font-bold text-foreground">{siteSettings?.company_name || 'ISP Billing'}</h1>
+                    <p className="text-muted-foreground mt-1.5 text-sm">Login to your account</p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Username
-                        </label>
-                        <input
+                <form onSubmit={handleSubmit} className="space-y-5">
+                    <div className="space-y-2">
+                        <Label htmlFor="username">Username</Label>
+                        <Input
+                            id="username"
                             type="text"
                             required
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             value={formData.username}
                             onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                         />
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Password
-                        </label>
-                        <input
+                    <div className="space-y-2">
+                        <Label htmlFor="password">Password</Label>
+                        <Input
+                            id="password"
                             type="password"
                             required
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             value={formData.password}
                             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                         />
                     </div>
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
-                    >
+                    <Button type="submit" disabled={loading} className="w-full" size="lg">
                         {loading ? 'Logging in...' : 'Login'}
-                    </button>
+                    </Button>
                 </form>
 
-                <p className="text-center text-gray-600 mt-6">
+                <p className="text-center text-muted-foreground mt-6 text-sm">
                     Don't have an account?{' '}
-                    <Link to="/register" className="text-blue-600 font-semibold hover:underline">
+                    <Link to="/register" className="text-primary font-semibold hover:underline">
                         Register
                     </Link>
                 </p>
-            </div>
+            </Card>
         </div>
     );
 }

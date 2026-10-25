@@ -100,13 +100,13 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+            <div className="bg-card rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col">
                 <div className="flex justify-between items-center p-6 border-b">
                     <div>
                         <h3 className="text-lg font-bold">{subscriber?.full_name || subscriber?.username || 'Subscriber'}</h3>
-                        <p className="text-sm text-gray-500">{subscriber?.username} &middot; {subscriber?.phone_number}</p>
+                        <p className="text-sm text-muted-foreground">{subscriber?.username} &middot; {subscriber?.phone_number}</p>
                     </div>
-                    <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
+                    <button onClick={onClose} className="p-1 text-muted-foreground hover:text-muted-foreground">
                         <X className="h-5 w-5" />
                     </button>
                 </div>
@@ -117,8 +117,8 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                             key={t}
                             onClick={() => setTab(t)}
                             className={`px-4 py-3 text-sm font-medium border-b-2 capitalize transition-colors ${tab === t
-                                ? 'border-blue-500 text-blue-600'
-                                : 'border-transparent text-gray-500 hover:text-gray-700'
+                                ? 'border-ring text-primary'
+                                : 'border-transparent text-muted-foreground hover:text-foreground/80'
                                 }`}
                         >
                             {t === 'plans' ? 'Plans & Top-up' : t}
@@ -128,7 +128,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
 
                 <div className="overflow-y-auto flex-1 p-6">
                     {isLoading || !form ? (
-                        <div className="text-center py-8 text-gray-500">Loading...</div>
+                        <div className="text-center py-8 text-muted-foreground">Loading...</div>
                     ) : tab === 'details' ? (
                         <form onSubmit={handleSave} className="space-y-4">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -138,7 +138,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                 <Field label="Email" value={form.email} onChange={v => setForm({ ...form, email: v })} />
                                 <Field label="Phone Number" value={form.phone_number} onChange={v => setForm({ ...form, phone_number: v })} />
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">Service Type</label>
                                     <select
                                         className="w-full border rounded-lg px-3 py-2"
                                         value={form.service_type}
@@ -189,7 +189,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                             )}
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                                <label className="block text-sm font-medium text-foreground/80 mb-1">Notes</label>
                                 <textarea
                                     className="w-full border rounded-lg px-3 py-2"
                                     rows={3}
@@ -200,7 +200,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                             <button
                                 type="submit"
                                 disabled={saveMutation.isPending}
-                                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
                             >
                                 <Save className="h-4 w-4 mr-2" />
                                 {saveMutation.isPending ? 'Saving...' : 'Save Changes'}
@@ -208,44 +208,44 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                         </form>
                     ) : tab === 'usage' ? (
                         usageLoading ? (
-                            <div className="text-center py-8 text-gray-500">Loading usage...</div>
+                            <div className="text-center py-8 text-muted-foreground">Loading usage...</div>
                         ) : (
                             <div>
                                 <div className="mb-6">
                                     <UsageChartPanels chart={usageData?.chart} loading={false} />
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                                    <div className="bg-gray-50 rounded-lg p-4 text-center">
-                                        <p className="text-xs text-gray-500 uppercase">All-Time Upload</p>
+                                    <div className="bg-secondary rounded-lg p-4 text-center">
+                                        <p className="text-xs text-muted-foreground uppercase">All-Time Upload</p>
                                         <p className="text-xl font-bold">{usageData?.totals.upload_gb} GB</p>
                                     </div>
-                                    <div className="bg-gray-50 rounded-lg p-4 text-center">
-                                        <p className="text-xs text-gray-500 uppercase">All-Time Download</p>
+                                    <div className="bg-secondary rounded-lg p-4 text-center">
+                                        <p className="text-xs text-muted-foreground uppercase">All-Time Download</p>
                                         <p className="text-xl font-bold">{usageData?.totals.download_gb} GB</p>
                                     </div>
-                                    <div className="bg-gray-50 rounded-lg p-4 text-center">
-                                        <p className="text-xs text-gray-500 uppercase">All-Time Total</p>
+                                    <div className="bg-secondary rounded-lg p-4 text-center">
+                                        <p className="text-xs text-muted-foreground uppercase">All-Time Total</p>
                                         <p className="text-xl font-bold">{usageData?.totals.total_gb} GB</p>
                                     </div>
                                 </div>
                                 <h4 className="text-sm font-bold mb-2">Session History</h4>
                                 <div className="overflow-x-auto">
-                                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <table className="min-w-full divide-y divide-border text-sm">
                                         <thead>
-                                            <tr className="text-left text-xs text-gray-500 uppercase">
+                                            <tr className="text-left text-xs text-muted-foreground uppercase">
                                                 <th className="py-2 pr-4">Date</th>
                                                 <th className="py-2 pr-4">IP</th>
                                                 <th className="py-2 text-right pr-4">Up (GB)</th>
                                                 <th className="py-2 text-right">Down (GB)</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-100">
+                                        <tbody className="divide-y divide-border">
                                             {usageData?.usage_records?.length === 0 ? (
-                                                <tr><td colSpan={4} className="py-6 text-center text-gray-400">No usage recorded yet.</td></tr>
+                                                <tr><td colSpan={4} className="py-6 text-center text-muted-foreground">No usage recorded yet.</td></tr>
                                             ) : usageData?.usage_records?.map((u: any) => (
                                                 <tr key={u.id}>
                                                     <td className="py-2 pr-4 whitespace-nowrap">{format(new Date(u.created_at), 'MMM d, yyyy HH:mm')}</td>
-                                                    <td className="py-2 pr-4 text-gray-500">{u.framed_ip_address || '-'}</td>
+                                                    <td className="py-2 pr-4 text-muted-foreground">{u.framed_ip_address || '-'}</td>
                                                     <td className="py-2 text-right pr-4">{(u.upload_bytes / (1024 ** 3)).toFixed(2)}</td>
                                                     <td className="py-2 text-right">{(u.download_bytes / (1024 ** 3)).toFixed(2)}</td>
                                                 </tr>
@@ -257,9 +257,9 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                         )
                     ) : (
                         <div className="space-y-6">
-                            <div className="bg-blue-50 rounded-lg p-4">
+                            <div className="bg-primary/10 rounded-lg p-4">
                                 <h4 className="text-sm font-bold mb-1 flex items-center gap-2"><Wallet className="h-4 w-4" /> Account Balance</h4>
-                                <p className="text-2xl font-bold text-blue-700 mb-3">KES {Number(subscriber?.account_balance || 0).toLocaleString()}</p>
+                                <p className="text-2xl font-bold text-primary mb-3">KES {Number(subscriber?.account_balance || 0).toLocaleString()}</p>
                                 <div className="flex flex-col sm:flex-row gap-2">
                                     <input
                                         type="number" min="0" step="0.01" placeholder="Amount to add"
@@ -270,7 +270,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                     <button
                                         disabled={!balanceAmount || addBalanceMutation.isPending}
                                         onClick={() => addBalanceMutation.mutate()}
-                                        className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+                                        className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm font-medium"
                                     >
                                         <PlusCircle className="h-4 w-4 mr-2" />
                                         {addBalanceMutation.isPending ? 'Adding...' : 'Add to Balance'}
@@ -278,7 +278,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                 </div>
                             </div>
 
-                            <div className="bg-gray-50 rounded-lg p-4">
+                            <div className="bg-secondary rounded-lg p-4">
                                 <h4 className="text-sm font-bold mb-3">Assign / Top Up / Switch Plan</h4>
                                 <div className="flex flex-col sm:flex-row gap-2">
                                     <select
@@ -304,7 +304,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                         disabled={!topUpPlanId || switchPlanMutation.isPending}
                                         onClick={() => switchPlanMutation.mutate()}
                                         title="Pay for this plan from the customer's existing account balance instead"
-                                        className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
+                                        className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm font-medium"
                                     >
                                         <ArrowLeftRight className="h-4 w-4 mr-2" />
                                         {switchPlanMutation.isPending ? 'Switching...' : 'Switch (Use Balance)'}
@@ -312,14 +312,14 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                 </div>
                                 {plans?.find((p: any) => String(p.id) === topUpPlanId)?.service_type === 'static' && !subscriber?.static_ip_address && (
                                     <div className="mt-3">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Static IP Address</label>
+                                        <label className="block text-sm font-medium text-foreground/80 mb-1">Static IP Address</label>
                                         <input
                                             type="text" placeholder="10.5.70.50"
                                             className="w-full border rounded-lg px-3 py-2 text-sm"
                                             value={topUpStaticIp}
                                             onChange={e => setTopUpStaticIp(e.target.value)}
                                         />
-                                        <p className="text-xs text-gray-500 mt-1">
+                                        <p className="text-xs text-muted-foreground mt-1">
                                             This customer has no static IP on file yet -- enter the fixed IP already configured on their device.
                                         </p>
                                     </div>
@@ -329,22 +329,22 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                             <div>
                                 <h4 className="text-sm font-bold mb-2">Subscription History</h4>
                                 <div className="overflow-x-auto">
-                                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <table className="min-w-full divide-y divide-border text-sm">
                                         <thead>
-                                            <tr className="text-left text-xs text-gray-500 uppercase">
+                                            <tr className="text-left text-xs text-muted-foreground uppercase">
                                                 <th className="py-2 pr-4">Plan</th>
                                                 <th className="py-2 pr-4">Status</th>
                                                 <th className="py-2">Expiry</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-100">
+                                        <tbody className="divide-y divide-border">
                                             {usageData?.subscriptions?.length === 0 ? (
-                                                <tr><td colSpan={3} className="py-4 text-center text-gray-400">No subscriptions yet.</td></tr>
+                                                <tr><td colSpan={3} className="py-4 text-center text-muted-foreground">No subscriptions yet.</td></tr>
                                             ) : usageData?.subscriptions?.map((s: any) => (
                                                 <tr key={s.id}>
                                                     <td className="py-2 pr-4 font-medium whitespace-nowrap">{s.plan?.name}</td>
                                                     <td className="py-2 pr-4 capitalize">{s.status}</td>
-                                                    <td className="py-2 text-gray-500 whitespace-nowrap">{format(new Date(s.expiry_date), 'MMM d, yyyy')}</td>
+                                                    <td className="py-2 text-muted-foreground whitespace-nowrap">{format(new Date(s.expiry_date), 'MMM d, yyyy')}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -355,9 +355,9 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                             <div>
                                 <h4 className="text-sm font-bold mb-2">Recent Transactions</h4>
                                 <div className="overflow-x-auto">
-                                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <table className="min-w-full divide-y divide-border text-sm">
                                         <thead>
-                                            <tr className="text-left text-xs text-gray-500 uppercase">
+                                            <tr className="text-left text-xs text-muted-foreground uppercase">
                                                 <th className="py-2 pr-4">Amount</th>
                                                 <th className="py-2 pr-4">Method</th>
                                                 <th className="py-2 pr-4">M-Pesa Code</th>
@@ -365,16 +365,16 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                                 <th className="py-2">Date</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-100">
+                                        <tbody className="divide-y divide-border">
                                             {usageData?.transactions?.length === 0 ? (
-                                                <tr><td colSpan={5} className="py-4 text-center text-gray-400">No transactions yet.</td></tr>
+                                                <tr><td colSpan={5} className="py-4 text-center text-muted-foreground">No transactions yet.</td></tr>
                                             ) : usageData?.transactions?.map((t: any) => (
                                                 <tr key={t.id}>
                                                     <td className="py-2 pr-4 font-medium whitespace-nowrap">KES {Number(t.amount).toLocaleString()}</td>
                                                     <td className="py-2 pr-4 uppercase">{t.payment_method}</td>
                                                     <td className="py-2 pr-4 font-mono text-xs">{t.mpesa_receipt_number || '-'}</td>
                                                     <td className="py-2 pr-4 capitalize">{t.status}</td>
-                                                    <td className="py-2 text-gray-500 whitespace-nowrap">{format(new Date(t.created_at), 'MMM d, yyyy')}</td>
+                                                    <td className="py-2 text-muted-foreground whitespace-nowrap">{format(new Date(t.created_at), 'MMM d, yyyy')}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -392,7 +392,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
     return (
         <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+            <label className="block text-sm font-medium text-foreground/80 mb-1">{label}</label>
             <input
                 type="text"
                 className="w-full border rounded-lg px-3 py-2"

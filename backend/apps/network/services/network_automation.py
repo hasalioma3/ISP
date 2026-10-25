@@ -32,6 +32,27 @@ def validate_portal_url(url):
     return None
 
 
+def build_acs_option43_value(acs_url):
+    """
+    Encodes a TR-069 ACS URL as a RouterOS raw-hex DHCP option 43 value
+    (RFC 2132 encapsulated vendor-specific sub-options: [sub-opt code 1
+    byte][length 1 byte][value]). Sub-option 1 = ACS URL -- this is the
+    CWMP convention multiple independent TR-069 implementations agree on
+    (Grandstream's auto-provisioning guide and the iopsys OpenWrt CWMP
+    client both treat sub-option 1 this way), but it's not universal: some
+    CPE firmware ignores option 43 for CWMP entirely, or expects a
+    different sub-option layout. Treat a device not picking this up the
+    same way as a WiFi-parameter-path mismatch -- expected per-vendor
+    variance to calibrate against real hardware, not a bug in this
+    encoding.
+    """
+    url_bytes = acs_url.encode('ascii')
+    if len(url_bytes) > 255:
+        raise ValueError('ACS URL is too long to fit a single DHCP option 43 sub-option (max 255 bytes)')
+    payload = bytes([1, len(url_bytes)]) + url_bytes
+    return '0x' + payload.hex()
+
+
 def build_hotspot_login_html(portal_url):
     """
     RouterOS hotspot login.html: the $(...) tokens are literal text in the
@@ -67,12 +88,23 @@ class NetworkAutomation:
     
     def suspend_customer(self, customer):
         """
-        Suspend network access for a customer
+        Suspend network access for a customer on every active router
+        (hotspot access is provisioned on all of them for roaming).
         """
-        router = Router.objects.filter(is_active=True).first()
-        if not router:
+        routers = list(Router.objects.filter(is_active=True))
+        if not routers:
             return {'success': False, 'error': 'No active router configured'}
-            
+
+        errors = []
+        for router in routers:
+            res = self._suspend_on_router(customer, router)
+            if not res.get('success'):
+                errors.append(f"{router.name}: {res.get('error')}")
+        if errors:
+            return {'success': False, 'error': ", ".join(errors)}
+        return {'success': True}
+
+    def _suspend_on_router(self, customer, router):
         mikrotik = MikroTikService(
             host=router.ip_address, username=router.username, 
             password=router.password, port=router.port, use_ssl=router.use_ssl
@@ -103,6 +135,9 @@ class NetworkAutomation:
                 username = customer.hotspot_username or customer.username
                 res1 = mikrotik.disable_hotspot_user(username)
                 res2 = mikrotik.disconnect_hotspot_session(username)
+                if customer.hotspot_mac_address:
+                    mikrotik.set_hotspot_mac_user(customer.hotspot_mac_address, 'default', disabled=True)
+                    mikrotik.disconnect_hotspot_by_mac(customer.hotspot_mac_address)
                 
                 if not res1['success']: results['errors'].append(f"Hotspot Disable: {res1.get('error')}")
                 if not res2['success']: results['errors'].append(f"Hotspot Disconnect: {res2.get('error')}")
@@ -139,16 +174,25 @@ class NetworkAutomation:
         same as apps/payments/services/payment_processor.py already does.
         """
         # Determine target routers: either from plan or fallback to all active
-        target_routers = plan.routers.filter(is_active=True)
-        if not target_routers.exists():
-            target_routers = Router.objects.filter(is_active=True)
+        plan_routers = plan.routers.filter(is_active=True)
+        all_routers = Router.objects.filter(is_active=True)
+        target_routers = plan_routers if plan_routers.exists() else all_routers
 
-        if not target_routers.exists():
+        if not all_routers.exists():
             raise Exception('No active router configured')
 
         errors = []
 
-        for router in target_routers:
+        for router in all_routers:
+            customer_hotspot = (customer.service_type in ['hotspot', 'both']) and (plan.service_type in ['hotspot', 'both'])
+            # Hotspot access is honored on every router (roaming); other
+            # services stay limited to the plan's routers.
+            if not customer_hotspot and not target_routers.filter(pk=router.pk).exists():
+                continue
+            if customer_hotspot and not target_routers.filter(pk=router.pk).exists():
+                enable_only_hotspot = True
+            else:
+                enable_only_hotspot = False
             mikrotik = MikroTikService(
                 host=router.ip_address, username=router.username,
                 password=router.password, port=router.port, use_ssl=router.use_ssl
@@ -161,13 +205,13 @@ class NetworkAutomation:
                 enable_hotspot = (customer.service_type in ['hotspot', 'both']) and (plan.service_type in ['hotspot', 'both'])
                 enable_static = (customer.service_type == 'static') and (plan.service_type == 'static')
 
-                if enable_pppoe:
+                if enable_pppoe and not enable_only_hotspot:
                     self._activate_pppoe(customer, plan, router, mikrotik)
 
                 if enable_hotspot:
                     self._activate_hotspot(customer, plan, router, mikrotik)
 
-                if enable_static:
+                if enable_static and not enable_only_hotspot:
                     self._activate_static(customer, plan, router, mikrotik)
 
             except Exception as e:
@@ -359,6 +403,14 @@ class NetworkAutomation:
         # Only interrupt an existing session if something actually changed
         # (or we just (re)created the user) -- otherwise leave an
         # already-working connection alone.
+        if customer.hotspot_mac_address:
+            mikrotik.ensure_hotspot_mac_login()
+            res_mac = mikrotik.set_hotspot_mac_user(customer.hotspot_mac_address, plan.mikrotik_profile)
+            if not res_mac['success']:
+                logger.error(f"{router.name}: MAC login user failed for {customer.username}: {res_mac.get('error')}")
+            else:
+                mikrotik.reset_unauthorized_hotspot_host(customer.hotspot_mac_address)
+
         if needs_update or created:
             mikrotik.disconnect_hotspot_session(hotspot_user.username)
             if customer.hotspot_mac_address:
@@ -416,11 +468,22 @@ class NetworkAutomation:
         return results
 
     def sync_all_users(self, router=None):
+        if router is None:
+            routers = list(Router.objects.filter(is_active=True))
+            if not routers:
+                return {'error': 'No active router configured'}
+            merged = {'success': [], 'failed': []}
+            for r in routers:
+                res = self.sync_all_users(router=r)
+                merged['success'] += [f"{r.name}: {s}" for s in res.get('success', [])]
+                merged['failed'] += [f"{r.name}: {s}" for s in res.get('failed', [])]
+            return merged
+
         from apps.billing.models import Subscription
         results = {'success': [], 'failed': []}
         active_subs = Subscription.objects.filter(status='active', expiry_date__gt=timezone.now())
-        router = router or Router.objects.filter(is_active=True).first()
-        if not router: return {'error': 'No active router configured'}
+        plan_scoped = lambda plan: (not plan.routers.filter(is_active=True).exists()
+                                    or plan.routers.filter(pk=router.pk).exists())
         mikrotik = MikroTikService(
             host=router.ip_address, username=router.username, 
             password=router.password, port=router.port, use_ssl=router.use_ssl
@@ -434,13 +497,13 @@ class NetworkAutomation:
                 # not attempt PPPoE activation using that plan's (hotspot)
                 # mikrotik_profile, same requirement activate_customer
                 # already enforces.
-                if customer.service_type in ['pppoe', 'both'] and plan.service_type in ['pppoe', 'both']:
+                if customer.service_type in ['pppoe', 'both'] and plan.service_type in ['pppoe', 'both'] and plan_scoped(plan):
                     self._activate_pppoe(customer, plan, router, mikrotik)
                     results['success'].append(f"PPPoE: {customer.username}")
                 if customer.service_type in ['hotspot', 'both'] and plan.service_type in ['hotspot', 'both']:
                     self._activate_hotspot(customer, plan, router, mikrotik)
                     results['success'].append(f"Hotspot: {customer.username}")
-                if customer.service_type == 'static' and plan.service_type == 'static':
+                if customer.service_type == 'static' and plan.service_type == 'static' and plan_scoped(plan):
                     self._activate_static(customer, plan, router, mikrotik)
                     results['success'].append(f"Static: {customer.username}")
             except Exception as e:
@@ -626,5 +689,124 @@ class NetworkAutomation:
         router.save(update_fields=['provisioned', 'provisioned_at', 'last_sync'])
 
         return results
+
+    def enable_acs_auto_provisioning(self, router, username=None, password=None):
+        """
+        Broadcasts the TR-069 ACS URL via DHCP option 43 on this router's
+        Hotspot network, so CPE devices that support zero-touch
+        provisioning pick up the ACS URL automatically on the same network
+        segment -- no manual per-device configuration needed (see the CPE
+        Onboarding Guide for the manual fallback, still required for
+        devices that don't support this).
+
+        Applied to the Hotspot network specifically because that's the
+        only DHCP network this system provisions today -- PPPoE customers
+        get their IP via PPP, not DHCP, so option 43 never reaches them.
+        If CPE devices are staged on a different network segment in
+        practice, this won't reach them; it's scoped to Hotspot rather
+        than assumed to cover every case.
+
+        Explicit opt-in, not part of provision_router -- so routers
+        already provisioned aren't silently changed by this being added.
+        """
+        if not settings.ACS_PUBLIC_URL:
+            return {'error': 'ACS_PUBLIC_URL is not configured -- set it in .env.prod before enabling auto-provisioning.'}
+
+        try:
+            hotspot_net = ipaddress.ip_network(router.hotspot_subnet, strict=False)
+        except ValueError as e:
+            return {'error': f'Invalid subnet configured on router: {e}'}
+        hotspot_gateway = str(hotspot_net[1])
+
+        snapshot_res = self.snapshot_router(router, username=username, password=password)
+        if not snapshot_res.get('success'):
+            return {'error': f"Could not connect to router: {snapshot_res.get('error')}"}
+
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=username or router.username,
+            password=password or router.password, port=router.port, use_ssl=router.use_ssl
+        )
+
+        option_value = build_acs_option43_value(settings.ACS_PUBLIC_URL)
+        option_res = mikrotik.add_dhcp_option('tr069-acs-url', 43, option_value)
+        if not option_res.get('success'):
+            return {'error': f"Could not create DHCP option: {option_res.get('error')}"}
+
+        network_res = mikrotik.add_dhcp_network(
+            str(hotspot_net), hotspot_gateway, dns_servers=router.dns_servers,
+            dhcp_option_name='tr069-acs-url',
+        )
+        if not network_res.get('success'):
+            return {'error': f"Could not attach option to network: {network_res.get('error')}"}
+
+        return {'success': True, 'acs_url': settings.ACS_PUBLIC_URL}
+
+    # Shared comment prefix so enable/disable find and remove exactly the
+    # rules this feature added, never anything an admin configured by hand.
+    WAN_MGMT_COMMENT_PREFIX = 'ISP Billing - WAN Mgmt Access'
+
+    def enable_wan_management_access(self, router, username=None, password=None):
+        """
+        Opens Winbox + SSH on this router's WAN interface
+        (settings.MIKROTIK_WAN_INTERFACE), scoped to whatever subnet that
+        interface's own current address is on -- RouterOS blocks
+        management access from WAN by default, so this is needed to reach
+        the router from the upstream network that gives it internet.
+        Derives the subnet live from the router's own WAN address rather
+        than a stored/entered value, so it can't go stale if the upstream
+        network's addressing ever changes.
+        """
+        snapshot_res = self.snapshot_router(router, username=username, password=password)
+        if not snapshot_res.get('success'):
+            return {'error': f"Could not connect to router: {snapshot_res.get('error')}"}
+
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=username or router.username,
+            password=password or router.password, port=router.port, use_ssl=router.use_ssl
+        )
+
+        wan_interface = settings.MIKROTIK_WAN_INTERFACE
+        addr_res = mikrotik.get_interface_address(wan_interface)
+        if not addr_res.get('success'):
+            return {'error': f"Could not read {wan_interface}'s address: {addr_res.get('error')}"}
+        if not addr_res.get('address'):
+            return {'error': f"{wan_interface} has no IP address right now (DHCP not bound yet?) -- nothing to scope the rule to."}
+
+        try:
+            subnet = ipaddress.ip_interface(addr_res['address']).network
+        except ValueError as e:
+            return {'error': f"Could not parse {wan_interface}'s address {addr_res['address']!r}: {e}"}
+
+        result = mikrotik.allow_management_access(wan_interface, str(subnet), self.WAN_MGMT_COMMENT_PREFIX)
+        if not result.get('success'):
+            return {'error': result.get('error')}
+
+        # LAN/VPN subnets reach the router from any interface, so no in-interface match.
+        extra_subnets = []
+        for raw in settings.MIKROTIK_MGMT_ALLOWED_SUBNETS:
+            try:
+                net = str(ipaddress.ip_network(raw, strict=False))
+            except ValueError as e:
+                return {'error': f'Invalid MIKROTIK_MGMT_ALLOWED_SUBNETS entry {raw!r}: {e}'}
+            res = mikrotik.allow_management_access(None, net, self.WAN_MGMT_COMMENT_PREFIX, tag=f' [{net}]')
+            if not res.get('success'):
+                return {'error': res.get('error')}
+            extra_subnets.append(net)
+        return {'success': True, 'subnet': str(subnet), 'extra_subnets': extra_subnets}
+
+    def disable_wan_management_access(self, router, username=None, password=None):
+        """Removes exactly the rules enable_wan_management_access added."""
+        snapshot_res = self.snapshot_router(router, username=username, password=password)
+        if not snapshot_res.get('success'):
+            return {'error': f"Could not connect to router: {snapshot_res.get('error')}"}
+
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=username or router.username,
+            password=password or router.password, port=router.port, use_ssl=router.use_ssl
+        )
+        result = mikrotik.revoke_management_access(self.WAN_MGMT_COMMENT_PREFIX)
+        if not result.get('success'):
+            return {'error': result.get('error')}
+        return {'success': True, 'removed_count': result.get('removed_count', 0)}
 
 network_automation = NetworkAutomation()

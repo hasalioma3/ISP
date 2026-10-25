@@ -14,38 +14,38 @@ export default function OrderHistory() {
 
     return (
         <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                <Receipt className="h-6 w-6 text-gray-500" /> Order History
+            <h1 className="text-2xl font-bold text-foreground mb-6 flex items-center gap-2">
+                <Receipt className="h-6 w-6 text-muted-foreground" /> Order History
             </h1>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-border">
+                        <thead className="bg-secondary">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Method</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Date</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Amount</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Method</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Reference</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Status</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-card divide-y divide-border">
                             {isLoading ? (
-                                <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                                <tr><td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
                                     <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...
                                 </td></tr>
                             ) : transactions?.length === 0 ? (
-                                <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500">No orders yet.</td></tr>
+                                <tr><td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">No orders yet.</td></tr>
                             ) : transactions?.map((t: any) => (
-                                <tr key={t.id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{format(new Date(t.created_at), 'MMM d, yyyy HH:mm')}</td>
-                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">KES {Number(t.amount).toLocaleString()}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500 uppercase">{t.payment_method}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500 font-mono">{t.mpesa_receipt_number || t.transaction_id}</td>
+                                <tr key={t.id} className="hover:bg-secondary">
+                                    <td className="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">{format(new Date(t.created_at), 'MMM d, yyyy HH:mm')}</td>
+                                    <td className="px-6 py-4 text-sm font-medium text-foreground">KES {Number(t.amount).toLocaleString()}</td>
+                                    <td className="px-6 py-4 text-sm text-muted-foreground uppercase">{t.payment_method}</td>
+                                    <td className="px-6 py-4 text-sm text-muted-foreground font-mono">{t.mpesa_receipt_number || t.transaction_id}</td>
                                     <td className="px-6 py-4">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${t.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                            t.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                                            t.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-foreground'
                                             }`}>
                                             {t.status}
                                         </span>

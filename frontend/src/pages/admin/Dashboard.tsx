@@ -29,7 +29,7 @@ const CARD_STYLES: Record<string, string> = {
     teal: 'bg-teal-600',
     sky: 'bg-sky-700',
     slate: 'bg-slate-700',
-    indigo: 'bg-indigo-900',
+    indigo: 'bg-primary',
     emerald: 'bg-emerald-600',
     cyan: 'bg-cyan-700',
     violet: 'bg-violet-800',
@@ -198,8 +198,8 @@ export default function Dashboard() {
             <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
 
             {/* Router View */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-                <div className="bg-blue-600 px-4 sm:px-6 py-4 flex flex-wrap gap-3 items-center justify-between">
+            <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden mb-6">
+                <div className="bg-primary px-4 sm:px-6 py-4 flex flex-wrap gap-3 items-center justify-between">
                     <div className="flex items-center text-white font-bold">
                         <RouterIcon className="h-5 w-5 mr-2" />
                         Router View
@@ -207,16 +207,16 @@ export default function Dashboard() {
                     <div className="relative">
                         <button
                             onClick={() => setIsRouterDropdownOpen(!isRouterDropdownOpen)}
-                            className="flex items-center gap-2 bg-white/95 hover:bg-white px-3 py-1.5 rounded-lg text-sm font-medium text-gray-700"
+                            className="flex items-center gap-2 bg-white/95 hover:bg-white px-3 py-1.5 rounded-lg text-sm font-medium text-foreground/80"
                         >
                             {selectedRouterName}
                             <ChevronDown className="h-4 w-4" />
                         </button>
                         {isRouterDropdownOpen && (
-                            <div className="absolute right-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-100 py-1 z-20">
+                            <div className="absolute right-0 mt-1 w-56 bg-card rounded-lg shadow-xl border border-border py-1 z-20">
                                 <button
                                     onClick={() => { setRouterFilter('all'); setIsRouterDropdownOpen(false); }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                    className="w-full text-left px-4 py-2 text-sm text-foreground/80 hover:bg-secondary"
                                 >
                                     All Routers - System Wide
                                 </button>
@@ -224,7 +224,7 @@ export default function Dashboard() {
                                     <button
                                         key={r.id}
                                         onClick={() => { setRouterFilter(r.id); setIsRouterDropdownOpen(false); }}
-                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                        className="w-full text-left px-4 py-2 text-sm text-foreground/80 hover:bg-secondary"
                                     >
                                         {r.name}
                                     </button>
@@ -236,26 +236,26 @@ export default function Dashboard() {
 
                 <div className="p-4 flex flex-wrap gap-4">
                     {statsLoading ? (
-                        <div className="text-gray-500 text-sm py-4 px-2">Loading routers...</div>
+                        <div className="text-muted-foreground text-sm py-4 px-2">Loading routers...</div>
                     ) : visibleRouters.length === 0 ? (
-                        <div className="text-gray-500 text-sm py-4 px-2">No routers configured yet.</div>
+                        <div className="text-muted-foreground text-sm py-4 px-2">No routers configured yet.</div>
                     ) : visibleRouters.map((r: any) => {
                         const health = routerHealth?.[r.id];
                         const throughput = routerThroughput[r.id];
                         const pctColor = (pct: number | null | undefined) =>
-                            pct == null ? 'text-gray-400' : pct >= 85 ? 'text-red-600' : pct >= 60 ? 'text-amber-600' : 'text-gray-700';
+                            pct == null ? 'text-muted-foreground' : pct >= 85 ? 'text-red-600' : pct >= 60 ? 'text-amber-600' : 'text-foreground/80';
                         return (
                             <button
                                 key={r.id}
                                 onClick={() => navigate('/admin/mikrotik')}
-                                className="border rounded-lg px-4 py-3 min-w-[200px] text-left hover:bg-gray-50 transition"
+                                className="border rounded-lg px-4 py-3 min-w-[200px] text-left hover:bg-secondary transition"
                             >
-                                <p className="font-medium text-blue-600 mb-1">{r.name}</p>
+                                <p className="font-medium text-primary mb-1">{r.name}</p>
                                 <div className="flex items-center gap-3 text-sm mb-2">
                                     <span className="flex items-center text-emerald-600">
                                         <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1" /> {r.online}
                                     </span>
-                                    <span className="text-blue-600">✓ {r.valid}</span>
+                                    <span className="text-primary">✓ {r.valid}</span>
                                     <span className="text-red-500">✕ {r.invalid}</span>
                                 </div>
                                 {health?.success ? (
@@ -266,16 +266,16 @@ export default function Dashboard() {
                                             <span className={pctColor(health.disk_used_pct)}>Disk {health.disk_used_pct ?? '-'}%</span>
                                         </div>
                                         {throughput && (
-                                            <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+                                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
                                                 <span>&darr; {throughput.rxKbps.toFixed(0)} Kbps</span>
                                                 <span>&uarr; {throughput.txKbps.toFixed(0)} Kbps</span>
                                             </div>
                                         )}
                                     </>
                                 ) : health && !health.success ? (
-                                    <p className="text-xs text-gray-400 border-t pt-2">Unreachable</p>
+                                    <p className="text-xs text-muted-foreground border-t pt-2">Unreachable</p>
                                 ) : (
-                                    <p className="text-xs text-gray-300 border-t pt-2">Loading health...</p>
+                                    <p className="text-xs text-muted-foreground/70 border-t pt-2">Loading health...</p>
                                 )}
                             </button>
                         );
@@ -306,7 +306,7 @@ export default function Dashboard() {
                 <button
                     onClick={() => refetchStats()}
                     disabled={statsFetching}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition text-sm font-medium disabled:opacity-50"
                 >
                     <RefreshCw className={`h-4 w-4 ${statsFetching ? 'animate-spin' : ''}`} />
                     Refresh Online Users
@@ -316,7 +316,7 @@ export default function Dashboard() {
             {/* Registration / Sales trends + Gateway / Insights / Packages */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
                 <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div className="bg-card p-6 rounded-xl shadow-sm border border-border">
                         <h3 className="text-lg font-bold mb-4">Monthly Registered Customers</h3>
                         <div className="h-64">
                             <ResponsiveContainer width="100%" height="100%">
@@ -332,7 +332,7 @@ export default function Dashboard() {
                     </div>
 
                     {showIncome && (
-                        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <div className="bg-card p-6 rounded-xl shadow-sm border border-border">
                             <h3 className="text-lg font-bold mb-4">Total Monthly Sales</h3>
                             <div className="h-64">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -341,7 +341,7 @@ export default function Dashboard() {
                                         <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                                         <YAxis tick={{ fontSize: 12 }} />
                                         <Tooltip formatter={(v: number) => `KES ${v}`} />
-                                        <Bar dataKey="total" fill="#2563eb" name="Sales" radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="total" fill="#7c3aed" name="Sales" radius={[4, 4, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
@@ -350,17 +350,17 @@ export default function Dashboard() {
                 </div>
 
                 <div className="space-y-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm">
+                    <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+                        <div className="bg-primary px-4 py-3 text-white font-bold text-sm">
                             Payment Gateway: {extra?.payment_gateway?.name || '-'}
                         </div>
                         <div className="p-4 text-sm space-y-2">
                             {extraLoading ? (
-                                <p className="text-gray-400">Checking...</p>
+                                <p className="text-muted-foreground">Checking...</p>
                             ) : (
                                 <>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-gray-500">Status</span>
+                                        <span className="text-muted-foreground">Status</span>
                                         {extra?.payment_gateway?.connected ? (
                                             <span className="flex items-center text-green-600 font-medium">
                                                 <CheckCircle2 className="h-4 w-4 mr-1" /> Connected
@@ -372,11 +372,11 @@ export default function Dashboard() {
                                         )}
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-gray-500">Environment</span>
+                                        <span className="text-muted-foreground">Environment</span>
                                         <span className="capitalize">{extra?.payment_gateway?.environment}</span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-gray-500">Shortcode</span>
+                                        <span className="text-muted-foreground">Shortcode</span>
                                         <span>{extra?.payment_gateway?.shortcode}</span>
                                     </div>
                                 </>
@@ -384,8 +384,8 @@ export default function Dashboard() {
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm">All Users Insights</div>
+                    <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+                        <div className="bg-primary px-4 py-3 text-white font-bold text-sm">All Users Insights</div>
                         <div className="p-4">
                             <div className="h-48">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -410,20 +410,20 @@ export default function Dashboard() {
                     </div>
 
                     {showIncome && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                            <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm">Best Selling Packages This Month</div>
+                        <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+                            <div className="bg-primary px-4 py-3 text-white font-bold text-sm">Best Selling Packages This Month</div>
                             <div className="overflow-x-auto">
                                 <table className="min-w-full text-sm">
                                     <thead>
-                                        <tr className="text-left text-xs text-gray-500 uppercase border-b">
+                                        <tr className="text-left text-xs text-muted-foreground uppercase border-b">
                                             <th className="px-4 py-2">Package</th>
                                             <th className="px-4 py-2 text-right">Sales</th>
                                             <th className="px-4 py-2 text-right">Revenue</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100">
+                                    <tbody className="divide-y divide-border">
                                         {extra?.best_selling_packages?.length === 0 ? (
-                                            <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-400">No sales this month.</td></tr>
+                                            <tr><td colSpan={3} className="px-4 py-4 text-center text-muted-foreground">No sales this month.</td></tr>
                                         ) : extra?.best_selling_packages?.map((p: any) => (
                                             <tr key={p.name}>
                                                 <td className="px-4 py-2 font-medium">{p.name}</td>
@@ -440,14 +440,14 @@ export default function Dashboard() {
             </div>
 
             {/* Network-wide Data Usage */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
+            <div className="bg-card p-6 rounded-xl shadow-sm border border-border mb-6">
                 <h3 className="text-lg font-bold mb-4">General Data Usage (Whole Network)</h3>
                 <UsageChartPanels chart={usageChart} loading={usageChartLoading} />
             </div>
 
             {/* Revenue Chart */}
             {showIncome && (
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
+                <div className="bg-card p-6 rounded-xl shadow-sm border border-border mb-6">
                     <h3 className="text-lg font-bold mb-4">Revenue Trend (Last 30 Days)</h3>
                     <div className="h-72">
                         <ResponsiveContainer width="100%" height="100%">
@@ -456,7 +456,7 @@ export default function Dashboard() {
                                 <XAxis dataKey="date" tickFormatter={(val) => val.split('-').slice(1).join('/')} />
                                 <YAxis />
                                 <Tooltip formatter={(value) => `KES ${value}`} />
-                                <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Revenue" />
+                                <Bar dataKey="total" fill="#7c3aed" radius={[4, 4, 0, 0]} name="Revenue" />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -466,21 +466,21 @@ export default function Dashboard() {
             {/* Transactions per Router / Last 5 Transactions / Users by Service Type */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
                 {showIncome && (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm">Transactions per Router</div>
+                    <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+                        <div className="bg-primary px-4 py-3 text-white font-bold text-sm">Transactions per Router</div>
                         <div className="overflow-x-auto">
                             <table className="min-w-full text-sm">
                                 <thead>
-                                    <tr className="text-left text-xs text-gray-500 uppercase border-b">
+                                    <tr className="text-left text-xs text-muted-foreground uppercase border-b">
                                         <th className="px-4 py-2">Router</th>
                                         <th className="px-4 py-2 text-right">Txns</th>
                                         <th className="px-4 py-2 text-right">%</th>
                                         <th className="px-4 py-2 text-right">Amount</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-100">
+                                <tbody className="divide-y divide-border">
                                     {extra?.transactions_per_router?.length === 0 ? (
-                                        <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-400">No transactions yet.</td></tr>
+                                        <tr><td colSpan={4} className="px-4 py-4 text-center text-muted-foreground">No transactions yet.</td></tr>
                                     ) : extra?.transactions_per_router?.map((r: any) => (
                                         <tr key={r.router}>
                                             <td className="px-4 py-2 font-medium">{r.router}</td>
@@ -496,25 +496,25 @@ export default function Dashboard() {
                 )}
 
                 {showIncome && (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm">Last 5 Transactions</div>
+                    <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+                        <div className="bg-primary px-4 py-3 text-white font-bold text-sm">Last 5 Transactions</div>
                         <div className="overflow-x-auto">
                             <table className="min-w-full text-sm">
                                 <thead>
-                                    <tr className="text-left text-xs text-gray-500 uppercase border-b">
+                                    <tr className="text-left text-xs text-muted-foreground uppercase border-b">
                                         <th className="px-4 py-2">Username</th>
                                         <th className="px-4 py-2 text-right">Amount</th>
                                         <th className="px-4 py-2 text-right">Date</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-100">
+                                <tbody className="divide-y divide-border">
                                     {extra?.last_transactions?.length === 0 ? (
-                                        <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-400">No transactions yet.</td></tr>
+                                        <tr><td colSpan={3} className="px-4 py-4 text-center text-muted-foreground">No transactions yet.</td></tr>
                                     ) : extra?.last_transactions?.map((t: any, i: number) => (
                                         <tr key={i}>
                                             <td className="px-4 py-2 font-medium truncate max-w-[120px]">{t.username}</td>
                                             <td className="px-4 py-2 text-right">Ksh. {t.amount}</td>
-                                            <td className="px-4 py-2 text-right text-gray-500">{format(new Date(t.date), 'yyyy-MM-dd')}</td>
+                                            <td className="px-4 py-2 text-right text-muted-foreground">{format(new Date(t.date), 'yyyy-MM-dd')}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -523,20 +523,20 @@ export default function Dashboard() {
                     </div>
                 )}
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="bg-blue-600 px-4 py-3 text-white font-bold text-sm flex items-center">
+                <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+                    <div className="bg-primary px-4 py-3 text-white font-bold text-sm flex items-center">
                         <Smartphone className="h-4 w-4 mr-2" /> Users by Service Type
                     </div>
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                             <thead>
-                                <tr className="text-left text-xs text-gray-500 uppercase border-b">
+                                <tr className="text-left text-xs text-muted-foreground uppercase border-b">
                                     <th className="px-4 py-2">Service Type</th>
                                     <th className="px-4 py-2 text-right">Users</th>
                                     <th className="px-4 py-2 text-right">%</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-border">
                                 {extra?.users_by_service_type?.map((s: any) => (
                                     <tr key={s.service_type}>
                                         <td className="px-4 py-2 font-medium capitalize">{s.service_type}</td>
@@ -552,20 +552,20 @@ export default function Dashboard() {
 
             {/* Voucher Stock */}
             {showIncome && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-                    <div className="bg-blue-600 px-6 py-4 text-white font-bold">Vouchers Stock</div>
+                <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden mb-6">
+                    <div className="bg-primary px-6 py-4 text-white font-bold">Vouchers Stock</div>
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead className="bg-gray-50">
+                        <table className="min-w-full divide-y divide-border text-sm">
+                            <thead className="bg-secondary">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan Name</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unused</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Used</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plan Name</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Unused</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Used</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-border">
                                 {extra?.voucher_stock?.length === 0 ? (
-                                    <tr><td colSpan={3} className="px-6 py-4 text-center text-gray-400">No vouchers generated yet.</td></tr>
+                                    <tr><td colSpan={3} className="px-6 py-4 text-center text-muted-foreground">No vouchers generated yet.</td></tr>
                                 ) : extra?.voucher_stock?.map((v: any) => (
                                     <tr key={v.plan_name}>
                                         <td className="px-6 py-3 font-medium">{v.plan_name}</td>
@@ -580,31 +580,31 @@ export default function Dashboard() {
             )}
 
             {/* Usage by User */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-                <div className="p-6 border-b border-gray-100">
+            <div className="bg-card rounded-2xl shadow-sm border border-border">
+                <div className="p-6 border-b border-border">
                     <h3 className="text-lg font-bold">Top Data Usage by User (Last 30 Days)</h3>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-border">
+                        <thead className="bg-secondary">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Upload (GB)</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Download (GB)</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total (GB)</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">User</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Upload (GB)</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Download (GB)</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Total (GB)</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-card divide-y divide-border">
                             {usageLoading ? (
-                                <tr><td colSpan={4} className="text-center py-8 text-gray-500">Loading...</td></tr>
+                                <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
                             ) : usageData?.length === 0 ? (
-                                <tr><td colSpan={4} className="text-center py-8 text-gray-500">No usage recorded yet.</td></tr>
+                                <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">No usage recorded yet.</td></tr>
                             ) : usageData?.map((u: any) => (
-                                <tr key={u.username} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{u.name}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500 text-right">{u.upload_gb}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500 text-right">{u.download_gb}</td>
-                                    <td className="px-6 py-4 text-sm font-medium text-gray-900 text-right">{u.total_gb}</td>
+                                <tr key={u.username} className="hover:bg-secondary">
+                                    <td className="px-6 py-4 text-sm font-medium text-foreground">{u.name}</td>
+                                    <td className="px-6 py-4 text-sm text-muted-foreground text-right">{u.upload_gb}</td>
+                                    <td className="px-6 py-4 text-sm text-muted-foreground text-right">{u.download_gb}</td>
+                                    <td className="px-6 py-4 text-sm font-medium text-foreground text-right">{u.total_gb}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -614,27 +614,27 @@ export default function Dashboard() {
 
             {/* Users Expiring Today / Recent Activity */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="bg-blue-600 px-6 py-4 text-white font-bold">Users Expiring Today</div>
+                <div className="lg:col-span-2 bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+                    <div className="bg-primary px-6 py-4 text-white font-bold">Users Expiring Today</div>
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead className="bg-gray-50">
+                        <table className="min-w-full divide-y divide-border text-sm">
+                            <thead className="bg-secondary">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created On</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expires On</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Username</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Created On</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Expires On</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-border">
                                 {expiringLoading ? (
-                                    <tr><td colSpan={3} className="px-6 py-6 text-center text-gray-400">Loading...</td></tr>
+                                    <tr><td colSpan={3} className="px-6 py-6 text-center text-muted-foreground">Loading...</td></tr>
                                 ) : expiring?.results?.length === 0 ? (
-                                    <tr><td colSpan={3} className="px-6 py-6 text-center text-gray-400">No subscriptions expiring today.</td></tr>
+                                    <tr><td colSpan={3} className="px-6 py-6 text-center text-muted-foreground">No subscriptions expiring today.</td></tr>
                                 ) : expiring?.results?.map((u: any, i: number) => (
                                     <tr key={i}>
-                                        <td className="px-6 py-3 font-medium text-blue-600">{u.username}</td>
-                                        <td className="px-6 py-3 text-gray-500">{format(new Date(u.created_on), 'd MMM yyyy HH:mm')}</td>
-                                        <td className="px-6 py-3 text-gray-500">{format(new Date(u.expires_on), 'd MMM yyyy HH:mm')}</td>
+                                        <td className="px-6 py-3 font-medium text-primary">{u.username}</td>
+                                        <td className="px-6 py-3 text-muted-foreground">{format(new Date(u.created_on), 'd MMM yyyy HH:mm')}</td>
+                                        <td className="px-6 py-3 text-muted-foreground">{format(new Date(u.expires_on), 'd MMM yyyy HH:mm')}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -649,7 +649,7 @@ export default function Dashboard() {
                             >
                                 Prev
                             </button>
-                            <span className="text-gray-500">Page {expiring.page} of {expiring.total_pages}</span>
+                            <span className="text-muted-foreground">Page {expiring.page} of {expiring.total_pages}</span>
                             <button
                                 onClick={() => setExpiringPage(p => Math.min(expiring.total_pages, p + 1))}
                                 disabled={expiringPage >= expiring.total_pages}
@@ -661,17 +661,17 @@ export default function Dashboard() {
                     )}
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="bg-blue-600 px-6 py-4 text-white font-bold">Recent Activity</div>
+                <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+                    <div className="bg-primary px-6 py-4 text-white font-bold">Recent Activity</div>
                     <div className="p-4 space-y-2 max-h-96 overflow-y-auto">
                         {activityLoading ? (
-                            <p className="text-gray-400 text-sm">Loading...</p>
+                            <p className="text-muted-foreground text-sm">Loading...</p>
                         ) : activity?.length === 0 ? (
-                            <p className="text-gray-400 text-sm">No login activity recorded yet.</p>
+                            <p className="text-muted-foreground text-sm">No login activity recorded yet.</p>
                         ) : activity?.map((a: any, i: number) => (
                             <div key={i} className="text-sm border-b last:border-0 pb-2">
-                                <p className="text-gray-800">{a.message}</p>
-                                <p className="text-xs text-gray-400">{format(new Date(a.created_at), 'd MMM yyyy HH:mm')}</p>
+                                <p className="text-foreground">{a.message}</p>
+                                <p className="text-xs text-muted-foreground">{format(new Date(a.created_at), 'd MMM yyyy HH:mm')}</p>
                             </div>
                         ))}
                     </div>

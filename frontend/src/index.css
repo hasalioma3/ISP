@@ -2,14 +2,87 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    /* Primary is the same violet scale as tailwind.config.js's `primary`
+       color (600 = #7c3aed). */
+    --background: 240 23% 97%;
+    --foreground: 230 20% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 230 20% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 230 20% 15%;
+
+    --primary: 262.1 83.3% 57.8%;
+    --primary-foreground: 210 20% 98%;
+
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 220.9 39.3% 11%;
+
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 231 10% 55%;
+
+    --accent: 262.1 83.3% 96%;
+    --accent-foreground: 262.1 83.3% 30%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 20% 98%;
+
+    --border: 230 20% 93%;
+    --input: 230 20% 90%;
+    --ring: 262.1 83.3% 57.8%;
+
+    --radius: 1rem;
+  }
+
+  /* Dark theme -- toggled via a `dark` class on <html> (see
+     src/store/themeStore.ts), matching tailwind.config.js's darkMode:
+     ["class"]. Same violet primary, lightened for contrast on a dark
+     background; every other token gets its own dark value rather than
+     relying on opacity tricks, so text stays readable at every surface. */
+  .dark {
+    --background: 240 14% 8%;
+    --foreground: 220 20% 92%;
+
+    --card: 240 12% 11%;
+    --card-foreground: 220 20% 92%;
+
+    --popover: 240 12% 11%;
+    --popover-foreground: 220 20% 92%;
+
+    --primary: 262.1 83.3% 66%;
+    --primary-foreground: 240 14% 8%;
+
+    --secondary: 240 9% 17%;
+    --secondary-foreground: 220 20% 92%;
+
+    --muted: 240 9% 17%;
+    --muted-foreground: 230 10% 65%;
+
+    --accent: 262.1 40% 22%;
+    --accent-foreground: 262.1 83.3% 85%;
+
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 210 20% 98%;
+
+    --border: 240 9% 20%;
+    --input: 240 9% 20%;
+    --ring: 262.1 83.3% 66%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+}
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light;
-  color: #1f2937;
-  background-color: #ffffff;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -17,7 +90,15 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  @apply bg-background text-foreground;
 }

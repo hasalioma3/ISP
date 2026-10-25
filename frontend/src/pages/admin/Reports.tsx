@@ -64,20 +64,20 @@ export default function Reports() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl font-bold">Financial Reports</h1>
                 <div className="flex flex-wrap gap-2">
-                    <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border shadow-sm flex-wrap">
-                        <Calendar className="h-4 w-4 text-gray-400" />
+                    <div className="flex items-center gap-2 bg-card px-3 py-2 rounded-lg border shadow-sm flex-wrap">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
                         <input
                             type="date"
                             value={startDate}
                             onChange={(e) => setStartDate(e.target.value)}
-                            className="text-sm border-none focus:ring-0 p-0 text-gray-600"
+                            className="text-sm border-none focus:ring-0 p-0 text-muted-foreground"
                         />
-                        <span className="text-gray-400">-</span>
+                        <span className="text-muted-foreground">-</span>
                         <input
                             type="date"
                             value={endDate}
                             onChange={(e) => setEndDate(e.target.value)}
-                            className="text-sm border-none focus:ring-0 p-0 text-gray-600"
+                            className="text-sm border-none focus:ring-0 p-0 text-muted-foreground"
                         />
                     </div>
                     <button
@@ -90,11 +90,11 @@ export default function Reports() {
                 </div>
             </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
+            <div className="bg-card p-6 rounded-xl shadow-sm border border-border mb-6">
                 <h3 className="text-lg font-bold mb-4">Revenue Overview</h3>
                 <div className="h-96">
                     {isLoading ? (
-                        <div className="h-full flex items-center justify-center text-gray-500">Loading chart...</div>
+                        <div className="h-full flex items-center justify-center text-muted-foreground">Loading chart...</div>
                     ) : isError ? (
                         <div className="h-full flex items-center justify-center text-red-500">Error loading report: {(error as Error).message}</div>
                     ) : (
@@ -111,7 +111,7 @@ export default function Reports() {
                                     labelFormatter={(label) => format(new Date(label), 'PPP')}
                                 />
                                 <Legend />
-                                <Bar dataKey="total" fill="#3b82f6" name="Revenue" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="total" fill="#7c3aed" name="Revenue" radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     )}

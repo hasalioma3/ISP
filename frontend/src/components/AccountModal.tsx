@@ -52,10 +52,10 @@ export default function AccountModal({ initialTab = 'profile', onClose }: { init
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="bg-card rounded-xl shadow-xl w-full max-w-md">
                 <div className="flex justify-between items-center p-6 border-b">
-                    <h3 className="text-lg font-bold text-gray-900">My Account</h3>
-                    <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
+                    <h3 className="text-lg font-bold text-foreground">My Account</h3>
+                    <button onClick={onClose} className="p-1 text-muted-foreground hover:text-muted-foreground">
                         <X className="h-5 w-5" />
                     </button>
                 </div>
@@ -66,8 +66,8 @@ export default function AccountModal({ initialTab = 'profile', onClose }: { init
                             key={t}
                             onClick={() => setTab(t)}
                             className={`px-4 py-3 text-sm font-medium border-b-2 capitalize transition-colors ${tab === t
-                                ? 'border-blue-500 text-blue-600'
-                                : 'border-transparent text-gray-500 hover:text-gray-700'
+                                ? 'border-ring text-primary'
+                                : 'border-transparent text-muted-foreground hover:text-foreground/80'
                                 }`}
                         >
                             {t === 'password' ? 'Change Password' : 'Edit Profile'}
@@ -80,7 +80,7 @@ export default function AccountModal({ initialTab = 'profile', onClose }: { init
                         <form onSubmit={handleProfileSubmit} className="space-y-4">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">First Name</label>
                                     <input
                                         type="text" className="w-full border rounded-lg px-3 py-2"
                                         value={profileForm.first_name}
@@ -88,7 +88,7 @@ export default function AccountModal({ initialTab = 'profile', onClose }: { init
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">Last Name</label>
                                     <input
                                         type="text" className="w-full border rounded-lg px-3 py-2"
                                         value={profileForm.last_name}
@@ -97,7 +97,7 @@ export default function AccountModal({ initialTab = 'profile', onClose }: { init
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                <label className="block text-sm font-medium text-foreground/80 mb-1">Email</label>
                                 <input
                                     type="email" className="w-full border rounded-lg px-3 py-2"
                                     value={profileForm.email}
@@ -105,7 +105,7 @@ export default function AccountModal({ initialTab = 'profile', onClose }: { init
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                                <label className="block text-sm font-medium text-foreground/80 mb-1">Phone Number</label>
                                 <input
                                     type="text" className="w-full border rounded-lg px-3 py-2"
                                     value={profileForm.phone_number}
@@ -115,7 +115,7 @@ export default function AccountModal({ initialTab = 'profile', onClose }: { init
                             <button
                                 type="submit"
                                 disabled={profileMutation.isPending}
-                                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
                             >
                                 <Save className="h-4 w-4 mr-2" />
                                 {profileMutation.isPending ? 'Saving...' : 'Save Changes'}
@@ -124,7 +124,7 @@ export default function AccountModal({ initialTab = 'profile', onClose }: { init
                     ) : (
                         <form onSubmit={handlePasswordSubmit} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                                <label className="block text-sm font-medium text-foreground/80 mb-1">Current Password</label>
                                 <input
                                     type="password" required className="w-full border rounded-lg px-3 py-2"
                                     value={passwordForm.old_password}
@@ -132,7 +132,7 @@ export default function AccountModal({ initialTab = 'profile', onClose }: { init
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                                <label className="block text-sm font-medium text-foreground/80 mb-1">New Password</label>
                                 <input
                                     type="password" required className="w-full border rounded-lg px-3 py-2"
                                     value={passwordForm.new_password}
@@ -140,7 +140,7 @@ export default function AccountModal({ initialTab = 'profile', onClose }: { init
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                                <label className="block text-sm font-medium text-foreground/80 mb-1">Confirm New Password</label>
                                 <input
                                     type="password" required className="w-full border rounded-lg px-3 py-2"
                                     value={passwordForm.confirm_password}
@@ -150,7 +150,7 @@ export default function AccountModal({ initialTab = 'profile', onClose }: { init
                             <button
                                 type="submit"
                                 disabled={passwordMutation.isPending}
-                                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
                             >
                                 <KeyRound className="h-4 w-4 mr-2" />
                                 {passwordMutation.isPending ? 'Changing...' : 'Change Password'}

@@ -9,8 +9,22 @@ REMOTE_DIR="~/ISP"
 echo "🚀 Deploying to Raspberry Pi ($PI_HOST)..."
 
 # 1. Sync Files
+#
+# --delete removes files on the Pi that no longer exist locally (e.g. a
+# renamed/deleted migration file) -- without it, a deleted file just sits
+# on the Pi forever, which is exactly what caused a migration-graph
+# conflict (two divergent migration chains, old + new) on a prior deploy.
+# Every path below is excluded for the opposite reason: they're Pi-only or
+# gitignored (.env.prod etc, generated per-company secrets) and must never
+# be touched by --delete, since they don't exist in the local source tree
+# to protect them -- plain --exclude keeps them untouched on both the copy
+# and the delete pass.
 echo "📦 Syncing files..."
-rsync -avz --progress --exclude 'node_modules' --exclude '.git' --exclude '__pycache__' ./ ${PI_USER}@${PI_HOST}:${REMOTE_DIR}/
+rsync -avz --delete --progress \
+    --exclude 'node_modules' --exclude '.git' --exclude '__pycache__' \
+    --exclude '.env' --exclude '.env.prod' --exclude 'backend/.env' --exclude 'frontend/.env' \
+    --exclude 'companies/*.env' --exclude 'vps' --exclude 'teststk.py' \
+    ./ ${PI_USER}@${PI_HOST}:${REMOTE_DIR}/
 
 # 2. Remote Commands
 echo "🔧 Executing remote rebuild..."
@@ -28,6 +42,8 @@ ssh ${PI_USER}@${PI_HOST} "\
     docker volume create isp_postgres_data >/dev/null && \
     docker volume create isp_static_volume >/dev/null && \
     docker volume create isp_media_volume >/dev/null && \
+    docker volume create isp_whatsapp_session >/dev/null && \
+    docker volume create isp_genieacs_mongo_data >/dev/null && \
     if docker compose ps -q db 2>/dev/null | grep -q .; then \
         echo '💾 Backing up database before redeploy...' && \
         mkdir -p ~/isp_backups && \

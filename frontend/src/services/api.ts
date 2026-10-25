@@ -11,6 +11,19 @@ const api = axios.create({
     },
 });
 
+// Builds a multipart form from a plain data object plus an attachment file
+// -- only used where a record can carry a file (expenses, inventory
+// purchases), and only when a file is actually attached (plain JSON is
+// lighter and keeps working for every other edit).
+function toFormData(data: Record<string, any>, file?: File | null) {
+    const form = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) form.append(key, value as any);
+    });
+    if (file) form.append('attachment', file);
+    return form;
+}
+
 // Request interceptor to add auth token
 api.interceptors.request.use(
     (config) => {
@@ -95,6 +108,19 @@ export const voucherAPI = {
         api.post('/billing/vouchers/generate/', data),
     redeem: (code: string, macAddress?: string) =>
         api.post('/billing/vouchers/redeem/', { code, mac_address: macAddress }),
+    send: (voucherId: number, data: { recipient: string; channel: 'sms' | 'whatsapp' | 'telegram' }) =>
+        api.post(`/billing/vouchers/${voucherId}/send/`, data),
+};
+
+// Notifications (SMS/WhatsApp/Telegram settings, test-send, promo broadcast)
+export const notificationAPI = {
+    getSettings: () => api.get('/notifications/settings/'),
+    updateSettings: (data: any) => api.patch('/notifications/settings/', data),
+    testSend: (data: { channel: 'sms' | 'whatsapp' | 'telegram'; recipient: string; message?: string }) =>
+        api.post('/notifications/test-send/', data),
+    getWhatsAppStatus: () => api.get('/notifications/whatsapp/status/'),
+    broadcast: (data: { message: string; channels: string[]; service_type?: string; dry_run?: boolean }) =>
+        api.post('/notifications/promo-broadcast/', data),
 };
 
 // Analytics API
@@ -150,6 +176,12 @@ export const adminAPI = {
     backupRouter: (id: number) => api.post(`/network/routers/${id}/backup/`),
     syncRouterProfiles: (id: number) => api.post(`/network/routers/${id}/sync_profiles/`),
     syncRouterUsers: (id: number) => api.post(`/network/routers/${id}/sync_users/`),
+    enableAcsProvisioning: (id: number) => api.post(`/network/routers/${id}/enable_acs_provisioning/`),
+    enableWanAccess: (id: number) => api.post(`/network/routers/${id}/enable_wan_access/`),
+    disableWanAccess: (id: number) => api.post(`/network/routers/${id}/disable_wan_access/`),
+    restartRouter: (id: number) => api.post(`/network/routers/${id}/restart/`),
+    getMaintenanceSchedule: (id: number) => api.get(`/network/routers/${id}/maintenance_schedule/`),
+    setMaintenanceSchedule: (id: number, data: any) => api.post(`/network/routers/${id}/maintenance_schedule/`, data),
     getRouterHealth: () => api.get('/network/routers/health/'),
     testRouterConnection: (data: { ip_address: string; username: string; password: string; port?: number; use_ssl?: boolean }) =>
         api.post('/network/routers/test_connection/', data),
@@ -176,6 +208,77 @@ export const siteSettingsAPI = {
         if (data.logo) form.append('logo', data.logo);
         return api.patch('/settings/site/', form, { headers: { 'Content-Type': 'multipart/form-data' } });
     },
+};
+
+// Accounting (expenses, other income, profit dashboard)
+export const accountingAPI = {
+    getExpenses: (params?: { search?: string; category?: string; ordering?: string; page?: number; page_size?: number }) =>
+        api.get('/accounting/expenses/', { params }),
+    createExpense: (data: any, file?: File | null) =>
+        file
+            ? api.post('/accounting/expenses/', toFormData(data, file), { headers: { 'Content-Type': 'multipart/form-data' } })
+            : api.post('/accounting/expenses/', data),
+    updateExpense: (id: number, data: any, file?: File | null) =>
+        file
+            ? api.patch(`/accounting/expenses/${id}/`, toFormData(data, file), { headers: { 'Content-Type': 'multipart/form-data' } })
+            : api.patch(`/accounting/expenses/${id}/`, data),
+    deleteExpense: (id: number) => api.delete(`/accounting/expenses/${id}/`),
+
+    getOtherIncome: (params?: { search?: string; category?: string; ordering?: string; page?: number; page_size?: number }) =>
+        api.get('/accounting/other-income/', { params }),
+    createOtherIncome: (data: any) => api.post('/accounting/other-income/', data),
+    updateOtherIncome: (id: number, data: any) => api.patch(`/accounting/other-income/${id}/`, data),
+    deleteOtherIncome: (id: number) => api.delete(`/accounting/other-income/${id}/`),
+
+    getDashboard: (startDate?: string, endDate?: string) =>
+        api.get('/accounting/dashboard/', { params: { start_date: startDate, end_date: endDate } }),
+};
+
+// Inventory (items, purchases, usage, stock dashboard)
+export const inventoryAPI = {
+    getItems: (params?: { search?: string; category?: string; is_active?: boolean; ordering?: string; page?: number; page_size?: number }) =>
+        api.get('/inventory/items/', { params }),
+    createItem: (data: any) => api.post('/inventory/items/', data),
+    updateItem: (id: number, data: any) => api.patch(`/inventory/items/${id}/`, data),
+    deleteItem: (id: number) => api.delete(`/inventory/items/${id}/`),
+
+    getPurchases: (params?: { search?: string; item?: number; ordering?: string; page?: number; page_size?: number }) =>
+        api.get('/inventory/purchases/', { params }),
+    createPurchase: (data: any, file?: File | null) =>
+        file
+            ? api.post('/inventory/purchases/', toFormData(data, file), { headers: { 'Content-Type': 'multipart/form-data' } })
+            : api.post('/inventory/purchases/', data),
+    updatePurchase: (id: number, data: any, file?: File | null) =>
+        file
+            ? api.patch(`/inventory/purchases/${id}/`, toFormData(data, file), { headers: { 'Content-Type': 'multipart/form-data' } })
+            : api.patch(`/inventory/purchases/${id}/`, data),
+    deletePurchase: (id: number) => api.delete(`/inventory/purchases/${id}/`),
+
+    getUsages: (params?: { search?: string; item?: number; customer?: number; ordering?: string; page?: number; page_size?: number }) =>
+        api.get('/inventory/usages/', { params }),
+    createUsage: (data: any) => api.post('/inventory/usages/', data),
+    updateUsage: (id: number, data: any) => api.patch(`/inventory/usages/${id}/`, data),
+    deleteUsage: (id: number) => api.delete(`/inventory/usages/${id}/`),
+
+    getDashboard: () => api.get('/inventory/dashboard/'),
+};
+
+// TR-069 CPE devices (Huawei/Tenda/TP-Link customer-premises routers)
+export const cpeDeviceAPI = {
+    getDevices: (params?: { brand?: string; is_online?: boolean; unlinked?: boolean; search?: string; page?: number; page_size?: number }) =>
+        api.get('/tr069/devices/', { params }),
+    getDevice: (id: number) => api.get(`/tr069/devices/${id}/`),
+    createDevice: (data: { genieacs_device_id: string; serial_number: string; brand: string; customer?: number | null }) =>
+        api.post('/tr069/devices/', data),
+    updateDevice: (id: number, data: any) => api.patch(`/tr069/devices/${id}/`, data),
+    deleteDevice: (id: number) => api.delete(`/tr069/devices/${id}/`),
+    linkCustomer: (id: number, customerId: number) => api.post(`/tr069/devices/${id}/link_customer/`, { customer_id: customerId }),
+    unlinkCustomer: (id: number) => api.post(`/tr069/devices/${id}/unlink_customer/`),
+    reboot: (id: number) => api.post(`/tr069/devices/${id}/reboot/`),
+    factoryReset: (id: number) => api.post(`/tr069/devices/${id}/factory_reset/`),
+    setWifi: (id: number, data: { ssid: string; password: string }) => api.post(`/tr069/devices/${id}/set_wifi/`, data),
+    getDiagnostics: (id: number) => api.get(`/tr069/devices/${id}/diagnostics/`),
+    pushFirmware: (id: number, fileName: string) => api.post(`/tr069/devices/${id}/push_firmware/`, { file_name: fileName }),
 };
 
 export default api;

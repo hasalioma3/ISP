@@ -1,3 +1,5 @@
+import re
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -82,6 +84,101 @@ class RouterViewSet(viewsets.ModelViewSet):
         if not result.get('success'):
             return Response({'error': result.get('error')}, status=400)
         return Response({'snapshot': result['snapshot'], 'snapshot_at': router.pre_provision_snapshot_at})
+
+    @action(detail=True, methods=['post'])
+    def enable_acs_provisioning(self, request, pk=None):
+        """
+        Broadcasts the TR-069 ACS URL via DHCP option 43 on this router's
+        Hotspot network, so CPE devices that support zero-touch
+        provisioning configure themselves automatically -- see
+        NetworkAutomation.enable_acs_auto_provisioning for the scope/
+        caveats (Hotspot network only, not every CPE device supports this).
+        Explicit opt-in action, admin-only like provision/backup.
+        """
+        router = self.get_object()
+        username = request.data.get('username')
+        password = request.data.get('password')
+        result = network_automation.enable_acs_auto_provisioning(router, username=username, password=password)
+        if result.get('error'):
+            return Response({'error': result['error']}, status=400)
+        return Response({'success': [f"CPE auto-provisioning enabled (ACS URL: {result['acs_url']})"], 'failed': []})
+
+    @action(detail=True, methods=['post'])
+    def restart(self, request, pk=None):
+        """Reboots the router. Admin-only; clients on it lose connectivity briefly."""
+        router = self.get_object()
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=router.username,
+            password=router.password, port=router.port, use_ssl=router.use_ssl
+        )
+        result = mikrotik.reboot()
+        if not result.get('success'):
+            return Response({'error': result.get('error')}, status=400)
+        return Response({'success': ['Restart command sent -- the router will be offline for a minute or two'], 'failed': []})
+
+    @action(detail=True, methods=['get', 'post'])
+    def maintenance_schedule(self, request, pk=None):
+        """
+        GET: current scheduled backup/update settings read from the router.
+        POST: {backup: {frequency, time}, update: {frequency, time}} -- frequency
+        is off/daily/weekly/monthly, time is HH:MM (router clock).
+        """
+        router = self.get_object()
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=router.username,
+            password=router.password, port=router.port, use_ssl=router.use_ssl
+        )
+        if request.method == 'GET':
+            result = mikrotik.get_maintenance_schedules()
+            if not result.get('success'):
+                return Response({'error': result.get('error')}, status=400)
+            return Response({'schedules': result['schedules']})
+
+        applied = []
+        for task in ('backup', 'update'):
+            cfg = request.data.get(task)
+            if cfg is None:
+                continue
+            frequency = cfg.get('frequency')
+            time_of_day = cfg.get('time') or ''
+            if frequency != 'off' and frequency not in MikroTikService.MAINTENANCE_INTERVALS:
+                return Response({'error': f'Invalid {task} frequency'}, status=400)
+            if frequency != 'off' and not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', time_of_day):
+                return Response({'error': f'{task} time must be HH:MM'}, status=400)
+            result = mikrotik.set_maintenance_schedule(task, frequency, time_of_day)
+            if not result.get('success'):
+                return Response({'error': result.get('error')}, status=400)
+            applied.append(f"{task}: {'disabled' if frequency == 'off' else f'{frequency} at {time_of_day}'}")
+        return Response({'success': [f'Scheduled {a}' for a in applied], 'failed': []})
+
+    @action(detail=True, methods=['post'])
+    def enable_wan_access(self, request, pk=None):
+        """
+        Opens Winbox + SSH on this router's WAN interface, scoped to
+        whatever subnet it's currently addressed on (the upstream network
+        that gives it internet) -- RouterOS blocks management access from
+        WAN by default. Admin-only, like provision/backup: this is a
+        firewall change, not read-only.
+        """
+        router = self.get_object()
+        username = request.data.get('username')
+        password = request.data.get('password')
+        result = network_automation.enable_wan_management_access(router, username=username, password=password)
+        if result.get('error'):
+            return Response({'error': result['error']}, status=400)
+        scopes = ', '.join([result['subnet']] + result.get('extra_subnets', []))
+        return Response({'success': [f"WAN management access enabled, scoped to {scopes}"], 'failed': []})
+
+    @action(detail=True, methods=['post'])
+    def disable_wan_access(self, request, pk=None):
+        """Removes exactly the rules enable_wan_access added."""
+        router = self.get_object()
+        username = request.data.get('username')
+        password = request.data.get('password')
+        result = network_automation.disable_wan_management_access(router, username=username, password=password)
+        if result.get('error'):
+            return Response({'error': result['error']}, status=400)
+        return Response({'success': [f"WAN management access disabled ({result['removed_count']} rule(s) removed)"], 'failed': []})
 
     @action(detail=False, methods=['post'])
     def test_connection(self, request):

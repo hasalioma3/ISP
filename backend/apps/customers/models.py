@@ -36,7 +36,7 @@ class Customer(AbstractUser):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='admin')
 
     # Personal Information
-    phone_number = models.CharField(max_length=15, unique=False, db_index=True)
+    phone_number = models.CharField(max_length=15, unique=False, db_index=True, blank=True, default='')
     # SHA-256 of phone_number in 254XXXXXXXXX form -- Safaricom's C2B
     # confirmations send the paying MSISDN hashed the same way (data
     # minimization rollout, complete since 2026-03-24), so this is how C2B
@@ -44,6 +44,11 @@ class Customer(AbstractUser):
     phone_hash = models.CharField(max_length=64, blank=True, db_index=True)
     id_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True)
+    # Set via the Telegram bot webhook when the customer sends /start
+    # <username> -- Telegram doesn't let a bot message a user first, so
+    # automated Telegram notifications only reach customers who've linked
+    # their chat this way.
+    telegram_chat_id = models.CharField(max_length=32, blank=True, null=True, db_index=True)
     
     # Service Information
     service_type = models.CharField(

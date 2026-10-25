@@ -126,10 +126,10 @@ export default function Payment() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <div className="bg-white shadow">
+        <div className="min-h-screen bg-secondary">
+            <div className="bg-card shadow">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <Link to="/dashboard" className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
+                    <Link to="/dashboard" className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
                         <ArrowLeft className="w-5 h-5" />
                         Back to Dashboard
                     </Link>
@@ -141,20 +141,20 @@ export default function Payment() {
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
                         <CreditCard className="w-8 h-8 text-green-600" />
                     </div>
-                    <h1 className="text-3xl font-bold text-gray-900">Make Payment</h1>
-                    <p className="text-gray-600 mt-2">Pay via M-Pesa STK Push</p>
+                    <h1 className="text-3xl font-bold text-foreground">Make Payment</h1>
+                    <p className="text-muted-foreground mt-2">Pay via M-Pesa STK Push</p>
                 </div>
 
                 {paymentStatus === 'idle' && (
-                    <div className="bg-white rounded-2xl shadow-lg p-8">
+                    <div className="bg-card rounded-2xl shadow-lg p-8">
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground/80 mb-2">
                                     Select Plan
                                 </label>
                                 <select
                                     required
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    className="w-full px-4 py-3 border border-input rounded-lg focus:ring-2 focus:ring-ring"
                                     value={selectedPlanId}
                                     onChange={(e) => setSelectedPlanId(e.target.value)}
                                 >
@@ -168,20 +168,20 @@ export default function Payment() {
                             </div>
 
                             {selectedPlan && (
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                    <h3 className="font-semibold text-gray-900 mb-2">{selectedPlan.name}</h3>
-                                    <p className="text-sm text-gray-600 mb-2">
+                                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                                    <h3 className="font-semibold text-foreground mb-2">{selectedPlan.name}</h3>
+                                    <p className="text-sm text-muted-foreground mb-2">
                                         Speed: {selectedPlan.download_speed}/{selectedPlan.upload_speed} Mbps
                                     </p>
-                                    <p className="text-2xl font-bold text-blue-600">KES {selectedPlan.price}</p>
+                                    <p className="text-2xl font-bold text-primary">KES {selectedPlan.price}</p>
                                 </div>
                             )}
 
                             {isAuthenticated && (
-                                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <Wallet className="h-4 w-4 text-indigo-700" />
-                                        <span className="text-sm font-medium text-indigo-900">
+                                        <Wallet className="h-4 w-4 text-primary" />
+                                        <span className="text-sm font-medium text-primary">
                                             Account Balance: KES {accountBalance.toLocaleString()}
                                         </span>
                                     </div>
@@ -191,7 +191,7 @@ export default function Payment() {
                                                 type="button"
                                                 onClick={handlePayFromBalance}
                                                 disabled={balanceLoading}
-                                                className="w-full mt-2 bg-indigo-600 text-white py-2.5 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                                                className="w-full mt-2 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary/90 transition disabled:opacity-50 flex items-center justify-center gap-2"
                                             >
                                                 {balanceLoading ? (
                                                     <>
@@ -206,7 +206,7 @@ export default function Payment() {
                                                 )}
                                             </button>
                                         ) : (
-                                            <p className="text-xs text-indigo-700 mt-1">
+                                            <p className="text-xs text-primary mt-1">
                                                 Not enough balance for this plan -- top up or pay via M-Pesa below.
                                             </p>
                                         )
@@ -215,29 +215,29 @@ export default function Payment() {
                             )}
 
                             {isAuthenticated && selectedPlan && (
-                                <div className="flex items-center gap-3 text-xs text-gray-400 font-medium">
+                                <div className="flex items-center gap-3 text-xs text-muted-foreground font-medium">
                                     <div className="flex-1 h-px bg-gray-200" /> OR PAY VIA M-PESA <div className="flex-1 h-px bg-gray-200" />
                                 </div>
                             )}
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground/80 mb-2">
                                     M-Pesa Phone Number
                                 </label>
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Smartphone className="h-5 w-5 text-gray-400" />
+                                        <Smartphone className="h-5 w-5 text-muted-foreground" />
                                     </div>
                                     <input
                                         type="tel"
                                         required
                                         placeholder="0712345678"
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        className="w-full pl-10 pr-4 py-3 border border-input rounded-lg focus:ring-2 focus:ring-ring"
                                         value={phoneNumber}
                                         onChange={(e) => setPhoneNumber(e.target.value)}
                                     />
                                 </div>
-                                <p className="text-sm text-gray-500 mt-1">
+                                <p className="text-sm text-muted-foreground mt-1">
                                     Enter the phone number to receive the STK Push prompt
                                 </p>
                             </div>
@@ -264,14 +264,14 @@ export default function Payment() {
                 )}
 
                 {paymentStatus === 'pending' && (
-                    <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-                        <Loader className="w-16 h-16 text-blue-600 animate-spin mx-auto mb-4" />
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">Waiting for Payment</h3>
-                        <p className="text-gray-600 mb-4">
+                    <div className="bg-card rounded-2xl shadow-lg p-8 text-center">
+                        <Loader className="w-16 h-16 text-primary animate-spin mx-auto mb-4" />
+                        <h3 className="text-2xl font-bold text-foreground mb-2">Waiting for Payment</h3>
+                        <p className="text-muted-foreground mb-4">
                             Please check your phone and enter your M-Pesa PIN to complete the payment.
                         </p>
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                            <p className="text-sm text-blue-800">
+                        <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                            <p className="text-sm text-primary">
                                 You will receive an STK Push notification on <strong>{phoneNumber}</strong>
                             </p>
                         </div>
@@ -279,20 +279,20 @@ export default function Payment() {
                 )}
 
                 {paymentStatus === 'success' && (
-                    <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+                    <div className="bg-card rounded-2xl shadow-lg p-8 text-center">
                         <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h3>
-                        <p className="text-gray-600 mb-4">
+                        <h3 className="text-2xl font-bold text-foreground mb-2">Payment Successful!</h3>
+                        <p className="text-muted-foreground mb-4">
                             Your internet access has been activated. Redirecting to dashboard...
                         </p>
                     </div>
                 )}
 
                 {paymentStatus === 'failed' && (
-                    <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+                    <div className="bg-card rounded-2xl shadow-lg p-8 text-center">
                         <XCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">Payment Failed</h3>
-                        <p className="text-gray-600 mb-4">
+                        <h3 className="text-2xl font-bold text-foreground mb-2">Payment Failed</h3>
+                        <p className="text-muted-foreground mb-4">
                             The payment was not completed. Please try again.
                         </p>
                         <button
@@ -300,7 +300,7 @@ export default function Payment() {
                                 setPaymentStatus('idle');
                                 setPaymentRequestId(null);
                             }}
-                            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700"
+                            className="bg-primary text-white px-6 py-3 rounded-lg font-semibold hover:bg-primary/90"
                         >
                             Try Again
                         </button>

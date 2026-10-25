@@ -52,6 +52,7 @@ services:
       - backend
     restart: always
     networks:
+      - default
       - isp_shared_network
 
   celery_beat:
@@ -63,7 +64,19 @@ services:
       - backend
     restart: always
     networks:
+      - default
       - isp_shared_network
+
+  whatsapp_service:
+    build: ./whatsapp-service
+    volumes:
+      - whatsapp_session:/app/auth
+    restart: always
+    networks:
+      - default
+    # Private to this company's own `default` network -- NOT
+    # isp_shared_network, since that's shared across every tenant and a
+    # same-named service there would collide. No published port.
 
 networks:
   default:
@@ -73,3 +86,4 @@ networks:
 volumes:
   static_volume:
   media_volume:
+  whatsapp_session:

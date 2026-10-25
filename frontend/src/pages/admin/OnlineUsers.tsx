@@ -56,13 +56,13 @@ export default function OnlineUsers() {
         <div>
             <h1 className="text-2xl font-bold mb-6">Online Users</h1>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="bg-blue-600 px-4 sm:px-6 py-4 flex flex-wrap gap-3 items-center justify-between">
+            <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+                <div className="bg-primary px-4 sm:px-6 py-4 flex flex-wrap gap-3 items-center justify-between">
                     <h3 className="text-white font-bold">Online Users</h3>
                     <button
                         onClick={() => syncMutation.mutate()}
                         disabled={syncMutation.isPending}
-                        className="flex items-center gap-2 bg-white/95 hover:bg-white px-3 py-1.5 rounded-lg text-sm font-medium text-gray-700 disabled:opacity-50"
+                        className="flex items-center gap-2 bg-white/95 hover:bg-white px-3 py-1.5 rounded-lg text-sm font-medium text-foreground/80 disabled:opacity-50"
                     >
                         <RefreshCw className={`h-4 w-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
                         Sync
@@ -75,8 +75,8 @@ export default function OnlineUsers() {
                             key={t.key}
                             onClick={() => setTab(t.key)}
                             className={`flex items-center shrink-0 px-4 sm:px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === t.key
-                                ? 'border-blue-500 text-blue-600 bg-blue-50'
-                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                                ? 'border-ring text-primary bg-primary/10'
+                                : 'border-transparent text-muted-foreground hover:text-foreground/80 hover:bg-secondary'
                                 }`}
                         >
                             <t.icon className="h-4 w-4 mr-2" />
@@ -92,45 +92,45 @@ export default function OnlineUsers() {
                             placeholder="Search by username..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                         />
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     </div>
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-border">
+                        <thead className="bg-secondary">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan Name</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created On</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expires On</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Method</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Router</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Manage</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Username</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plan Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Type</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Created On</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Expires On</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Method</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Router</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Status</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Manage</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-card divide-y divide-border">
                             {isLoading ? (
-                                <tr><td colSpan={9} className="text-center py-8 text-gray-500">Loading...</td></tr>
+                                <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
                             ) : filtered.length === 0 ? (
-                                <tr><td colSpan={9} className="text-center py-8 text-gray-500">No users currently online.</td></tr>
+                                <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">No users currently online.</td></tr>
                             ) : filtered.map((u: any) => (
-                                <tr key={u.session_id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 text-sm font-medium text-blue-600">{u.username}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-900">{u.plan_name}</td>
-                                    <td className="px-6 py-4 text-sm uppercase text-gray-500">{u.type}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                <tr key={u.session_id} className="hover:bg-secondary">
+                                    <td className="px-6 py-4 text-sm font-medium text-primary">{u.username}</td>
+                                    <td className="px-6 py-4 text-sm text-foreground">{u.plan_name}</td>
+                                    <td className="px-6 py-4 text-sm uppercase text-muted-foreground">{u.type}</td>
+                                    <td className="px-6 py-4 text-sm text-muted-foreground">
                                         {u.created_on ? format(new Date(u.created_on), 'd MMM yyyy HH:mm') : '-'}
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                    <td className="px-6 py-4 text-sm text-muted-foreground">
                                         {u.expires_on ? format(new Date(u.expires_on), 'd MMM yyyy HH:mm') : '-'}
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-gray-500">{u.method}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500">{u.router}</td>
+                                    <td className="px-6 py-4 text-sm text-muted-foreground">{u.method}</td>
+                                    <td className="px-6 py-4 text-sm text-muted-foreground">{u.router}</td>
                                     <td className="px-6 py-4">
                                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                             Online
@@ -164,7 +164,7 @@ export default function OnlineUsers() {
                     </table>
                 </div>
                 {isFetching && !isLoading && (
-                    <div className="text-xs text-gray-400 px-6 py-2">Refreshing...</div>
+                    <div className="text-xs text-muted-foreground px-6 py-2">Refreshing...</div>
                 )}
             </div>
 

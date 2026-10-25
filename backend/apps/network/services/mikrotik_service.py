@@ -197,6 +197,59 @@ class MikroTikService:
             logger.error(f"Failed to update Hotspot user {username}: {str(e)}")
             return {'success': False, 'error': str(e)}
     
+    def ensure_hotspot_mac_login(self):
+        """Enable MAC auto-login on every hotspot server profile in use."""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            servers = [h for h in api.get_resource('/ip/hotspot').get() if h.get('id')]
+            profiles = api.get_resource('/ip/hotspot/profile')
+            used = {s.get('profile') for s in servers}
+            for prof in [p for p in profiles.get() if p.get('id') and p.get('name') in used]:
+                methods = [m for m in prof.get('login-by', '').split(',') if m]
+                if 'mac' not in methods:
+                    profiles.set(id=prof['id'], **{'login-by': ','.join(['mac'] + methods)})
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to enable hotspot MAC login: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def set_hotspot_mac_user(self, mac_address, profile, disabled=False):
+        """User named after the MAC so RouterOS logs the device in automatically."""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            users = api.get_resource('/ip/hotspot/user')
+            mac = mac_address.upper()
+            existing = [u for u in users.get(name=mac) if u.get('id')]
+            flag = 'yes' if disabled else 'no'
+            if existing:
+                users.set(id=existing[0]['id'], profile=profile, disabled=flag)
+            else:
+                users.add(**{'name': mac, 'profile': profile, 'mac-address': mac,
+                             'disabled': flag, 'comment': 'ISP Billing - roaming MAC login'})
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to set hotspot MAC user {mac_address}: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def reset_unauthorized_hotspot_host(self, mac_address):
+        """Drop a stale unauthorized host entry so RouterOS retries MAC login."""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            hosts = api.get_resource('/ip/hotspot/host')
+            for h in hosts.get(**{'mac-address': mac_address.upper()}):
+                if h.get('id') and h.get('authorized') in ('false', 'no', False):
+                    hosts.remove(id=h['id'])
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to reset hotspot host {mac_address}: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
     def disable_hotspot_user(self, username):
         return self.update_hotspot_user(username, disabled='yes')
     
@@ -530,8 +583,25 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def add_dhcp_network(self, subnet, gateway, dns_servers=''):
-        """subnet is CIDR form e.g. '10.5.50.0/24'"""
+    def get_interface_address(self, interface):
+        """Read-only: this router's own current CIDR address on `interface`
+        (e.g. '192.168.1.50/24'), or None if it has none (DHCP not yet
+        bound, or a static interface with nothing configured)."""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            ip_address = api.get_resource('/ip/address')
+            entries = [a for a in ip_address.get(interface=interface) if a.get('id')]
+            connection.disconnect()
+            return {'success': True, 'address': entries[0]['address'] if entries else None}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_dhcp_network(self, subnet, gateway, dns_servers='', dhcp_option_name=None):
+        """subnet is CIDR form e.g. '10.5.50.0/24'. dhcp_option_name, if
+        given, must already exist (see add_dhcp_option) -- attaches it to
+        this network's `dhcp-option` property so it's sent with every
+        lease on this subnet."""
         try:
             connection = self._get_connection()
             api = connection.get_api()
@@ -541,10 +611,34 @@ class MikroTikService:
             params = {'gateway': gateway}
             if dns_servers:
                 params['dns-server'] = dns_servers
+            if dhcp_option_name:
+                params['dhcp-option'] = dhcp_option_name
             if existing:
                 dhcp_network.set(id=existing[0]['id'], **params)
             else:
                 dhcp_network.add(address=subnet, **params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def add_dhcp_option(self, name, code, value):
+        """
+        value is a RouterOS-format option value -- a '0x...'-prefixed hex
+        string for a binary payload (e.g. an RFC 2132 encapsulated
+        vendor-specific option), or a plain string for a text option.
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            option = api.get_resource('/ip/dhcp-server/option')
+            existing = option.get(name=name)
+            existing = [o for o in existing if o.get('id')]
+            params = {'code': str(code), 'value': value}
+            if existing:
+                option.set(id=existing[0]['id'], **params)
+            else:
+                option.add(name=name, **params)
             connection.disconnect()
             return {'success': True}
         except Exception as e:
@@ -892,6 +986,144 @@ class MikroTikService:
                     filter_rules.set(id=rule['id'], disabled='yes')
             connection.disconnect()
             return {'success': True, 'disabled_count': len(rules)}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def allow_management_access(self, interface, src_address, comment_prefix, tag=''):
+        """
+        Adds Winbox (8291) + SSH (22) input-chain accept rules scoped to
+        `src_address`, placed above the firewall's existing rules -- a
+        typical default config has a catch-all drop later in the input
+        chain that would otherwise shadow these. Both rules share
+        `comment_prefix` so revoke_management_access can find and remove
+        exactly these two later, not anything else an admin added by hand.
+
+        RouterOS's `place-before` add-time directive takes an existing
+        rule's own ID, not a numeric position -- so this reads the
+        current first rule in the list (if any) and places before that,
+        rather than passing a bare index.
+
+        `interface=None` omits the in-interface match (for LAN/VPN source
+        subnets that can arrive on any interface); `tag` keeps each source's
+        rules distinct so several can coexist under the same prefix.
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            filter_rules = api.get_resource('/ip/firewall/filter')
+
+            all_rules = [r for r in filter_rules.get() if r.get('id')]
+            first_rule_id = all_rules[0]['id'] if all_rules else None
+
+            for port, label in [(8291, 'Winbox'), (22, 'SSH')]:
+                comment = f'{comment_prefix}{tag} ({label})'
+                rule_fields = {
+                    'src-address': src_address,
+                    'protocol': 'tcp', 'dst-port': str(port), 'action': 'accept',
+                }
+                if interface:
+                    rule_fields['in-interface'] = interface
+                existing = [r for r in filter_rules.get(comment=comment) if r.get('id')]
+                if existing:
+                    filter_rules.set(id=existing[0]['id'], disabled='no', **rule_fields)
+                else:
+                    add_kwargs = {'chain': 'input', 'comment': comment, **rule_fields}
+                    if first_rule_id:
+                        add_kwargs['place-before'] = first_rule_id
+                    filter_rules.add(**add_kwargs)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def revoke_management_access(self, comment_prefix):
+        """Removes exactly the rules allow_management_access added (matched
+        by comment prefix), leaving everything else untouched."""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            filter_rules = api.get_resource('/ip/firewall/filter')
+            all_rules = [r for r in filter_rules.get() if r.get('id')]
+            matched = [r for r in all_rules if (r.get('comment') or '').startswith(comment_prefix)]
+            for rule in matched:
+                filter_rules.remove(id=rule['id'])
+            connection.disconnect()
+            return {'success': True, 'removed_count': len(matched)}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    # Scheduled maintenance runs on the router itself (/system/scheduler), so
+    # it still fires if the billing server is offline.
+    MAINTENANCE_COMMENT_PREFIX = 'ISP Billing - Scheduled'
+    MAINTENANCE_INTERVALS = {'daily': '1d', 'weekly': '7d', 'monthly': '30d'}
+    MAINTENANCE_SCRIPTS = {
+        'backup': '/system backup save name=isp-auto-backup; /export file=isp-auto-export',
+        'update': (
+            '/system package update check-for-updates once; :delay 15s; '
+            ':if ([/system package update get status] = "New version is available") do={ '
+            '/system backup save name=isp-pre-update; /system package update install }'
+        ),
+    }
+
+    def reboot(self):
+        """Sends the reboot command; the router drops the connection as it
+        goes down, so a failure after the command is sent counts as success."""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+        try:
+            api.get_resource('/system').call('reboot')
+        except Exception as e:
+            logger.info(f"Reboot sent to {self.host}; connection closed: {e}")
+        return {'success': True}
+
+    def set_maintenance_schedule(self, task, frequency, time_of_day):
+        """Creates/replaces the router scheduler entry for `task` ('backup' or
+        'update'); frequency 'off' removes it. time_of_day is 'HH:MM'."""
+        name = f'isp-auto-{task}'
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            scheduler = api.get_resource('/system/scheduler')
+            for entry in scheduler.get(name=name):
+                if entry.get('id'):
+                    scheduler.remove(id=entry['id'])
+            if frequency != 'off':
+                scheduler.add(
+                    name=name,
+                    **{
+                        'start-time': f'{time_of_day}:00',
+                        'interval': self.MAINTENANCE_INTERVALS[frequency],
+                        'on-event': self.MAINTENANCE_SCRIPTS[task],
+                        'policy': 'read,write,policy,test,reboot',
+                        'comment': f'{self.MAINTENANCE_COMMENT_PREFIX} ({task})',
+                    },
+                )
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_maintenance_schedules(self):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            entries = api.get_resource('/system/scheduler').get()
+            connection.disconnect()
+            by_interval = {v: k for k, v in self.MAINTENANCE_INTERVALS.items()}
+            schedules = {}
+            for task in self.MAINTENANCE_SCRIPTS:
+                entry = next((e for e in entries if e.get('name') == f'isp-auto-{task}'), None)
+                if entry:
+                    schedules[task] = {
+                        'frequency': by_interval.get(entry.get('interval'), 'custom'),
+                        'time': (entry.get('start-time') or '')[:5],
+                    }
+                else:
+                    schedules[task] = {'frequency': 'off', 'time': ''}
+            return {'success': True, 'schedules': schedules}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 

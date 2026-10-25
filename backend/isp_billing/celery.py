@@ -34,6 +34,10 @@ app.conf.beat_schedule = {
         'task': 'apps.notifications.tasks.send_expiry_reminders',
         'schedule': crontab(hour=8, minute=0),  # Once daily -- covers both the 3-day and day-of stages
     },
+    'sync-cpe-devices': {
+        'task': 'apps.tr069.tasks.sync_cpe_devices',
+        'schedule': crontab(minute='*/5'),  # Every 5 minutes -- device online/offline status doesn't need per-minute freshness
+    },
 }
 
 @app.task(bind=True)

@@ -209,6 +209,7 @@ from django.utils import timezone
 from django.db import transaction
 import random
 import string
+from apps.notifications.tasks import send_welcome_notification, send_voucher_notification
 from apps.billing.models import Voucher, VoucherBatch
 from apps.billing.serializers import (
     VoucherBatchSerializer, VoucherGenerationSerializer, VoucherRedeemSerializer
@@ -287,6 +288,35 @@ class VoucherGenerationView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+class VoucherSendView(APIView):
+    """
+    Deliver an unused voucher's code to a recipient over SMS/WhatsApp/
+    Telegram (admin/sales only) -- sending doesn't consume the voucher,
+    only redemption does that.
+    """
+    permission_classes = [RoleAllowed('admin', 'sales')]
+
+    def post(self, request, voucher_id):
+        recipient = (request.data.get('recipient') or '').strip()
+        channel = request.data.get('channel')
+
+        if channel not in ('sms', 'whatsapp', 'telegram'):
+            return Response({'error': 'channel must be sms, whatsapp, or telegram'}, status=status.HTTP_400_BAD_REQUEST)
+        if not recipient:
+            return Response({'error': 'recipient is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            voucher = Voucher.objects.get(id=voucher_id)
+        except Voucher.DoesNotExist:
+            return Response({'error': 'Voucher not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if voucher.status != 'active':
+            return Response({'error': 'This voucher has already been used or expired'}, status=status.HTTP_400_BAD_REQUEST)
+
+        send_voucher_notification.delay(voucher.id, recipient, channel)
+        return Response({'success': True, 'message': f'Voucher code queued for delivery via {channel}'})
+
+
 class VoucherRedeemView(APIView):
     """
     Redeem a voucher code
@@ -357,7 +387,10 @@ class VoucherRedeemView(APIView):
                         customer.hotspot_mac_address = mac_address
 
                 customer.save()
-                
+                transaction.on_commit(
+                    lambda: send_welcome_notification.delay(customer.id, voucher.code)
+                )
+
                 # Logic used to vary if using get_or_create, now significantly simplified for "always create new" logic requested
                 created = True
                 
@@ -383,19 +416,42 @@ class VoucherRedeemView(APIView):
                 # 4. Generate Tokens
                 from rest_framework_simplejwt.tokens import RefreshToken
                 from apps.customers.serializers import CustomerSerializer
-                
+
                 refresh = RefreshToken.for_user(customer)
+
+            # PPPoE has no "instant login" the way Hotspot does -- there's no
+            # captive-portal form that can authenticate a PPPoE session, it
+            # requires the customer's own router to dial in with these
+            # credentials. The router-side secret is already created/enabled
+            # at this point (via the Subscription save above), so the only
+            # thing left is making sure the customer actually gets the
+            # credentials they need to configure their router -- the portal
+            # UI has no other way to show them, since CustomerSerializer's
+            # password fields are gated to an authenticated request matching
+            # this customer, which this request never is (voucher redemption
+            # is anonymous until the tokens above are issued).
+            message = f'Voucher redeemed! Subscribed to {voucher.plan.name}.'
+            if voucher.plan.service_type in ['pppoe', 'both']:
+                message += ' Configure your router with the PPPoE credentials shown to connect.'
 
             return Response({
                 'success': True,
-                'message': f'Voucher redeemed! Subscribed to {voucher.plan.name}.',
+                'message': message,
                 'customer': CustomerSerializer(customer).data,
+                'credentials': {
+                    'portal_username': customer.username,
+                    'portal_password': voucher.code,
+                    'pppoe_username': customer.pppoe_username,
+                    'pppoe_password': customer.pppoe_password,
+                    'hotspot_username': customer.hotspot_username,
+                    'hotspot_password': customer.hotspot_password,
+                },
                 'tokens': {
                     'refresh': str(refresh),
                     'access': str(refresh.access_token),
                 }
             })
-            
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -432,8 +488,6 @@ class ManualSubscriptionView(APIView):
 
         if not customer:
             phone_number = (data.get('phone_number') or '').strip()
-            if not phone_number:
-                return Response({'error': 'phone_number is required to create a new customer'}, status=status.HTTP_400_BAD_REQUEST)
 
             if not password:
                 password = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
@@ -463,6 +517,9 @@ class ManualSubscriptionView(APIView):
                 customer.static_ip_address = static_ip
             customer.save()
             created_new = True
+            transaction.on_commit(
+                lambda: send_welcome_notification.delay(customer.id, password)
+            )
         elif plan.service_type == 'static' and not customer.static_ip_address:
             static_ip = (data.get('static_ip_address') or '').strip()
             if not static_ip:
@@ -628,7 +685,7 @@ class PPPoEBulkImportView(APIView):
             return Response({'error': 'File must be UTF-8 encoded CSV'}, status=status.HTTP_400_BAD_REQUEST)
 
         reader = csv.DictReader(io.StringIO(decoded))
-        required_cols = {'username', 'password', 'phone_number', 'plan_name'}
+        required_cols = {'username', 'password', 'plan_name'}
         if not required_cols.issubset(set(reader.fieldnames or [])):
             missing = required_cols - set(reader.fieldnames or [])
             return Response(
@@ -644,12 +701,12 @@ class PPPoEBulkImportView(APIView):
             phone_number = (row.get('phone_number') or '').strip()
             plan_name = (row.get('plan_name') or '').strip()
 
-            if not username or not password or not phone_number or not plan_name:
-                errors.append({'row': i, 'username': username, 'error': 'username, password, phone_number and plan_name are required'})
+            if not username or not password or not plan_name:
+                errors.append({'row': i, 'username': username, 'error': 'username, password and plan_name are required'})
                 continue
 
-            if len(password) < 8:
-                errors.append({'row': i, 'username': username, 'error': 'password must be at least 8 characters'})
+            if len(password) < 3:
+                errors.append({'row': i, 'username': username, 'error': 'password must be at least 3 characters'})
                 continue
 
             if Customer.objects.filter(username=username).exists():

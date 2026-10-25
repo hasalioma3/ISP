@@ -14,7 +14,7 @@ from apps.billing.services import purchase_plan
 from apps.customers.models import Customer
 from apps.network.services.network_automation import network_automation
 from apps.payments.services.phone_hash import is_msisdn_hash
-from apps.notifications.tasks import send_payment_confirmation_sms
+from apps.notifications.tasks import send_payment_confirmation_sms, send_payment_failed_notification
 
 logger = logging.getLogger('mpesa')
 
@@ -89,7 +89,11 @@ class PaymentProcessor:
                 # Payment failed
                 payment_request.status = 'failed'
                 payment_request.save()
-                
+
+                send_payment_failed_notification.delay(
+                    payment_request.customer_id, payment_request.plan_id, result_desc
+                )
+
                 logger.warning(f"Payment failed: {merchant_request_id}, reason: {result_desc}")
                 return {
                     'success': False,

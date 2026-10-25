@@ -27,6 +27,9 @@ import OnlineUsers from './pages/admin/OnlineUsers';
 import BillingPlans from './pages/admin/BillingPlans';
 import DataUsage from './pages/admin/DataUsage';
 import Payments from './pages/admin/Payments';
+import Accounting from './pages/admin/Accounting';
+import Inventory from './pages/admin/Inventory';
+import CPEDevices from './pages/admin/CPEDevices';
 import NetworkOps from './pages/admin/NetworkOps';
 
 const queryClient = new QueryClient();
@@ -113,10 +116,13 @@ function App() {
             <Route path="data-usage" element={<DataUsage />} />
             <Route path="network-ops" element={<NetworkOps />} />
             <Route path="payments" element={<Payments />} />
+            <Route path="accounting" element={<Accounting />} />
+            <Route path="inventory" element={<Inventory />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="vouchers" element={<VoucherManager />} />
             <Route path="mikrotik" element={<MikroTikSync />} />
+            <Route path="cpe-devices" element={<CPEDevices />} />
             <Route path="billing-plans" element={<BillingPlans />} />
             <Route index element={<Navigate to="dashboard" />} />
           </Route>

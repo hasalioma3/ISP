@@ -61,6 +61,9 @@ INSTALLED_APPS = [
     'apps.network',
     'apps.analytics',
     'apps.sitesettings',
+    'apps.accounting',
+    'apps.inventory',
+    'apps.tr069',
 ]
 
 if DEBUG:
@@ -146,6 +149,12 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Media files
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'mediafiles'
+
+# Matches nginx's client_max_body_size (nginx/default.conf) -- explicit
+# here rather than relying on Django's 2.5MB default, which is too small
+# for a phone camera photo (receipt/invoice attachments).
+DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -246,6 +255,36 @@ if AFRICASTALKING_ENVIRONMENT == 'production':
 else:
     AFRICASTALKING_BASE_URL = 'https://api.sandbox.africastalking.com'
 
+# Notifications: SMS/WhatsApp/Telegram credentials now live in the DB
+# (NotificationSettings, encrypted) rather than env vars -- the
+# AFRICASTALKING_* vars above are only read once, by a data migration, to
+# seed that table on deploy so the already-working SMS flow doesn't go
+# dark; the settings page is the source of truth after that.
+#
+# This key must stay out of the database -- encrypting DB-stored secrets
+# with a key that's also DB-stored protects nothing. Required: generate one
+# per tenant with:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# and set NOTIFICATIONS_ENCRYPTION_KEY in that tenant's .env/.env.prod.
+NOTIFICATIONS_ENCRYPTION_KEY = config('NOTIFICATIONS_ENCRYPTION_KEY', default='')
+
+# Internal-only Docker service name of the WhatsApp (Baileys) sidecar --
+# wiring, not a secret, so it's fine as a plain default.
+WHATSAPP_SIDECAR_URL = config('WHATSAPP_SIDECAR_URL', default='http://whatsapp_service:3000')
+# Pause between WhatsApp sends in a bulk broadcast, to reduce the ban risk
+# that comes with QR-paired (unofficial) WhatsApp automation.
+WHATSAPP_BROADCAST_DELAY_SECONDS = config('WHATSAPP_BROADCAST_DELAY_SECONDS', default=4, cast=int)
+
+# TR-069 (GenieACS NBI) -- internal-only Docker service name, same
+# access-control-via-network-isolation pattern as WHATSAPP_SIDECAR_URL.
+ACS_NBI_URL = config('ACS_NBI_URL', default='http://genieacs_nbi:7557')
+# Public-facing ACS URL handed to CPE devices (via DHCP option 43 --
+# apps.network.services.network_automation.build_acs_option43_value -- and
+# manually during onboarding, see the CPE Onboarding Guide). Different from
+# ACS_NBI_URL above: that's Django's internal admin-API route to GenieACS,
+# this is what devices on the internet actually connect to.
+ACS_PUBLIC_URL = config('ACS_PUBLIC_URL', default='')
+
 # MikroTik Configuration
 MIKROTIK_HOST = config('MIKROTIK_HOST', default='192.168.88.1')
 MIKROTIK_USERNAME = config('MIKROTIK_USERNAME', default='admin')
@@ -272,6 +311,15 @@ MIKROTIK_PROVISION_BRIDGE_PORTS = [
 # dashboard's Router View card (get_system_health). Not enforced anywhere;
 # if a router's actual WAN port differs, override per-deployment via env.
 MIKROTIK_WAN_INTERFACE = config('MIKROTIK_WAN_INTERFACE', default='ether1')
+
+# Source subnets allowed to reach Winbox/SSH via "Enable WAN Management Access",
+# on any interface. Defaults to all private (RFC1918) ranges, which covers any
+# LAN or VPN; public addresses stay blocked. Override via env to narrow it.
+MIKROTIK_MGMT_ALLOWED_SUBNETS = [
+    s.strip() for s in config(
+        'MIKROTIK_MGMT_ALLOWED_SUBNETS', default='10.0.0.0/8,172.16.0.0/12,192.168.0.0/16'
+    ).split(',') if s.strip()
+]
 
 # Rate-limit applied to the built-in "default" Hotspot/PPPoE profiles at
 # provisioning time. Whoever ends up on "default" isn't on a real billing

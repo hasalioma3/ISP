@@ -1,5 +1,5 @@
 
-from django.db.models.signals import post_save, m2m_changed
+from django.db.models.signals import post_save, post_delete, m2m_changed
 from django.dispatch import receiver
 from apps.billing.models import BillingPlan
 from apps.network.tasks import sync_plan_to_routers
@@ -68,3 +68,27 @@ def sync_subscription_on_save(sender, instance, created, **kwargs):
             if instance.customer.status != new_status:
                 instance.customer.status = new_status
                 instance.customer.save(update_fields=['status'])
+
+
+@receiver(post_delete, sender=Subscription)
+def suspend_on_subscription_delete(sender, instance, **kwargs):
+    """
+    Deleting a subscription must cut access too, otherwise the router user
+    stays enabled. Skipped if the customer still has another live one.
+    """
+    from django.utils import timezone
+    from apps.customers.models import Customer
+    customer = Customer.objects.filter(pk=instance.customer_id).first()
+    if customer is None:
+        return
+    still_active = Subscription.objects.filter(
+        customer=customer, status='active', expiry_date__gt=timezone.now()
+    ).exists()
+    if still_active:
+        return
+    result = network_automation.suspend_customer(customer)
+    if not result.get('success'):
+        logger.error(f"Failed to suspend {customer.username} after subscription delete: {result.get('error')}")
+    if customer.status == 'active':
+        customer.status = 'suspended'
+        customer.save(update_fields=['status'])

@@ -117,15 +117,19 @@ export default function CustomerDashboard() {
 
     return (
         <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-6">Your Account Information</h1>
+            <h1 className="text-2xl font-bold text-foreground mb-6">Your Account Information</h1>
 
             <div className="grid md:grid-cols-4 gap-4 mb-6">
-                <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-5 text-white">
-                    <p className="text-blue-100 text-sm">{greeting()},</p>
+                <div className="bg-gradient-to-br from-primary to-primary/80 rounded-2xl p-5 text-primary-foreground">
+                    <p className="text-primary-foreground/70 text-sm">{greeting()},</p>
                     <p className="text-xl font-bold mb-2">{user?.full_name || user?.username}</p>
-                    <p className="text-blue-100 text-xs">Welcome to {user?.full_name ? 'your portal' : 'the portal'}</p>
+                    <p className="text-primary-foreground/70 text-xs">Welcome to {user?.full_name ? 'your portal' : 'the portal'}</p>
                 </div>
 
+                {/* These three stay deliberately dark (not the light-theme card
+                    tokens) -- an intentional high-contrast accent against the
+                    greeting gradient card, so their own text uses explicit
+                    gray-400/white rather than the semantic (light-theme) tokens. */}
                 <div className="bg-gray-900 rounded-2xl p-5 text-white">
                     <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
                         <Wallet className="h-3.5 w-3.5" /> Current Balance
@@ -164,36 +168,36 @@ export default function CustomerDashboard() {
                     ) : (
                         <>
                             <p className="text-lg font-bold text-gray-400">No active plan</p>
-                            <Link to="/plans" className="text-blue-400 text-xs font-semibold hover:text-blue-300">Browse plans &rarr;</Link>
+                            <Link to="/plans" className="text-violet-400 text-xs font-semibold hover:text-violet-300">Browse plans &rarr;</Link>
                         </>
                     )}
                 </div>
             </div>
 
             <div className="grid lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div className="lg:col-span-2 bg-card rounded-2xl shadow-sm border border-border p-6">
                     <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                            <Activity className="h-5 w-5 text-purple-600" /> Data Usage
+                        <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                            <Activity className="h-5 w-5 text-primary" /> Data Usage
                         </h3>
-                        <Link to="/usage" className="text-sm text-blue-600 hover:text-blue-800">View all</Link>
+                        <Link to="/usage" className="text-sm text-primary hover:text-primary">View all</Link>
                     </div>
                     <div className="flex items-center gap-4 mb-4 text-sm">
-                        <span className={`flex items-center gap-1.5 font-medium ${liveSession?.active ? 'text-green-600' : 'text-gray-400'}`}>
+                        <span className={`flex items-center gap-1.5 font-medium ${liveSession?.active ? 'text-green-600' : 'text-muted-foreground'}`}>
                             <span className={`h-2 w-2 rounded-full ${liveSession?.active ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
                             {liveSession?.active ? 'Online now' : 'Offline'}
                         </span>
                         {liveSession?.active && liveSpeed && (
                             <>
-                                <span className="text-gray-500">&darr; {liveSpeed.downloadKbps.toFixed(0)} Kbps</span>
-                                <span className="text-gray-500">&uarr; {liveSpeed.uploadKbps.toFixed(0)} Kbps</span>
+                                <span className="text-muted-foreground">&darr; {liveSpeed.downloadKbps.toFixed(0)} Kbps</span>
+                                <span className="text-muted-foreground">&uarr; {liveSpeed.uploadKbps.toFixed(0)} Kbps</span>
                             </>
                         )}
                     </div>
 
                     {liveSession?.active && trafficSamples.length > 0 && (
                         <div className="h-40 mb-6">
-                            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Live Traffic</p>
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Live Traffic</p>
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={trafficSamples}>
                                     <defs>
@@ -202,15 +206,15 @@ export default function CustomerDashboard() {
                                             <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
                                         </linearGradient>
                                         <linearGradient id="liveUploadGrad" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
-                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                            <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.4} />
+                                            <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
                                     <XAxis dataKey="time" tick={{ fontSize: 10 }} minTickGap={40} />
                                     <YAxis tick={{ fontSize: 10 }} unit=" Kbps" width={70} />
                                     <Tooltip formatter={(v: number) => `${v} Kbps`} />
                                     <Area type="monotone" dataKey="download" name="Download" stroke="#14b8a6" fill="url(#liveDownloadGrad)" isAnimationActive={false} />
-                                    <Area type="monotone" dataKey="upload" name="Upload" stroke="#3b82f6" fill="url(#liveUploadGrad)" isAnimationActive={false} />
+                                    <Area type="monotone" dataKey="upload" name="Upload" stroke="#7c3aed" fill="url(#liveUploadGrad)" isAnimationActive={false} />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
@@ -222,8 +226,8 @@ export default function CustomerDashboard() {
                                 <AreaChart data={dailyUsage}>
                                     <defs>
                                         <linearGradient id="uploadGrad" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.5} />
-                                            <stop offset="95%" stopColor="#60a5fa" stopOpacity={0} />
+                                            <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.5} />
+                                            <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
                                         </linearGradient>
                                         <linearGradient id="downloadGrad" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#2dd4bf" stopOpacity={0.5} />
@@ -233,76 +237,76 @@ export default function CustomerDashboard() {
                                     <XAxis dataKey="day" tick={{ fontSize: 11 }} />
                                     <YAxis tick={{ fontSize: 11 }} unit=" GB" />
                                     <Tooltip formatter={(v: number) => `${v} GB`} />
-                                    <Area type="monotone" dataKey="upload" name="Upload" stroke="#3b82f6" fill="url(#uploadGrad)" />
+                                    <Area type="monotone" dataKey="upload" name="Upload" stroke="#7c3aed" fill="url(#uploadGrad)" />
                                     <Area type="monotone" dataKey="download" name="Download" stroke="#14b8a6" fill="url(#downloadGrad)" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
                     ) : (
-                        <div className="h-72 flex items-center justify-center text-gray-400 text-sm">No usage recorded yet.</div>
+                        <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">No usage recorded yet.</div>
                     )}
                 </div>
 
                 <div className="space-y-6">
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                        <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-4">
-                            <Router className="h-4 w-4 text-gray-500" /> Account Overview
+                    <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
+                        <h3 className="text-sm font-bold text-foreground flex items-center gap-2 mb-4">
+                            <Router className="h-4 w-4 text-muted-foreground" /> Account Overview
                         </h3>
                         <dl className="space-y-3 text-sm">
                             <div className="flex justify-between">
-                                <dt className="text-gray-500">Username</dt>
-                                <dd className="font-medium text-gray-900">{credentialUsername || '-'}</dd>
+                                <dt className="text-muted-foreground">Username</dt>
+                                <dd className="font-medium text-foreground">{credentialUsername || '-'}</dd>
                             </div>
                             {credentialPassword && (
                                 <div className="flex justify-between">
-                                    <dt className="text-gray-500">Password</dt>
-                                    <dd className="font-mono font-medium text-gray-900">{credentialPassword}</dd>
+                                    <dt className="text-muted-foreground">Password</dt>
+                                    <dd className="font-mono font-medium text-foreground">{credentialPassword}</dd>
                                 </div>
                             )}
                             <div className="flex justify-between">
-                                <dt className="text-gray-500">Balance</dt>
-                                <dd className="font-medium text-gray-900">KES {Number(user?.account_balance || 0).toLocaleString()}</dd>
+                                <dt className="text-muted-foreground">Balance</dt>
+                                <dd className="font-medium text-foreground">KES {Number(user?.account_balance || 0).toLocaleString()}</dd>
                             </div>
                             {subscription && (
                                 <>
                                     <div className="flex justify-between">
-                                        <dt className="text-gray-500">Plan</dt>
-                                        <dd className="font-medium text-gray-900">{subscription.plan.name}</dd>
+                                        <dt className="text-muted-foreground">Plan</dt>
+                                        <dd className="font-medium text-foreground">{subscription.plan.name}</dd>
                                     </div>
                                     <div className="flex justify-between">
-                                        <dt className="text-gray-500">Created On</dt>
-                                        <dd className="font-medium text-gray-900">{format(new Date(subscription.created_at), 'MMM d, yyyy')}</dd>
+                                        <dt className="text-muted-foreground">Created On</dt>
+                                        <dd className="font-medium text-foreground">{format(new Date(subscription.created_at), 'MMM d, yyyy')}</dd>
                                     </div>
                                     <div className="flex justify-between">
-                                        <dt className="text-gray-500">Expires On</dt>
-                                        <dd className="font-medium text-gray-900">{format(new Date(subscription.expiry_date), 'MMM d, yyyy HH:mm')}</dd>
+                                        <dt className="text-muted-foreground">Expires On</dt>
+                                        <dd className="font-medium text-foreground">{format(new Date(subscription.expiry_date), 'MMM d, yyyy HH:mm')}</dd>
                                     </div>
                                 </>
                             )}
                         </dl>
                         <Link
                             to="/plans"
-                            className="mt-4 block text-center w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-700"
+                            className="mt-4 block text-center w-full bg-primary text-white py-2 rounded-lg text-sm font-semibold hover:bg-primary/90"
                         >
                             Renew / Buy a Package
                         </Link>
                     </div>
 
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                    <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
                         <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-bold text-gray-900">Recent Transactions</h3>
-                            <Link to="/orders" className="text-xs text-blue-600 hover:text-blue-800">View all</Link>
+                            <h3 className="text-sm font-bold text-foreground">Recent Transactions</h3>
+                            <Link to="/orders" className="text-xs text-primary hover:text-primary">View all</Link>
                         </div>
                         {recentTransactions.length > 0 ? (
                             <div className="space-y-3">
                                 {recentTransactions.map((t: any) => (
                                     <div key={t.id} className="flex justify-between items-center text-sm border-t pt-2 first:border-t-0 first:pt-0">
                                         <div>
-                                            <p className="font-medium text-gray-900">KES {Number(t.amount).toLocaleString()}</p>
-                                            <p className="text-gray-500 text-xs uppercase">{t.payment_method}</p>
+                                            <p className="font-medium text-foreground">KES {Number(t.amount).toLocaleString()}</p>
+                                            <p className="text-muted-foreground text-xs uppercase">{t.payment_method}</p>
                                         </div>
                                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${t.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                            t.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                                            t.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-foreground'
                                             }`}>
                                             {t.status}
                                         </span>
@@ -310,7 +314,7 @@ export default function CustomerDashboard() {
                                 ))}
                             </div>
                         ) : (
-                            <p className="text-gray-400 text-sm">No transactions yet.</p>
+                            <p className="text-muted-foreground text-sm">No transactions yet.</p>
                         )}
                     </div>
                 </div>
@@ -320,7 +324,7 @@ export default function CustomerDashboard() {
                 <div className="mt-6">
                     <Link
                         to="/admin"
-                        className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-blue-600"
+                        className="inline-flex items-center gap-2 text-sm font-medium text-foreground/80 hover:text-primary"
                     >
                         &rarr; Go to Admin Dashboard
                     </Link>

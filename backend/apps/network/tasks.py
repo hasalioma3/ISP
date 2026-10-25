@@ -75,7 +75,7 @@ def collect_usage_statistics():
             if not session_id:
                 continue
             seen_session_ids.append(session_id)
-            customer = Customer.objects.filter(username=session['username']).first()
+            customer = _find_customer(session['username'], session['mac_address'])
             if not customer:
                 continue
             ActiveSession.objects.update_or_create(
@@ -97,7 +97,36 @@ def collect_usage_statistics():
         # list -- drop them so online-user counts stay accurate.
         ActiveSession.objects.filter(router=router).exclude(session_id__in=seen_session_ids).delete()
 
+    # A roaming device can still hold a stale session on the router it left.
+    # Keep the most recent one (lowest uptime) and drop the rest.
+    newest = {}
+    for sess in ActiveSession.objects.select_related('router').filter(session_type='hotspot'):
+        key = (sess.customer_id, (sess.mac_address or '').upper())
+        cur = newest.get(key)
+        if cur is None or sess.uptime_seconds < cur.uptime_seconds:
+            newest[key] = sess
+    keep_ids = {v.id for v in newest.values()}
+    for sess in ActiveSession.objects.select_related('router').filter(session_type='hotspot').exclude(id__in=keep_ids):
+        try:
+            r = sess.router
+            ms = MikroTikService(host=r.ip_address, username=r.username,
+                                 password=r.password, port=r.port, use_ssl=r.use_ssl)
+            ms.disconnect_hotspot_session(sess.username)
+        except Exception as e:
+            logger.warning(f"Could not drop stale session {sess.username} on {sess.router.name}: {e}")
+        sess.delete()
+
     logger.info(f"Usage statistics collection completed. {total_updated} sessions updated.")
+
+def _find_customer(username, mac=None):
+    """Roaming MAC-login sessions use the MAC as username, so fall back to it."""
+    from apps.customers.models import Customer
+    customer = Customer.objects.filter(username=username).first()
+    if not customer and mac:
+        customer = Customer.objects.filter(hotspot_mac_address__iexact=mac).first()
+    if not customer and username and ':' in username:
+        customer = Customer.objects.filter(hotspot_mac_address__iexact=username).first()
+    return customer
 
 def update_usage_record(username, delta_upload, delta_download, mac, ip, router_ip=''):
     """
@@ -111,7 +140,7 @@ def update_usage_record(username, delta_upload, delta_download, mac, ip, router_
 
     try:
         from apps.customers.models import Customer
-        customer = Customer.objects.filter(username=username).first()
+        customer = _find_customer(username, mac)
 
         if not customer:
             logger.warning(f"Usage collection: Customer not found for {username}")
@@ -175,7 +204,8 @@ def sync_plan_to_routers(plan_id):
         # since activate_customer WAS using this same "all active routers"
         # fallback for activation, just not for this sync.
         target_routers = plan.routers.filter(is_active=True)
-        if not target_routers.exists():
+        # Hotspot plans must exist on every router so a customer can roam.
+        if plan.service_type in ['hotspot', 'both'] or not target_routers.exists():
             target_routers = Router.objects.filter(is_active=True)
 
         logger.info(f"Syncing plan {plan.name} to {target_routers.count()} routers...")
@@ -305,7 +335,10 @@ def check_expired_subscriptions():
             # 1. Update DB Status
             sub.status = 'expired'
             sub.save()
-            
+
+            from apps.notifications.tasks import send_suspension_notice
+            send_suspension_notice.delay(sub.customer_id, sub.id)
+
             # 2. Trigger Network Suspension
             # Handled by the Subscription signal we just added? 
             # SIGNAL CHECK: We added a signal that calls suspend_customer if status is 'expired'.

@@ -5,6 +5,10 @@ import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { UserPlus } from 'lucide-react';
 import { useSiteSettings } from '../hooks/useSiteSettings';
+import { Card } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 
 export default function Register() {
     const navigate = useNavigate();
@@ -63,90 +67,91 @@ export default function Register() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl">
+        <div className="min-h-screen bg-secondary flex items-center justify-center p-4 py-10">
+            <Card className="shadow-lg p-8 w-full max-w-2xl">
                 <div className="text-center mb-8">
                     {siteSettings?.logo ? (
                         <img
                             src={siteSettings.logo}
                             alt={siteSettings.company_name}
-                            className="w-16 h-16 rounded-full object-contain bg-blue-50 mx-auto mb-4"
+                            className="w-16 h-16 rounded-2xl object-contain bg-accent mx-auto mb-4"
                         />
                     ) : (
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                            <UserPlus className="w-8 h-8 text-blue-600" />
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-2xl mb-4">
+                            <UserPlus className="w-8 h-8 text-primary" />
                         </div>
                     )}
                     {siteSettings?.company_name && (
-                        <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">{siteSettings.company_name}</p>
+                        <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">{siteSettings.company_name}</p>
                     )}
-                    <h1 className="text-3xl font-bold text-gray-900">Create Account</h1>
-                    <p className="text-gray-600 mt-2">Register for ISP services</p>
+                    <h1 className="text-2xl font-bold text-foreground">Create Account</h1>
+                    <p className="text-muted-foreground mt-1.5 text-sm">Register for ISP services</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
-                            <input
+                        <div className="space-y-2">
+                            <Label htmlFor="first_name">First Name</Label>
+                            <Input
+                                id="first_name"
                                 type="text"
                                 required
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 value={formData.first_name}
                                 onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
                             />
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
-                            <input
+                        <div className="space-y-2">
+                            <Label htmlFor="last_name">Last Name</Label>
+                            <Input
+                                id="last_name"
                                 type="text"
                                 required
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 value={formData.last_name}
                                 onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
                             />
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
-                        <input
+                    <div className="space-y-2">
+                        <Label htmlFor="username">Username</Label>
+                        <Input
+                            id="username"
                             type="text"
                             required
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                             value={formData.username}
                             onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                         />
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                            <input
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Email</Label>
+                            <Input
+                                id="email"
                                 type="email"
                                 required
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 value={formData.email}
                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                             />
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                            <input
+                        <div className="space-y-2">
+                            <Label htmlFor="phone_number">Phone Number</Label>
+                            <Input
+                                id="phone_number"
                                 type="tel"
                                 required
                                 placeholder="0712345678"
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 value={formData.phone_number}
                                 onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
                             />
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
+                    <div className="space-y-2">
+                        <Label htmlFor="service_type">Service Type</Label>
                         <select
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            id="service_type"
+                            className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                             value={formData.service_type}
                             onChange={(e) => setFormData({ ...formData, service_type: e.target.value })}
                         >
@@ -157,44 +162,40 @@ export default function Register() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                            <input
+                        <div className="space-y-2">
+                            <Label htmlFor="password">Password</Label>
+                            <Input
+                                id="password"
                                 type="password"
                                 required
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 value={formData.password}
                                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                             />
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
-                            <input
+                        <div className="space-y-2">
+                            <Label htmlFor="password2">Confirm Password</Label>
+                            <Input
+                                id="password2"
                                 type="password"
                                 required
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 value={formData.password2}
                                 onChange={(e) => setFormData({ ...formData, password2: e.target.value })}
                             />
                         </div>
                     </div>
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 mt-6"
-                    >
+                    <Button type="submit" disabled={loading} className="w-full mt-2" size="lg">
                         {loading ? 'Creating account...' : 'Register'}
-                    </button>
+                    </Button>
                 </form>
 
-                <p className="text-center text-gray-600 mt-6">
+                <p className="text-center text-muted-foreground mt-6 text-sm">
                     Already have an account?{' '}
-                    <Link to="/login" className="text-blue-600 font-semibold hover:underline">
+                    <Link to="/login" className="text-primary font-semibold hover:underline">
                         Login
                     </Link>
                 </p>
-            </div>
+            </Card>
         </div>
     );
 }

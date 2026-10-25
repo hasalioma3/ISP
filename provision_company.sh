@@ -55,6 +55,10 @@ fi
 SECRET_KEY=$(openssl rand -hex 32)
 DB_PASSWORD=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 20)
 ADMIN_PASSWORD=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c 14)
+# A Fernet key is 32 random bytes, URL-safe base64 encoded (with padding) --
+# this is equivalent to Fernet.generate_key() without depending on the
+# backend image (not built yet at this point) having `cryptography` installed.
+NOTIFICATIONS_ENCRYPTION_KEY=$(openssl rand 32 | base64 | tr '+/' '-_')
 DB_NAME="isp_${SLUG}"
 DB_USER="isp_${SLUG}_user"
 
@@ -73,6 +77,7 @@ sed \
     -e "s|__SLUG__|${SLUG}|g" \
     -e "s|__PORT__|${PORT}|g" \
     -e "s|__SECRET_KEY__|${SECRET_KEY}|g" \
+    -e "s|__NOTIFICATIONS_ENCRYPTION_KEY__|${NOTIFICATIONS_ENCRYPTION_KEY}|g" \
     -e "s|__HOST_IP__|${HOST_IP}|g" \
     -e "s|__DB_NAME__|${DB_NAME}|g" \
     -e "s|__DB_USER__|${DB_USER}|g" \

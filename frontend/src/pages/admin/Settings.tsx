@@ -2,10 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, billingAPI, siteSettingsAPI } from '../../services/api';
-import { Users as UsersIcon, CreditCard, Plus, Pencil, Trash2, X, Copy, ShieldCheck, Image as ImageIcon, Building2, Download, Upload, UploadCloud } from 'lucide-react';
+import { Users as UsersIcon, CreditCard, Plus, Pencil, Trash2, X, Copy, ShieldCheck, Image as ImageIcon, Building2, Download, Upload, UploadCloud, ShieldAlert, Bell } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSiteSettings } from '../../hooks/useSiteSettings';
 import { downloadBlob } from '../../utils/downloadBlob';
+import { useAuthStore } from '../../store/authStore';
+import NotificationsTab from '../../components/settings/NotificationsTab';
 
 const ROLES = [
     { value: 'admin', label: 'Admin' },
@@ -14,27 +16,47 @@ const ROLES = [
 ];
 
 const ROLE_BADGE: Record<string, string> = {
-    admin: 'bg-purple-100 text-purple-800',
-    technician: 'bg-blue-100 text-blue-800',
+    admin: 'bg-primary/10 text-primary',
+    technician: 'bg-cyan-100 text-cyan-800',
     sales: 'bg-emerald-100 text-emerald-800',
 };
 
 export default function Settings() {
     const [urlParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState(urlParams.get('tab') || 'branding');
+    const user = useAuthStore((state) => state.user);
+    // Every tab on this page (branding, staff, manual customer, bulk
+    // import) is admin/sales-only on the backend already -- this just
+    // keeps a technician who navigates here directly (the nav link is
+    // already hidden for them) from seeing forms they can't actually
+    // submit instead of a confusing 403.
+    const canAccessSettings = !!user?.is_superuser || user?.role !== 'technician';
+
+    if (!canAccessSettings) {
+        return (
+            <div>
+                <h1 className="text-2xl font-bold mb-6">System Settings</h1>
+                <div className="bg-card rounded-2xl shadow-sm border border-border p-12 text-center">
+                    <ShieldAlert className="h-10 w-10 text-red-400 mx-auto mb-3" />
+                    <h2 className="text-lg font-semibold text-foreground">Restricted</h2>
+                    <p className="text-sm text-muted-foreground mt-1">Technicians don't have access to system settings.</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div>
             <h1 className="text-2xl font-bold mb-6">System Settings</h1>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[500px]">
+            <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden min-h-[500px]">
                 {/* Tabs */}
                 <div className="flex border-b overflow-x-auto">
                     <button
                         onClick={() => setActiveTab('branding')}
                         className={`flex items-center shrink-0 px-4 sm:px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'branding'
-                            ? 'border-blue-500 text-blue-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            ? 'border-ring text-primary'
+                            : 'border-transparent text-muted-foreground hover:text-foreground/80 hover:bg-secondary'
                             }`}
                     >
                         <Building2 className="h-4 w-4 mr-2" />
@@ -43,8 +65,8 @@ export default function Settings() {
                     <button
                         onClick={() => setActiveTab('staff')}
                         className={`flex items-center shrink-0 px-4 sm:px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'staff'
-                            ? 'border-blue-500 text-blue-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            ? 'border-ring text-primary'
+                            : 'border-transparent text-muted-foreground hover:text-foreground/80 hover:bg-secondary'
                             }`}
                     >
                         <UsersIcon className="h-4 w-4 mr-2" />
@@ -53,8 +75,8 @@ export default function Settings() {
                     <button
                         onClick={() => setActiveTab('manual')}
                         className={`flex items-center shrink-0 px-4 sm:px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'manual'
-                            ? 'border-blue-500 text-blue-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            ? 'border-ring text-primary'
+                            : 'border-transparent text-muted-foreground hover:text-foreground/80 hover:bg-secondary'
                             }`}
                     >
                         <CreditCard className="h-4 w-4 mr-2" />
@@ -63,12 +85,22 @@ export default function Settings() {
                     <button
                         onClick={() => setActiveTab('bulk-import')}
                         className={`flex items-center shrink-0 px-4 sm:px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'bulk-import'
-                            ? 'border-blue-500 text-blue-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            ? 'border-ring text-primary'
+                            : 'border-transparent text-muted-foreground hover:text-foreground/80 hover:bg-secondary'
                             }`}
                     >
                         <UploadCloud className="h-4 w-4 mr-2" />
                         Bulk Import
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('notifications')}
+                        className={`flex items-center shrink-0 px-4 sm:px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'notifications'
+                            ? 'border-ring text-primary'
+                            : 'border-transparent text-muted-foreground hover:text-foreground/80 hover:bg-secondary'
+                            }`}
+                    >
+                        <Bell className="h-4 w-4 mr-2" />
+                        Notifications
                     </button>
                 </div>
 
@@ -78,6 +110,7 @@ export default function Settings() {
                     {activeTab === 'staff' && <StaffTab />}
                     {activeTab === 'manual' && <ManualUserTab />}
                     {activeTab === 'bulk-import' && <BulkImportTab />}
+                    {activeTab === 'notifications' && <NotificationsTab />}
                 </div>
             </div>
         </div>
@@ -127,28 +160,28 @@ function BrandingTab() {
     return (
         <div className="max-w-xl">
             <h3 className="text-lg font-bold mb-1">Company Branding</h3>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-muted-foreground mb-4">
                 Shown in the admin sidebar header and used as the browser tab icon (favicon).
             </p>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Company Name</label>
                     <input
                         type="text" required
                         className="w-full border rounded-lg px-3 py-2"
                         value={companyName}
                         onChange={e => setCompanyName(e.target.value)}
                     />
-                    <p className="text-xs text-gray-500 mt-1">Shown next to the logo in the sidebar header.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Shown next to the logo in the sidebar header.</p>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Logo</label>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Logo</label>
                     <div className="flex items-center gap-4">
-                        <div className="h-16 w-16 rounded-lg border bg-gray-50 flex items-center justify-center overflow-hidden">
+                        <div className="h-16 w-16 rounded-lg border bg-secondary flex items-center justify-center overflow-hidden">
                             {displayedLogo ? (
                                 <img src={displayedLogo} alt="Logo preview" className="h-full w-full object-contain" />
                             ) : (
-                                <ImageIcon className="h-6 w-6 text-gray-300" />
+                                <ImageIcon className="h-6 w-6 text-muted-foreground/70" />
                             )}
                         </div>
                         <div>
@@ -156,18 +189,18 @@ function BrandingTab() {
                             <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
-                                className="px-3 py-2 border rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                className="px-3 py-2 border rounded-lg text-sm font-medium text-foreground/80 hover:bg-secondary"
                             >
                                 Choose file
                             </button>
-                            <p className="text-xs text-gray-500 mt-1">PNG or SVG recommended, square works best.</p>
+                            <p className="text-xs text-muted-foreground mt-1">PNG or SVG recommended, square works best.</p>
                         </div>
                     </div>
                 </div>
                 <button
                     type="submit"
                     disabled={updateMutation.isPending}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                    className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
                 >
                     {updateMutation.isPending ? 'Saving...' : 'Save Branding'}
                 </button>
@@ -253,17 +286,17 @@ function StaffTab() {
                 <h3 className="text-lg font-bold">Staff Directory</h3>
                 <button
                     onClick={() => { resetForm(); setIsFormOpen(true); }}
-                    className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                    className="flex items-center px-3 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary/90"
                 >
                     <Plus className="h-4 w-4 mr-2" /> Add Staff
                 </button>
             </div>
 
             {isFormOpen && (
-                <form onSubmit={handleSubmit} className="bg-gray-50 border rounded-lg p-4 mb-4 space-y-3">
+                <form onSubmit={handleSubmit} className="bg-secondary border rounded-lg p-4 mb-4 space-y-3">
                     <div className="flex items-center justify-between">
                         <h4 className="font-bold text-sm">{editingId ? 'Edit Staff Member' : 'New Staff Member'}</h4>
-                        <button type="button" onClick={resetForm} className="text-gray-400 hover:text-gray-600">
+                        <button type="button" onClick={resetForm} className="text-muted-foreground hover:text-muted-foreground">
                             <X className="h-4 w-4" />
                         </button>
                     </div>
@@ -288,21 +321,21 @@ function StaffTab() {
                     <button
                         type="submit"
                         disabled={createMutation.isPending || updateMutation.isPending}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                        className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50"
                     >
                         {editingId ? 'Save Changes' : 'Create Staff Member'}
                     </button>
                 </form>
             )}
 
-            {isLoading && <p className="text-gray-500 text-center py-4">Loading...</p>}
+            {isLoading && <p className="text-muted-foreground text-center py-4">Loading...</p>}
             <div className="space-y-3">
-                {staff?.length === 0 && <p className="text-gray-500 text-center py-4">No staff members yet.</p>}
+                {staff?.length === 0 && <p className="text-muted-foreground text-center py-4">No staff members yet.</p>}
                 {staff?.map((user: any) => (
                     <div key={user.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border rounded-lg">
                         <div className="min-w-0">
                             <p className="font-bold truncate">{user.username} {user.first_name && `(${user.first_name} ${user.last_name})`}</p>
-                            <p className="text-sm text-gray-500 truncate">{user.email || 'No email'} &middot; {user.phone_number || 'No phone'}</p>
+                            <p className="text-sm text-muted-foreground truncate">{user.email || 'No email'} &middot; {user.phone_number || 'No phone'}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                             {user.is_superuser ? (
@@ -310,18 +343,18 @@ function StaffTab() {
                                     <ShieldCheck className="h-3 w-3 mr-1" /> Superuser
                                 </span>
                             ) : (
-                                <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${ROLE_BADGE[user.role] || 'bg-gray-100 text-gray-800'}`}>
+                                <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${ROLE_BADGE[user.role] || 'bg-gray-100 text-foreground'}`}>
                                     {user.role}
                                 </span>
                             )}
                             {!user.is_superuser && (
                                 <>
-                                    <button onClick={() => openEdit(user)} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded">
+                                    <button onClick={() => openEdit(user)} className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded">
                                         <Pencil className="h-4 w-4" />
                                     </button>
                                     <button
                                         onClick={() => { if (confirm(`Remove staff member ${user.username}?`)) deleteMutation.mutate(user.id); }}
-                                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
+                                        className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded"
                                     >
                                         <Trash2 className="h-4 w-4" />
                                     </button>
@@ -385,14 +418,14 @@ function ManualUserTab() {
     return (
         <div className="max-w-md">
             <h3 className="text-lg font-bold mb-1">Create PPPoE / Hotspot / Static Customer</h3>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-muted-foreground mb-4">
                 Create a customer manually and activate a plan for them (e.g. cash payment). If the username doesn't
                 already exist, a new account is created and login credentials are issued below.
             </p>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                        <label className="block text-sm font-medium text-foreground/80 mb-1">Username</label>
                         <input
                             type="text" required
                             className="w-full border rounded-lg px-3 py-2"
@@ -401,7 +434,7 @@ function ManualUserTab() {
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+                        <label className="block text-sm font-medium text-foreground/80 mb-1">Service Type</label>
                         <select
                             className="w-full border rounded-lg px-3 py-2"
                             value={formData.service_type}
@@ -414,18 +447,18 @@ function ManualUserTab() {
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                        <label className="block text-sm font-medium text-foreground/80 mb-1">First Name</label>
                         <input type="text" className="w-full border rounded-lg px-3 py-2"
                             value={formData.first_name} onChange={e => setFormData({ ...formData, first_name: e.target.value })} />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                        <label className="block text-sm font-medium text-foreground/80 mb-1">Last Name (Optional)</label>
                         <input type="text" className="w-full border rounded-lg px-3 py-2"
                             value={formData.last_name} onChange={e => setFormData({ ...formData, last_name: e.target.value })} />
                     </div>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Phone Number (Optional)</label>
                     <input
                         type="text"
                         className="w-full border rounded-lg px-3 py-2"
@@ -435,20 +468,20 @@ function ManualUserTab() {
                 </div>
                 {formData.service_type === 'static' && (
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Static IP Address</label>
+                        <label className="block text-sm font-medium text-foreground/80 mb-1">Static IP Address</label>
                         <input
                             type="text" required placeholder="10.5.70.50"
                             className="w-full border rounded-lg px-3 py-2"
                             value={formData.static_ip_address}
                             onChange={e => setFormData({ ...formData, static_ip_address: e.target.value })}
                         />
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                             The fixed IP already configured on the customer's device. A bandwidth queue is created for it.
                         </p>
                     </div>
                 )}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email (Optional)</label>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Email (Optional)</label>
                     <input
                         type="email"
                         className="w-full border rounded-lg px-3 py-2"
@@ -457,7 +490,7 @@ function ManualUserTab() {
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Password (leave blank to auto-generate)</label>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Password (leave blank to auto-generate)</label>
                     <input
                         type="text"
                         className="w-full border rounded-lg px-3 py-2"
@@ -466,7 +499,7 @@ function ManualUserTab() {
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Plan</label>
                     <select
                         required
                         className="w-full border rounded-lg px-3 py-2"
@@ -489,10 +522,10 @@ function ManualUserTab() {
             </form>
 
             {issuedCredentials && (
-                <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="mt-6 bg-primary/10 border border-primary/20 rounded-lg p-4">
                     <div className="flex justify-between items-center mb-2">
-                        <h4 className="font-bold text-sm text-blue-900">Issued Credentials</h4>
-                        <button onClick={copyCredentials} className="flex items-center text-xs text-blue-700 hover:text-blue-900">
+                        <h4 className="font-bold text-sm text-primary">Issued Credentials</h4>
+                        <button onClick={copyCredentials} className="flex items-center text-xs text-primary hover:text-primary">
                             <Copy className="h-3 w-3 mr-1" /> Copy
                         </button>
                     </div>
@@ -508,7 +541,7 @@ function ManualUserTab() {
                             <p>Static IP: {issuedCredentials.static_ip_address}</p>
                         )}
                     </div>
-                    <p className="text-xs text-blue-700 mt-2">This is shown once -- copy it now to hand to the customer.</p>
+                    <p className="text-xs text-primary mt-2">This is shown once -- copy it now to hand to the customer.</p>
                 </div>
             )}
         </div>
@@ -543,7 +576,7 @@ function BulkImportTab() {
     return (
         <div className="max-w-2xl">
             <h3 className="text-lg font-bold mb-1">Import PPPoE Users</h3>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-muted-foreground mb-4">
                 Bulk-create PPPoE customers from a CSV. Each row's username/password become both their
                 portal login and PPPoE login, and they're activated on the router immediately -- same as
                 creating one manually, just many at once. Existing usernames are rejected, not modified.
@@ -554,7 +587,7 @@ function BulkImportTab() {
             <div className="flex flex-col sm:flex-row gap-2 mb-6">
                 <button
                     onClick={handleDownloadTemplate}
-                    className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+                    className="flex items-center px-4 py-2 border border-input text-foreground/80 rounded-lg hover:bg-secondary transition text-sm font-medium"
                 >
                     <Download className="h-4 w-4 mr-2" /> Download Template
                 </button>
@@ -562,19 +595,19 @@ function BulkImportTab() {
                 <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={importMutation.isPending}
-                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
+                    className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition text-sm font-medium disabled:opacity-50"
                 >
                     <Upload className="h-4 w-4 mr-2" /> {importMutation.isPending ? 'Importing...' : 'Import CSV'}
                 </button>
             </div>
 
             {importResult && (
-                <div className="bg-gray-50 border rounded-lg p-4">
+                <div className="bg-secondary border rounded-lg p-4">
                     <div className="flex justify-between items-start mb-2">
-                        <h4 className="text-sm font-bold text-gray-900">
+                        <h4 className="text-sm font-bold text-foreground">
                             {importResult.created_count} created, {importResult.error_count} failed
                         </h4>
-                        <button onClick={() => setImportResult(null)} className="text-gray-400 hover:text-gray-600">
+                        <button onClick={() => setImportResult(null)} className="text-muted-foreground hover:text-muted-foreground">
                             <X className="h-4 w-4" />
                         </button>
                     </div>

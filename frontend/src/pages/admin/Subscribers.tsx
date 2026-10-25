@@ -8,25 +8,28 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import SubscriberDetailModal from '../../components/SubscriberDetailModal';
+import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
 
 type SortField = 'account_balance' | 'created_at';
 type TabKey = 'all' | 'active' | 'expired' | 'hotspot' | 'static' | 'pppoe' | 'new';
 
 const TABS: { key: TabKey; label: string; icon: any; activeClass: string; idleClass: string }[] = [
-    { key: 'all', label: 'All Users', icon: Users, activeClass: 'bg-blue-600 text-white', idleClass: 'bg-blue-50 text-blue-700 hover:bg-blue-100' },
+    { key: 'all', label: 'All Users', icon: Users, activeClass: 'bg-primary text-primary-foreground', idleClass: 'bg-primary/10 text-primary hover:bg-primary/20' },
     { key: 'active', label: 'Active Users', icon: CheckCircle, activeClass: 'bg-green-600 text-white', idleClass: 'bg-green-50 text-green-700 hover:bg-green-100' },
     { key: 'expired', label: 'Expired Users', icon: XCircle, activeClass: 'bg-red-600 text-white', idleClass: 'bg-red-50 text-red-700 hover:bg-red-100' },
     { key: 'hotspot', label: 'Hotspot Users', icon: Wifi, activeClass: 'bg-amber-500 text-white', idleClass: 'bg-amber-50 text-amber-700 hover:bg-amber-100' },
     { key: 'static', label: 'Static Users', icon: Monitor, activeClass: 'bg-cyan-600 text-white', idleClass: 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100' },
-    { key: 'pppoe', label: 'PPPoE Users', icon: Repeat, activeClass: 'bg-purple-600 text-white', idleClass: 'bg-purple-50 text-purple-700 hover:bg-purple-100' },
+    { key: 'pppoe', label: 'PPPoE Users', icon: Repeat, activeClass: 'bg-violet-600 text-white', idleClass: 'bg-violet-50 text-violet-700 hover:bg-violet-100' },
     { key: 'new', label: 'New Users', icon: UserPlus, activeClass: 'bg-gray-800 text-white', idleClass: 'bg-gray-50 text-gray-700 hover:bg-gray-100' },
 ];
 
-const PLAN_BADGE: Record<string, string> = {
-    active: 'bg-green-100 text-green-800',
-    expired: 'bg-red-100 text-red-800',
-    suspended: 'bg-amber-100 text-amber-800',
-    cancelled: 'bg-gray-100 text-gray-600',
+const PLAN_BADGE: Record<string, 'success' | 'destructive' | 'warning' | 'secondary'> = {
+    active: 'success',
+    expired: 'destructive',
+    suspended: 'warning',
+    cancelled: 'secondary',
 };
 
 export default function Subscribers() {
@@ -94,28 +97,28 @@ export default function Subscribers() {
     };
 
     const SortIcon = ({ field }: { field: SortField }) => {
-        if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 text-gray-300" />;
+        if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 text-muted-foreground/50" />;
         return sortDesc ? <ArrowDown className="h-3 w-3 ml-1" /> : <ArrowUp className="h-3 w-3 ml-1" />;
     };
 
     return (
         <div>
-            <h1 className="text-2xl font-bold mb-6">Subscribers</h1>
+            <h1 className="text-2xl font-bold mb-6 text-foreground">Subscribers</h1>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <Card padding={false} className="overflow-hidden">
                 {/* Banner */}
-                <div className="bg-blue-600 px-4 sm:px-6 py-4 flex flex-wrap gap-3 justify-between items-center">
-                    <h2 className="text-white font-bold text-lg">All Users</h2>
+                <div className="bg-primary px-4 sm:px-6 py-4 flex flex-wrap gap-3 justify-between items-center">
+                    <h2 className="text-primary-foreground font-bold text-lg">All Users</h2>
                     <Link
                         to="/admin/settings?tab=manual"
-                        className="flex items-center gap-2 px-3 py-1.5 bg-white text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-50"
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white/95 text-primary rounded-lg text-sm font-medium hover:bg-white"
                     >
                         <UserPlus className="h-4 w-4" /> Add New Contact
                     </Link>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex flex-wrap gap-2 p-4 border-b border-gray-100">
+                <div className="flex flex-wrap gap-2 p-4 border-b border-border">
                     {TABS.map(t => {
                         const Icon = t.icon;
                         const isActive = activeTab === t.key;
@@ -133,22 +136,22 @@ export default function Subscribers() {
                 </div>
 
                 {/* Controls */}
-                <div className="flex flex-wrap items-center gap-3 p-4 border-b border-gray-100">
+                <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border">
                     <div className="relative flex-1 min-w-[220px]">
                         <input
                             type="text"
                             placeholder="Search by name, username, email, phone..."
-                            className="pl-10 pr-4 py-2 border rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="pl-10 pr-4 py-2 border border-input rounded-lg w-full bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                             value={searchTerm}
                             onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
                         />
-                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                     </div>
 
                     <select
                         value={routerFilter}
                         onChange={(e) => { setRouterFilter(e.target.value); setPage(1); }}
-                        className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                     >
                         <option value="">All Routers</option>
                         {routers?.map((r: any) => (
@@ -156,12 +159,12 @@ export default function Subscribers() {
                         ))}
                     </select>
 
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         Show
                         <select
                             value={pageSize}
                             onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                            className="border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="border border-input rounded-lg px-2 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                             {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
                         </select>
@@ -170,38 +173,38 @@ export default function Subscribers() {
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-border">
+                        <thead className="bg-secondary">
                             <tr>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Full Name</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Username</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Full Name</th>
                                 <th
                                     onClick={() => toggleSort('account_balance')}
-                                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700"
+                                    className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground"
                                 >
                                     <span className="flex items-center">Balance <SortIcon field="account_balance" /></span>
                                 </th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone Number</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Package</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Type</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Phone Number</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Package</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Service Type</th>
                                 <th
                                     onClick={() => toggleSort('created_at')}
-                                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700"
+                                    className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground"
                                 >
                                     <span className="flex items-center">Created On <SortIcon field="created_at" /></span>
                                 </th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">MAC Address</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Router</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Manage</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">IP Address</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">MAC Address</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Router</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Manage</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-card divide-y divide-border">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={12} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={12} className="px-6 py-8 text-center text-muted-foreground">
                                         <div className="flex justify-center items-center">
                                             <Loader2 className="h-6 w-6 animate-spin mr-2" />
                                             Loading subscribers...
@@ -210,45 +213,45 @@ export default function Subscribers() {
                                 </tr>
                             ) : isError ? (
                                 <tr>
-                                    <td colSpan={12} className="px-6 py-8 text-center text-red-500">
+                                    <td colSpan={12} className="px-6 py-8 text-center text-red-600">
                                         Error loading subscribers: {(error as Error).message}
                                     </td>
                                 </tr>
                             ) : subscribers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={12} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={12} className="px-6 py-8 text-center text-muted-foreground">
                                         No subscribers found.
                                     </td>
                                 </tr>
                             ) : (
                                 subscribers.map((user: any, idx: number) => (
-                                    <tr key={user.id} className="hover:bg-gray-50 transition">
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{(page - 1) * pageSize + idx + 1}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.username}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{user.full_name || '-'}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">KES {Number(user.account_balance).toLocaleString()}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{user.phone_number || '-'}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{user.email || '-'}</td>
+                                    <tr key={user.id} className="hover:bg-secondary/60 transition">
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-muted-foreground">{(page - 1) * pageSize + idx + 1}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-foreground">{user.username}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-foreground/80">{user.full_name || '-'}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-foreground">KES {Number(user.account_balance).toLocaleString()}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-muted-foreground">{user.phone_number || '-'}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-muted-foreground">{user.email || '-'}</td>
                                         <td className="px-4 py-4 whitespace-nowrap">
                                             {user.current_plan_name ? (
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${PLAN_BADGE[user.current_plan_status] || 'bg-gray-100 text-gray-600'}`}>
+                                                <Badge variant={PLAN_BADGE[user.current_plan_status] || 'secondary'}>
                                                     {user.current_plan_name}
-                                                </span>
+                                                </Badge>
                                             ) : (
-                                                <span className="text-xs text-gray-400">No plan</span>
+                                                <span className="text-xs text-muted-foreground">No plan</span>
                                             )}
                                         </td>
                                         <td className="px-4 py-4 whitespace-nowrap">
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 uppercase">
+                                            <Badge variant="default" className="uppercase bg-primary/10 text-primary">
                                                 {user.service_type}
-                                            </span>
+                                            </Badge>
                                         </td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-muted-foreground">
                                             {user.created_at ? format(new Date(user.created_at), 'MMM d, yyyy HH:mm') : '-'}
                                         </td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{user.last_ip || '-'}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{user.hotspot_mac_address || '-'}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{user.router_name || '-'}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-muted-foreground">{user.last_ip || '-'}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-muted-foreground">{user.hotspot_mac_address || '-'}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-muted-foreground">{user.router_name || '-'}</td>
                                         <td className="px-4 py-4 whitespace-nowrap">
                                             <div className="flex gap-1">
                                                 <button
@@ -282,28 +285,30 @@ export default function Subscribers() {
                 </div>
 
                 {/* Pagination */}
-                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm text-gray-600">
+                <div className="flex items-center justify-between px-4 py-3 border-t border-border text-sm text-muted-foreground">
                     <span>
                         {totalCount === 0 ? '0 results' : `Page ${page} of ${totalPages} · ${totalCount} total`}
                     </span>
                     <div className="flex gap-2">
-                        <button
+                        <Button
+                            variant="secondary"
+                            size="sm"
                             disabled={page <= 1}
                             onClick={() => setPage(p => Math.max(1, p - 1))}
-                            className="flex items-center px-3 py-1.5 border rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
                         >
                             <ChevronLeft className="h-4 w-4" /> Prev
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            size="sm"
                             disabled={page >= totalPages}
                             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                            className="flex items-center px-3 py-1.5 border rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
                         >
                             Next <ChevronRight className="h-4 w-4" />
-                        </button>
+                        </Button>
                     </div>
                 </div>
-            </div>
+            </Card>
 
             {selectedId !== null && (
                 <SubscriberDetailModal id={selectedId} initialTab={initialTab} onClose={() => setSelectedId(null)} />

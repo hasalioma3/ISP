@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import { Loader2, Router as RouterIcon, ShieldCheck, ShieldAlert, Plus, Pencil, Trash2, X, Wifi } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
-type ActionKey = 'backup' | 'sync_profiles' | 'sync_users';
+type ActionKey = 'backup' | 'sync_profiles' | 'sync_users' | 'enable_acs' | 'enable_wan_access' | 'disable_wan_access' | 'restart';
 
 const ACTIONS: { key: ActionKey; label: string; description: string; className: string }[] = [
     {
@@ -18,13 +18,37 @@ const ACTIONS: { key: ActionKey; label: string; description: string; className: 
         key: 'sync_profiles',
         label: 'Sync Profiles',
         description: 'Push all Billing Plans to this router as PPPoE/Hotspot profiles.',
-        className: 'bg-indigo-600 hover:bg-indigo-700',
+        className: 'bg-primary hover:bg-primary/90',
     },
     {
         key: 'sync_users',
         label: 'Sync Users',
         description: 'Push all active subscriptions to this router as secrets/users.',
         className: 'bg-green-600 hover:bg-green-700',
+    },
+    {
+        key: 'enable_acs',
+        label: 'Enable CPE Auto-Provisioning',
+        description: 'Broadcasts the TR-069 ACS URL via DHCP option 43 on this router’s Hotspot network, so supported CPE devices self-configure. Not every device supports this — see the CPE Onboarding Guide for the manual fallback.',
+        className: 'bg-violet-600 hover:bg-violet-700',
+    },
+    {
+        key: 'enable_wan_access',
+        label: 'Enable WAN Management Access',
+        description: 'Opens Winbox + SSH on this router’s WAN interface, scoped to whatever subnet it’s currently on (the upstream router that gives it internet) — and all private networks (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) from any interface, so you can reach this router’s admin tools from any LAN or while on the VPN. Public addresses stay blocked. RouterOS blocks this from WAN by default.',
+        className: 'bg-amber-600 hover:bg-amber-700',
+    },
+    {
+        key: 'disable_wan_access',
+        label: 'Disable WAN Management Access',
+        description: 'Removes the rules the action above added, closing WAN-side access to Winbox/SSH again.',
+        className: 'bg-gray-500 hover:bg-gray-600',
+    },
+    {
+        key: 'restart',
+        label: 'Restart Router',
+        description: 'Reboots this router. Connected customers lose service for a minute or two.',
+        className: 'bg-red-600 hover:bg-red-700',
     },
 ];
 
@@ -33,6 +57,10 @@ const runAction = (id: number, key: ActionKey) => {
         case 'backup': return adminAPI.backupRouter(id);
         case 'sync_profiles': return adminAPI.syncRouterProfiles(id);
         case 'sync_users': return adminAPI.syncRouterUsers(id);
+        case 'enable_acs': return adminAPI.enableAcsProvisioning(id);
+        case 'enable_wan_access': return adminAPI.enableWanAccess(id);
+        case 'disable_wan_access': return adminAPI.disableWanAccess(id);
+        case 'restart': return adminAPI.restartRouter(id);
     }
 };
 
@@ -58,7 +86,8 @@ const emptyForm = {
 export default function MikroTikSync() {
     const user = useAuthStore((state) => state.user);
     const canManage = !!user?.is_superuser || user?.role === 'admin';
-    const visibleActions = canManage ? ACTIONS : ACTIONS.filter((a) => a.key !== 'backup');
+    const ADMIN_ONLY_ACTIONS: ActionKey[] = ['backup', 'enable_acs', 'enable_wan_access', 'disable_wan_access', 'restart'];
+    const visibleActions = canManage ? ACTIONS : ACTIONS.filter((a) => !ADMIN_ONLY_ACTIONS.includes(a.key));
     const [loadingKey, setLoadingKey] = useState<string | null>(null);
     const [logsByRouter, setLogsByRouter] = useState<Record<number, string[]>>({});
 
@@ -77,6 +106,47 @@ export default function MikroTikSync() {
     const [provisionPassword, setProvisionPassword] = useState('');
     const [provisionPortalUrl, setProvisionPortalUrl] = useState('');
     const [provisionSubmitting, setProvisionSubmitting] = useState(false);
+
+    // Scheduled backup/update modal
+    type TaskSchedule = { frequency: string; time: string };
+    const [scheduleRouter, setScheduleRouter] = useState<any | null>(null);
+    const [schedule, setSchedule] = useState<Record<'backup' | 'update', TaskSchedule>>({
+        backup: { frequency: 'off', time: '03:00' },
+        update: { frequency: 'off', time: '04:00' },
+    });
+    const [scheduleLoading, setScheduleLoading] = useState(false);
+    const [scheduleSaving, setScheduleSaving] = useState(false);
+
+    const openScheduleModal = async (router: any) => {
+        setScheduleRouter(router);
+        setScheduleLoading(true);
+        try {
+            const res = await adminAPI.getMaintenanceSchedule(router.id);
+            const s = res.data.schedules;
+            setSchedule({
+                backup: { frequency: s.backup.frequency, time: s.backup.time || '03:00' },
+                update: { frequency: s.update.frequency, time: s.update.time || '04:00' },
+            });
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Could not read current schedule from router');
+        } finally {
+            setScheduleLoading(false);
+        }
+    };
+
+    const submitSchedule = async () => {
+        if (!scheduleRouter) return;
+        setScheduleSaving(true);
+        try {
+            const res = await adminAPI.setMaintenanceSchedule(scheduleRouter.id, schedule);
+            applyResult(scheduleRouter.id, res.data, 'Schedule');
+            setScheduleRouter(null);
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to save schedule');
+        } finally {
+            setScheduleSaving(false);
+        }
+    };
 
     const { data: routers, isLoading, isError, refetch } = useQuery({
         queryKey: ['admin-routers'],
@@ -112,6 +182,7 @@ export default function MikroTikSync() {
     };
 
     const handleAction = async (routerId: number, action: ActionKey) => {
+        if (action === 'restart' && !window.confirm('Restart this router? Connected customers will lose service for a minute or two.')) return;
         const loadingId = `${routerId}-${action}`;
         setLoadingKey(loadingId);
         try {
@@ -258,7 +329,7 @@ export default function MikroTikSync() {
                 {canManage && (
                     <button
                         onClick={openCreateForm}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded"
+                        className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white text-sm font-medium py-2 px-4 rounded"
                     >
                         <Plus className="h-4 w-4" /> Add Router
                     </button>
@@ -266,26 +337,26 @@ export default function MikroTikSync() {
             </div>
 
             {isLoading ? (
-                <div className="flex justify-center items-center py-16 text-gray-500">
+                <div className="flex justify-center items-center py-16 text-muted-foreground">
                     <Loader2 className="h-6 w-6 animate-spin mr-2" />
                     Loading routers...
                 </div>
             ) : isError ? (
                 <div className="text-center py-16 text-red-500">Failed to load routers.</div>
             ) : routers?.length === 0 ? (
-                <div className="text-center py-16 text-gray-500">
+                <div className="text-center py-16 text-muted-foreground">
                     No routers configured yet. Click "Add Router" to get started.
                 </div>
             ) : (
                 <div className="space-y-6">
                     {routers?.map((router: any) => (
-                        <div key={router.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                        <div key={router.id} className="bg-card rounded-2xl shadow-sm border border-border p-6">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                                 <div className="flex items-center gap-3">
-                                    <RouterIcon className="h-6 w-6 text-gray-400" />
+                                    <RouterIcon className="h-6 w-6 text-muted-foreground" />
                                     <div>
                                         <h2 className="text-lg font-semibold">{router.name}</h2>
-                                        <p className="text-sm text-gray-500">{router.ip_address}</p>
+                                        <p className="text-sm text-muted-foreground">{router.ip_address}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
@@ -300,10 +371,10 @@ export default function MikroTikSync() {
                                     )}
                                     {canManage && (
                                         <>
-                                            <button onClick={() => openEditForm(router)} title="Edit" className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
+                                            <button onClick={() => openEditForm(router)} title="Edit" className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg">
                                                 <Pencil className="h-4 w-4" />
                                             </button>
-                                            <button onClick={() => handleDelete(router)} title="Delete" className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                                            <button onClick={() => handleDelete(router)} title="Delete" className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg">
                                                 <Trash2 className="h-4 w-4" />
                                             </button>
                                         </>
@@ -317,9 +388,19 @@ export default function MikroTikSync() {
                                         title="Full bootstrap: IP pools, DHCP, NAT, Hotspot server + profile, PPPoE server, walled garden, plan profiles. Asks for router login each time."
                                         onClick={() => openProvisionModal(router)}
                                         disabled={loadingKey !== null}
-                                        className="py-2 px-3 rounded text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700"
+                                        className="py-2 px-3 rounded text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-primary hover:bg-primary/90"
                                     >
                                         Provision
+                                    </button>
+                                )}
+                                {canManage && (
+                                    <button
+                                        title="Schedule automatic config backups and RouterOS updates. Runs on the router itself."
+                                        onClick={() => openScheduleModal(router)}
+                                        disabled={loadingKey !== null}
+                                        className="py-2 px-3 rounded text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-teal-600 hover:bg-teal-700"
+                                    >
+                                        Schedule Backup & Updates
                                     </button>
                                 )}
                                 {visibleActions.map((a) => {
@@ -358,80 +439,80 @@ export default function MikroTikSync() {
             {/* Add/Edit Router modal */}
             {formOpen && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                    <div className="bg-card rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
                         <div className="flex items-center justify-between p-5 border-b">
                             <h2 className="text-lg font-semibold">{editingId ? 'Edit Router' : 'Add Router'}</h2>
-                            <button onClick={closeForm} className="p-1 text-gray-400 hover:text-gray-600">
+                            <button onClick={closeForm} className="p-1 text-muted-foreground hover:text-muted-foreground">
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
                         <div className="p-5 space-y-4">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">Name</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">IP Address</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">IP Address</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.ip_address}
                                         onChange={(e) => setFormData({ ...formData, ip_address: e.target.value })} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">Username</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.username}
                                         onChange={(e) => setFormData({ ...formData, username: e.target.value })} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Password {editingId && <span className="text-gray-400 font-normal">(leave blank to keep)</span>}
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">
+                                        Password {editingId && <span className="text-muted-foreground font-normal">(leave blank to keep)</span>}
                                     </label>
                                     <input type="password" className="w-full border rounded px-3 py-2 text-sm" value={formData.password}
                                         onChange={(e) => setFormData({ ...formData, password: e.target.value })} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">API Port</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">API Port</label>
                                     <input type="number" className="w-full border rounded px-3 py-2 text-sm" value={formData.port}
                                         onChange={(e) => setFormData({ ...formData, port: Number(e.target.value) })} />
                                 </div>
                                 <div className="flex items-center gap-2 pt-6">
                                     <input type="checkbox" id="use_ssl" checked={formData.use_ssl}
                                         onChange={(e) => setFormData({ ...formData, use_ssl: e.target.checked })} />
-                                    <label htmlFor="use_ssl" className="text-sm text-gray-700">Use SSL/TLS for API</label>
+                                    <label htmlFor="use_ssl" className="text-sm text-foreground/80">Use SSL/TLS for API</label>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Hotspot Subnet</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">Hotspot Subnet</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.hotspot_subnet}
                                         onChange={(e) => setFormData({ ...formData, hotspot_subnet: e.target.value })} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">PPPoE Subnet</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">PPPoE Subnet</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.pppoe_subnet}
                                         onChange={(e) => setFormData({ ...formData, pppoe_subnet: e.target.value })} />
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">DNS Servers</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">DNS Servers</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.dns_servers}
                                         onChange={(e) => setFormData({ ...formData, dns_servers: e.target.value })} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Uplink Capacity (Mbps)</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">Uplink Capacity (Mbps)</label>
                                     <input type="number" min="1" placeholder="e.g. 100" className="w-full border rounded px-3 py-2 text-sm" value={formData.uplink_mbps}
                                         onChange={(e) => setFormData({ ...formData, uplink_mbps: e.target.value })} />
-                                    <p className="text-xs text-gray-500 mt-1">
+                                    <p className="text-xs text-muted-foreground mt-1">
                                         Optional -- enables headroom % on the Network Ops bandwidth trend report.
                                     </p>
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Captive Portal URL</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">Captive Portal URL</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.portal_url}
                                         onChange={(e) => setFormData({ ...formData, portal_url: e.target.value })} />
-                                    <p className="text-xs text-gray-500 mt-1">
+                                    <p className="text-xs text-muted-foreground mt-1">
                                         Where the router's Hotspot login page redirects unauthenticated clients.
                                     </p>
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">Location</label>
                                     <input className="w-full border rounded px-3 py-2 text-sm" value={formData.location}
                                         onChange={(e) => setFormData({ ...formData, location: e.target.value })} />
                                 </div>
@@ -441,38 +522,92 @@ export default function MikroTikSync() {
                                 <button
                                     onClick={handleTestConnection}
                                     disabled={testLoading}
-                                    className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                                    className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary disabled:opacity-50"
                                 >
                                     <Wifi className="h-4 w-4" /> {testLoading ? 'Testing connection...' : 'Test Connection & List Interfaces'}
                                 </button>
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p className="text-xs text-muted-foreground mt-1">
                                     Confirms the router is reachable with these credentials and shows real interface names,
                                     so you can check they match the server's configured provisioning interface before saving.
                                 </p>
                                 {testError && <p className="text-sm text-red-600 mt-2">{testError}</p>}
                                 {testResult && (
-                                    <div className="mt-2 bg-gray-50 border rounded p-3 text-xs font-mono max-h-32 overflow-y-auto">
+                                    <div className="mt-2 bg-secondary border rounded p-3 text-xs font-mono max-h-32 overflow-y-auto">
                                         {testResult.length === 0 ? (
-                                            <p className="text-gray-500">No interfaces returned.</p>
+                                            <p className="text-muted-foreground">No interfaces returned.</p>
                                         ) : testResult.map((i: any) => (
                                             <div key={i.name}>
-                                                {i.name} <span className="text-gray-400">({i.type}, {i.disabled ? 'disabled' : i.running ? 'running' : 'not running'})</span>
+                                                {i.name} <span className="text-muted-foreground">({i.type}, {i.disabled ? 'disabled' : i.running ? 'running' : 'not running'})</span>
                                             </div>
                                         ))}
                                     </div>
                                 )}
                             </div>
                         </div>
-                        <div className="flex justify-end gap-3 p-5 border-t bg-gray-50 rounded-b-xl">
-                            <button onClick={closeForm} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded">
+                        <div className="flex justify-end gap-3 p-5 border-t bg-secondary rounded-b-xl">
+                            <button onClick={closeForm} className="px-4 py-2 text-sm font-medium text-foreground/80 hover:bg-accent rounded">
                                 Cancel
                             </button>
                             <button
                                 onClick={handleFormSubmit}
                                 disabled={formSaving}
-                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-50"
+                                className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded disabled:opacity-50"
                             >
                                 {formSaving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Router'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Scheduled backup/update modal */}
+            {scheduleRouter && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-card rounded-xl shadow-xl w-full max-w-md">
+                        <div className="flex items-center justify-between p-5 border-b">
+                            <h2 className="text-lg font-semibold">Schedule "{scheduleRouter.name}"</h2>
+                            <button onClick={() => setScheduleRouter(null)} className="p-1 text-muted-foreground">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-5">
+                            {scheduleLoading ? (
+                                <div className="flex items-center text-muted-foreground text-sm">
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" /> Reading current schedule...
+                                </div>
+                            ) : (
+                                (['backup', 'update'] as const).map((task) => (
+                                    <div key={task}>
+                                        <label className="block text-sm font-medium text-foreground/80 mb-1">
+                                            {task === 'backup' ? 'Config backup' : 'RouterOS update (reboots if one is installed)'}
+                                        </label>
+                                        <div className="flex gap-2">
+                                            <select className="flex-1 border rounded px-3 py-2 text-sm" value={schedule[task].frequency}
+                                                onChange={(e) => setSchedule({ ...schedule, [task]: { ...schedule[task], frequency: e.target.value } })}>
+                                                <option value="off">Off</option>
+                                                <option value="daily">Daily</option>
+                                                <option value="weekly">Weekly</option>
+                                                <option value="monthly">Monthly</option>
+                                            </select>
+                                            <input type="time" className="border rounded px-3 py-2 text-sm" value={schedule[task].time}
+                                                disabled={schedule[task].frequency === 'off'}
+                                                onChange={(e) => setSchedule({ ...schedule, [task]: { ...schedule[task], time: e.target.value } })} />
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                                Time uses the router's clock. Backups are saved on the router as isp-auto-backup.backup (overwritten each run).
+                                Updates take a backup first, then install and reboot.
+                            </p>
+                        </div>
+                        <div className="flex justify-end gap-3 p-5 border-t bg-secondary rounded-b-xl">
+                            <button onClick={() => setScheduleRouter(null)} className="px-4 py-2 text-sm font-medium text-foreground/80 hover:bg-accent rounded">
+                                Cancel
+                            </button>
+                            <button onClick={submitSchedule} disabled={scheduleSaving || scheduleLoading}
+                                className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded disabled:opacity-50">
+                                {scheduleSaving ? 'Saving...' : 'Save'}
                             </button>
                         </div>
                     </div>
@@ -482,45 +617,45 @@ export default function MikroTikSync() {
             {/* Provision credentials modal */}
             {provisionRouter && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+                    <div className="bg-card rounded-xl shadow-xl w-full max-w-sm">
                         <div className="flex items-center justify-between p-5 border-b">
                             <h2 className="text-lg font-semibold">Provision "{provisionRouter.name}"</h2>
-                            <button onClick={closeProvisionModal} className="p-1 text-gray-400 hover:text-gray-600">
+                            <button onClick={closeProvisionModal} className="p-1 text-muted-foreground hover:text-muted-foreground">
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
                         <div className="p-5 space-y-4">
-                            <p className="text-sm text-gray-600">
+                            <p className="text-sm text-muted-foreground">
                                 This writes real configuration to the router. Enter its current login to confirm before proceeding.
                             </p>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                                <label className="block text-sm font-medium text-foreground/80 mb-1">Username</label>
                                 <input className="w-full border rounded px-3 py-2 text-sm" value={provisionUsername}
                                     onChange={(e) => setProvisionUsername(e.target.value)} autoFocus />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                <label className="block text-sm font-medium text-foreground/80 mb-1">Password</label>
                                 <input type="password" className="w-full border rounded px-3 py-2 text-sm" value={provisionPassword}
                                     onChange={(e) => setProvisionPassword(e.target.value)} />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Captive Portal URL</label>
+                                <label className="block text-sm font-medium text-foreground/80 mb-1">Captive Portal URL</label>
                                 <input className="w-full border rounded px-3 py-2 text-sm" value={provisionPortalUrl}
                                     onChange={(e) => setProvisionPortalUrl(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && submitProvision()} />
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p className="text-xs text-muted-foreground mt-1">
                                     Written into the router's Hotspot login page as a redirect target.
                                 </p>
                             </div>
                         </div>
-                        <div className="flex justify-end gap-3 p-5 border-t bg-gray-50 rounded-b-xl">
-                            <button onClick={closeProvisionModal} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded">
+                        <div className="flex justify-end gap-3 p-5 border-t bg-secondary rounded-b-xl">
+                            <button onClick={closeProvisionModal} className="px-4 py-2 text-sm font-medium text-foreground/80 hover:bg-accent rounded">
                                 Cancel
                             </button>
                             <button
                                 onClick={submitProvision}
                                 disabled={provisionSubmitting}
-                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-50"
+                                className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded disabled:opacity-50"
                             >
                                 {provisionSubmitting ? 'Provisioning...' : 'Provision'}
                             </button>

@@ -11,39 +11,35 @@
 # new/from-scratch system, or if the Pi's Docker state needs a hard reset.
 set -e
 
-PI_HOST="192.168.88.249"
+PI_HOST="192.168.58.252"
+# PI_HOST="192.168.56.117"
 PI_USER="pi"
 REMOTE_DIR="~/ISP"
 
 echo "🔄 Updating Raspberry Pi ($PI_HOST)..."
 
 # 1. Sync Files
+#
+# --delete removes files on the Pi that no longer exist locally (e.g. a
+# renamed/deleted migration file) -- without it, a deleted file just sits
+# on the Pi forever, which is exactly what caused a migration-graph
+# conflict (two divergent migration chains, old + new) on a prior deploy.
+# Every path below is excluded for the opposite reason: they're Pi-only or
+# gitignored (.env.prod etc, generated per-company secrets) and must never
+# be touched by --delete, since they don't exist in the local source tree
+# to protect them -- plain --exclude keeps them untouched on both the copy
+# and the delete pass.
 echo "📦 Syncing files..."
-rsync -avz --progress --exclude 'node_modules' --exclude '.git' --exclude '__pycache__' ./ ${PI_USER}@${PI_HOST}:${REMOTE_DIR}/
+rsync -avz --delete --progress \
+    --exclude 'node_modules' --exclude '.git' --exclude '__pycache__' \
+    --exclude '.env' --exclude '.env.prod' --exclude 'backend/.env' --exclude 'frontend/.env' \
+    --exclude 'companies/*.env' --exclude 'vps' --exclude 'teststk.py' \
+    ./ ${PI_USER}@${PI_HOST}:${REMOTE_DIR}/
 
 # 2. Remote Commands
-echo "🔧 Building and applying changes..."
+echo "🔧 Running update script on the Pi..."
 set +e
-ssh ${PI_USER}@${PI_HOST} "\
-    if ! command -v docker >/dev/null 2>&1; then \
-        echo '❌ Docker is not installed on the Pi -- run ./deploy_fresh.sh first.'; \
-        exit 1; \
-    fi && \
-    cd ${REMOTE_DIR} && \
-    if docker compose ps -q db 2>/dev/null | grep -q .; then \
-        echo '💾 Quick pre-update backup...' && \
-        mkdir -p ~/isp_backups && \
-        docker compose exec -T db pg_dump --clean --if-exists -U isp_user isp_billing_prod > ~/isp_backups/pre_update_\$(date +%Y%m%d_%H%M%S).sql; \
-    else \
-        echo '⏭️  Nothing running yet -- run ./deploy_fresh.sh for the first deploy.'; \
-        exit 1; \
-    fi && \
-    echo '🏗️ Building (cached layers are reused -- only what changed rebuilds)...' && \
-    docker compose build && \
-    echo '🚀 Applying: only containers whose image actually changed get recreated...' && \
-    docker compose up -d && \
-    echo '✨ Applying migrations...' && \
-    docker compose exec -T backend python manage.py migrate"
+ssh ${PI_USER}@${PI_HOST} "bash ${REMOTE_DIR}/update_on_pi.sh"
 DEPLOY_EXIT=$?
 set -e
 

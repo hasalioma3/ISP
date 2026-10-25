@@ -98,7 +98,7 @@ export default function DataUsage() {
         { label: 'Total Download', value: `${totals?.download_gb ?? 0} GB`, color: 'border-l-orange-500' },
         { label: 'Total Usage', value: `${totals?.total_gb ?? 0} GB`, color: 'border-l-red-500' },
         { label: 'Active Users', value: totals?.active_users ?? 0, color: 'border-l-purple-500' },
-        { label: 'Avg Per User', value: `${totals?.avg_per_user_gb ?? 0} GB`, color: 'border-l-blue-500' },
+        { label: 'Avg Per User', value: `${totals?.avg_per_user_gb ?? 0} GB`, color: 'border-l-primary' },
         {
             label: `vs Previous (${totals?.previous_total_gb ?? 0} GB)`,
             value: vsPct === null || vsPct === undefined ? 'N/A' : `${vsPct > 0 ? '+' : ''}${vsPct}%`,
@@ -110,8 +110,8 @@ export default function DataUsage() {
         <div>
             <h1 className="text-2xl font-bold mb-6">Data Usage</h1>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="bg-blue-600 px-6 py-4 flex items-center text-white font-bold">
+            <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+                <div className="bg-primary px-6 py-4 flex items-center text-white font-bold">
                     <PieIcon className="h-5 w-5 mr-2" /> Data Usage
                 </div>
 
@@ -121,8 +121,8 @@ export default function DataUsage() {
                             key={p.key}
                             onClick={() => setPeriod(p.key)}
                             className={`flex items-center shrink-0 px-4 sm:px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${period === p.key
-                                ? 'border-blue-500 text-blue-600 bg-blue-50'
-                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                                ? 'border-ring text-primary bg-primary/10'
+                                : 'border-transparent text-muted-foreground hover:text-foreground/80 hover:bg-secondary'
                                 }`}
                         >
                             <Calendar className="h-4 w-4 mr-2" /> {p.label}
@@ -133,9 +133,9 @@ export default function DataUsage() {
                 {/* Stat cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 p-6">
                     {statCards.map(c => (
-                        <div key={c.label} className={`border-l-4 ${c.color} bg-gray-50 rounded-r-lg px-4 py-3`}>
-                            <p className="text-xl font-bold text-gray-900">{c.value}</p>
-                            <p className="text-xs text-gray-500 uppercase tracking-wide mt-1">{c.label}</p>
+                        <div key={c.label} className={`border-l-4 ${c.color} bg-secondary rounded-r-lg px-4 py-3`}>
+                            <p className="text-xl font-bold text-foreground">{c.value}</p>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wide mt-1">{c.label}</p>
                         </div>
                     ))}
                 </div>
@@ -146,9 +146,9 @@ export default function DataUsage() {
                         <input
                             type="text" placeholder="Search username or name"
                             value={searchInput} onChange={e => setSearchInput(e.target.value)}
-                            className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                         />
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     </div>
                     <select value={routerFilter} onChange={e => setRouterFilter(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
                         <option value="">All Routers</option>
@@ -164,10 +164,10 @@ export default function DataUsage() {
                     <select value={limit} onChange={e => setLimit(Number(e.target.value))} className="border rounded-lg px-3 py-2 text-sm">
                         {[10, 25, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
                     </select>
-                    <button type="submit" className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                    <button type="submit" className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90">
                         <Filter className="h-4 w-4" /> Filter
                     </button>
-                    <button type="button" onClick={handleReset} className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200">
+                    <button type="button" onClick={handleReset} className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-foreground/80 rounded-lg text-sm font-medium hover:bg-gray-200">
                         <RotateCcw className="h-4 w-4" /> Reset
                     </button>
                     <button type="button" onClick={handleExportCSV} className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600">
@@ -177,14 +177,14 @@ export default function DataUsage() {
 
                 {/* Sort by */}
                 <div className="flex flex-wrap items-center gap-2 px-6 pb-6">
-                    <span className="text-sm text-gray-500 mr-1">Sort by:</span>
+                    <span className="text-sm text-muted-foreground mr-1">Sort by:</span>
                     {SORTS.map(s => (
                         <button
                             key={s.key}
                             onClick={() => setSort(s.key)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${sort === s.key
                                 ? 'bg-red-500 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                : 'bg-gray-100 text-foreground/80 hover:bg-gray-200'
                                 }`}
                         >
                             <s.icon className="h-3.5 w-3.5" /> {s.label}
@@ -196,13 +196,13 @@ export default function DataUsage() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-6 pb-6">
                     <div className="lg:col-span-2 border rounded-lg p-4">
                         <h3 className="text-sm font-bold mb-4 flex items-center">
-                            <TrendingUp className="h-4 w-4 mr-2 text-gray-400" /> Top 10 Users by Usage
+                            <TrendingUp className="h-4 w-4 mr-2 text-muted-foreground" /> Top 10 Users by Usage
                         </h3>
                         <div className="h-80">
                             {isLoading ? (
-                                <div className="h-full flex items-center justify-center text-gray-400 text-sm">Loading...</div>
+                                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Loading...</div>
                             ) : (data?.top_users?.length ?? 0) === 0 ? (
-                                <div className="h-full flex items-center justify-center text-gray-400 text-sm">No usage in this period.</div>
+                                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">No usage in this period.</div>
                             ) : (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={data.top_users} layout="vertical" margin={{ left: 20 }}>
@@ -210,7 +210,7 @@ export default function DataUsage() {
                                         <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${v} GB`} />
                                         <YAxis type="category" dataKey="username" tick={{ fontSize: 12 }} width={110} />
                                         <Tooltip formatter={(v: number) => `${v} GB`} />
-                                        <Bar dataKey="total_gb" fill="#60a5fa" radius={[0, 4, 4, 0]} name="Total Usage" />
+                                        <Bar dataKey="total_gb" fill="#a78bfa" radius={[0, 4, 4, 0]} name="Total Usage" />
                                     </BarChart>
                                 </ResponsiveContainer>
                             )}
@@ -219,7 +219,7 @@ export default function DataUsage() {
 
                     <div className="border rounded-lg p-4">
                         <h3 className="text-sm font-bold mb-4 flex items-center">
-                            <PieIcon className="h-4 w-4 mr-2 text-gray-400" /> Upload vs Download
+                            <PieIcon className="h-4 w-4 mr-2 text-muted-foreground" /> Upload vs Download
                         </h3>
                         <div className="h-64">
                             <ResponsiveContainer width="100%" height="100%">
@@ -232,7 +232,7 @@ export default function DataUsage() {
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
-                        <div className="flex justify-center gap-4 text-xs text-gray-500 mt-2">
+                        <div className="flex justify-center gap-4 text-xs text-muted-foreground mt-2">
                             <span className="flex items-center"><span className="h-2 w-2 rounded-full bg-amber-400 mr-1" /> Upload</span>
                             <span className="flex items-center"><span className="h-2 w-2 rounded-full bg-emerald-400 mr-1" /> Download</span>
                         </div>
@@ -241,28 +241,28 @@ export default function DataUsage() {
 
                 {/* Table */}
                 <div className="border-t overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-border">
+                        <thead className="bg-secondary">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                                     <UsersIcon className="h-3.5 w-3.5 inline mr-1" /> User
                                 </th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Upload (GB)</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Download (GB)</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total (GB)</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Upload (GB)</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Download (GB)</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Total (GB)</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-card divide-y divide-border">
                             {isLoading ? (
-                                <tr><td colSpan={4} className="text-center py-8 text-gray-500">Loading...</td></tr>
+                                <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
                             ) : data?.users?.length === 0 ? (
-                                <tr><td colSpan={4} className="text-center py-8 text-gray-500">No usage recorded for this period.</td></tr>
+                                <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">No usage recorded for this period.</td></tr>
                             ) : data?.users?.map((u: any) => (
-                                <tr key={u.username} className="hover:bg-gray-50">
-                                    <td className="px-6 py-3 text-sm font-medium text-gray-900">{u.name}</td>
-                                    <td className="px-6 py-3 text-sm text-gray-500 text-right">{u.upload_gb}</td>
-                                    <td className="px-6 py-3 text-sm text-gray-500 text-right">{u.download_gb}</td>
-                                    <td className="px-6 py-3 text-sm font-medium text-gray-900 text-right">{u.total_gb}</td>
+                                <tr key={u.username} className="hover:bg-secondary">
+                                    <td className="px-6 py-3 text-sm font-medium text-foreground">{u.name}</td>
+                                    <td className="px-6 py-3 text-sm text-muted-foreground text-right">{u.upload_gb}</td>
+                                    <td className="px-6 py-3 text-sm text-muted-foreground text-right">{u.download_gb}</td>
+                                    <td className="px-6 py-3 text-sm font-medium text-foreground text-right">{u.total_gb}</td>
                                 </tr>
                             ))}
                         </tbody>

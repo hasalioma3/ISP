@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { voucherAPI, billingAPI, paymentAPI } from '../../services/api';
+import { useSiteSettings } from '../../hooks/useSiteSettings';
 import toast from 'react-hot-toast';
-import { Wifi, Lock, Loader, ArrowRight, CreditCard, X, Check } from 'lucide-react';
+import { Wifi, Lock, Loader, CreditCard, X, Check } from 'lucide-react';
+import { Card } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
 
 interface Plan {
     id: number;
@@ -19,6 +22,7 @@ interface Plan {
 const CaptivePortal: React.FC = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
+    const { data: siteSettings } = useSiteSettings();
 
     const mac = searchParams.get('mac') || searchParams.get('mac_esc');
     const linkLogin = searchParams.get('link-login') || searchParams.get('link_login');
@@ -32,6 +36,7 @@ const CaptivePortal: React.FC = () => {
     const [message, setMessage] = useState('Checking connection status...');
     const [voucherCode, setVoucherCode] = useState('');
     const [redeeming, setRedeeming] = useState(false);
+    const [pppoeCredentials, setPppoeCredentials] = useState<{ username: string; password: string } | null>(null);
     const [mpesaCode, setMpesaCode] = useState('');
     const [reactivating, setReactivating] = useState(false);
 
@@ -129,12 +134,12 @@ const CaptivePortal: React.FC = () => {
     };
 
     const doLogin = (username: string, password: string) => {
+        // loginActionUrl already falls back to the default gateway login URL
+        // when link-login wasn't in the redirect -- submitting is still the
+        // right move even then (silently no-op-ing here just stranded the
+        // device with no internet and a confusing "success" toast).
         if (!linkLogin) {
-            setLoading(false);
-            setStatus('active');
-            setMessage('You are already authorized! (Dev Mode: No redirect URL provided)');
-            toast.success('Login logic triggered but no redirect URL found.');
-            return;
+            console.warn('No link-login param in the captive portal redirect -- submitting to the default gateway login URL instead.');
         }
 
         const form = document.createElement('form');
@@ -166,24 +171,33 @@ const CaptivePortal: React.FC = () => {
     const handleRedeemVoucher = async (e: React.FormEvent) => {
         e.preventDefault();
         setRedeeming(true);
+        setPppoeCredentials(null);
         try {
             const response = await voucherAPI.redeem(voucherCode, mac || undefined);
             toast.success(response.data.message);
 
-            // Auto Login if tokens are present
             if (response.data.tokens) {
                 localStorage.setItem('access_token', response.data.tokens.access);
                 localStorage.setItem('refresh_token', response.data.tokens.refresh);
+            }
 
-                // Use the returned customer username/password (which defaults to voucher code) to authorize in Mikrotik
-                // The doLogin function submits a form to the Mikrotik router
-                const customer = response.data.customer;
-                // Note: Security-wise, we might want to change how doLogin works, 
-                // but for now we follow the existing pattern if password is available or assumed.
+            // credentials.hotspot_username/password are the actual values
+            // provisioned on the router (not reconstructed from the voucher
+            // code client-side, which could drift if the backend had to
+            // de-duplicate the username) -- use them directly for the
+            // captive-portal login.
+            const credentials = response.data.credentials;
+            const serviceType = response.data.customer?.service_type;
+            const isHotspotCapable = serviceType === 'hotspot' || serviceType === 'both';
 
-                // If we don't have the password explicitly in the response (serialized customer usually hides it), 
-                // we can assume password = voucherCode based on our backend logic for auto-created users.
-                doLogin(customer.username || voucherCode, voucherCode);
+            if (isHotspotCapable && credentials?.hotspot_username) {
+                doLogin(credentials.hotspot_username, credentials.hotspot_password);
+            } else if (credentials?.pppoe_username) {
+                // PPPoE has no "instant login" the way Hotspot does -- there's
+                // no captive-portal form that can authenticate a PPPoE
+                // session. The only thing left to do is show the customer
+                // the credentials their own router needs to dial in with.
+                setPppoeCredentials({ username: credentials.pppoe_username, password: credentials.pppoe_password });
             } else if (mac) {
                 checkStatus();
             }
@@ -235,188 +249,208 @@ const CaptivePortal: React.FC = () => {
 
     if (loading || status === 'active') {
         return (
-            <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4 text-white">
+            <div className="min-h-screen bg-secondary flex items-center justify-center p-4">
                 <div className="text-center">
-                    <Loader className="h-12 w-12 animate-spin mx-auto text-blue-500 mb-4" />
-                    <h2 className="text-xl font-bold">{message}</h2>
+                    <Loader className="h-12 w-12 animate-spin mx-auto text-primary mb-4" />
+                    <h2 className="text-xl font-bold text-foreground">{message}</h2>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-900 p-4 font-sans">
+        <div className="min-h-screen bg-secondary p-4 font-sans">
             <div className="max-w-4xl mx-auto space-y-6">
                 {/* Header */}
-                <div className="text-center text-white pt-8 pb-4">
-                    <div className="mx-auto bg-blue-600 rounded-full w-16 h-16 flex items-center justify-center mb-4 shadow-lg shadow-blue-500/50">
-                        <Wifi className="h-8 w-8 text-white" />
-                    </div>
-                    <h1 className="text-3xl font-bold mb-2">Connect to ISP Wi-Fi</h1>
-                    <p className="text-gray-400">Choose a package to get started instantly.</p>
+                <div className="text-center pt-8 pb-4">
+                    {siteSettings?.logo ? (
+                        <img
+                            src={siteSettings.logo}
+                            alt={siteSettings.company_name}
+                            className="mx-auto rounded-2xl w-16 h-16 object-contain bg-card border border-border mb-4 shadow-sm"
+                        />
+                    ) : (
+                        <div className="mx-auto bg-primary rounded-2xl w-16 h-16 flex items-center justify-center mb-4 shadow-lg shadow-primary/30">
+                            <Wifi className="h-8 w-8 text-primary-foreground" />
+                        </div>
+                    )}
+                    <h1 className="text-3xl font-bold mb-2 text-foreground">
+                        Connect to {siteSettings?.company_name || 'WiFi'}
+                    </h1>
+                    <p className="text-muted-foreground">Choose a package to get started instantly.</p>
                 </div>
 
                 {/* Plans Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {plans.map((plan) => (
-                        <div key={plan.id} className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-blue-500 transition-all shadow-lg flex flex-col relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                        <Card key={plan.id} className="p-6 hover:border-primary/50 transition-all flex flex-col relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-bl-lg">
                                 {plan.download_speed} Mbps
                             </div>
-                            <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
-                            <div className="text-3xl font-bold text-green-400 mb-4">
-                                <span className="text-sm text-gray-400 font-normal">KES</span> {Math.floor(parseFloat(plan.price))}
+                            <h3 className="text-xl font-bold text-foreground mb-2">{plan.name}</h3>
+                            <div className="text-3xl font-bold text-green-600 mb-4">
+                                <span className="text-sm text-muted-foreground font-normal">KES</span> {Math.floor(parseFloat(plan.price))}
                             </div>
-                            <p className="text-gray-400 text-sm mb-6 flex-1">{plan.description || `${plan.duration_value} ${plan.duration_unit} Unlimited Internet`}</p>
-                            <button
+                            <p className="text-muted-foreground text-sm mb-6 flex-1">{plan.description || `${plan.duration_value} ${plan.duration_unit} Unlimited Internet`}</p>
+                            <Button
                                 onClick={() => setSelectedPlan(plan)}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2 group-hover:scale-105 active:scale-95 transform duration-200"
+                                className="w-full group-hover:scale-105 active:scale-95 transform duration-200"
+                                size="lg"
                             >
                                 <CreditCard className="h-4 w-4" />
                                 Buy Now
-                            </button>
-                        </div>
+                            </Button>
+                        </Card>
                     ))}
                 </div>
 
                 {/* Voucher & Login Section */}
                 <div className="max-w-md mx-auto space-y-4">
-                    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                        <h3 className="text-white font-medium mb-3 text-sm uppercase tracking-wider text-gray-400">Have a Voucher?</h3>
+                    <Card className="p-4">
+                        <h3 className="text-foreground font-medium mb-3 text-xs uppercase tracking-wider text-muted-foreground">Have a Voucher?</h3>
                         <form onSubmit={handleRedeemVoucher} className="flex gap-2">
                             <input
                                 type="text"
                                 placeholder="Enter Voucher Code"
                                 value={voucherCode}
                                 onChange={(e) => setVoucherCode(e.target.value)}
-                                className="flex-1 bg-gray-900 border border-gray-600 rounded-lg p-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+                                className="flex-1 bg-background border border-input rounded-lg p-3 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition"
                             />
-                            <button
-                                type="submit"
-                                disabled={redeeming}
-                                className="bg-green-600 hover:bg-green-700 text-white px-6 rounded-lg font-bold disabled:opacity-50 transition"
-                            >
+                            <Button type="submit" disabled={redeeming} variant="default" className="px-6 bg-green-600 hover:bg-green-700">
                                 {redeeming ? <Loader className="animate-spin h-5 w-5" /> : 'Redeem'}
-                            </button>
+                            </Button>
                         </form>
-                    </div>
+                    </Card>
 
-                    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                        <h3 className="text-white font-medium mb-3 text-sm uppercase tracking-wider text-gray-400">Already Paid? Reconnect</h3>
+                    {pppoeCredentials && (
+                        <Card className="p-4 bg-primary/5 border-primary/20">
+                            <h3 className="text-foreground font-bold mb-2 flex items-center gap-2"><Check className="h-4 w-4 text-green-600" /> PPPoE Ready</h3>
+                            <p className="text-muted-foreground text-sm mb-3">
+                                PPPoE doesn't connect automatically here -- enter these details in your own
+                                router's PPPoE/dial-up settings to get online:
+                            </p>
+                            <div className="bg-background rounded-lg p-3 space-y-1 font-mono text-sm border border-border">
+                                <p className="text-muted-foreground">Username: <span className="text-foreground">{pppoeCredentials.username}</span></p>
+                                <p className="text-muted-foreground">Password: <span className="text-foreground">{pppoeCredentials.password}</span></p>
+                            </div>
+                        </Card>
+                    )}
+
+                    <Card className="p-4">
+                        <h3 className="text-foreground font-medium mb-3 text-xs uppercase tracking-wider text-muted-foreground">Already Paid? Reconnect</h3>
                         <form onSubmit={handleReactivate} className="flex gap-2">
                             <input
                                 type="text"
                                 placeholder="Enter M-Pesa Code"
                                 value={mpesaCode}
                                 onChange={(e) => setMpesaCode(e.target.value)}
-                                className="flex-1 bg-gray-900 border border-gray-600 rounded-lg p-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition uppercase"
+                                className="flex-1 bg-background border border-input rounded-lg p-3 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition uppercase"
                             />
-                            <button
-                                type="submit"
-                                disabled={reactivating}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-6 rounded-lg font-bold disabled:opacity-50 transition"
-                            >
+                            <Button type="submit" disabled={reactivating} className="px-6">
                                 {reactivating ? <Loader className="animate-spin h-5 w-5" /> : 'Reconnect'}
-                            </button>
+                            </Button>
                         </form>
-                        <p className="text-xs text-gray-500 mt-2">Already have an active plan but got disconnected? Enter the M-Pesa code from your payment SMS.</p>
-                    </div>
+                        <p className="text-xs text-muted-foreground mt-2">Already have an active plan but got disconnected? Enter the M-Pesa code from your payment SMS.</p>
+                    </Card>
 
                     <button
                         onClick={() => navigate('/login')}
-                        className="w-full text-gray-400 hover:text-white text-sm py-2 transition"
+                        className="w-full text-muted-foreground hover:text-foreground text-sm py-2 transition"
                     >
                         Already have an account? Login here
                     </button>
                 </div>
 
-                <div className="text-center text-xs text-gray-600 pb-8">
-                    MAC: {mac || 'Unknown'} • Secure Connection <Lock className="h-3 w-3 inline ml-1" />
+                <div className="text-center text-xs text-muted-foreground pb-8">
+                    MAC: {mac || 'Unknown'} &middot; Secure Connection <Lock className="h-3 w-3 inline ml-1" />
                 </div>
             </div>
 
             {/* Payment Modal */}
             {selectedPlan && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-gray-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-700 relative animate-in fade-in zoom-in duration-200">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <Card className="max-w-sm w-full p-6 shadow-2xl relative animate-in fade-in zoom-in duration-200">
                         <button
                             onClick={() => { setSelectedPlan(null); setPaymentSuccess(false); setPollTimedOut(false); }}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-white"
+                            className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
                         >
                             <X className="h-6 w-6" />
                         </button>
 
                         {!paymentSuccess ? (
                             <>
-                                <h2 className="text-2xl font-bold text-white mb-1">Confirm Purchase</h2>
-                                <p className="text-gray-400 mb-6">You are buying <span className="text-blue-400 font-bold">{selectedPlan.name}</span> for <span className="text-green-400 font-bold">KES {Math.floor(parseFloat(selectedPlan.price))}</span></p>
+                                <h2 className="text-2xl font-bold text-foreground mb-1">Confirm Purchase</h2>
+                                <p className="text-muted-foreground mb-6">You are buying <span className="text-primary font-bold">{selectedPlan.name}</span> for <span className="text-green-600 font-bold">KES {Math.floor(parseFloat(selectedPlan.price))}</span></p>
 
                                 <form onSubmit={handleBuyPlan} className="space-y-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-1">M-Pesa Phone Number</label>
+                                        <label className="block text-sm font-medium text-foreground mb-1">M-Pesa Phone Number</label>
                                         <input
                                             type="tel"
                                             placeholder="07XXXXXXXX"
                                             value={phoneNumber}
                                             onChange={(e) => setPhoneNumber(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white text-lg placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+                                            className="w-full bg-background border border-input rounded-lg p-3 text-foreground text-lg placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition"
                                             required
                                         />
                                     </div>
-                                    <button
+                                    <Button
                                         type="submit"
                                         disabled={processingPayment}
-                                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl transition flex items-center justify-center gap-2 text-lg disabled:opacity-50"
+                                        className="w-full bg-green-600 hover:bg-green-700 text-lg"
+                                        size="lg"
                                     >
                                         {processingPayment ? <Loader className="animate-spin h-6 w-6" /> : 'Pay with M-Pesa'}
-                                    </button>
+                                    </Button>
                                 </form>
                             </>
                         ) : !pollTimedOut ? (
                             <div className="text-center py-8">
-                                <div className="bg-green-600/20 text-green-500 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
+                                <div className="bg-green-100 text-green-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
                                     <Check className="h-10 w-10" />
                                 </div>
-                                <h2 className="text-2xl font-bold text-white mb-2">Check your phone!</h2>
-                                <p className="text-gray-400 mb-2">Enter your M-Pesa PIN to complete the payment.</p>
-                                <div className="flex items-center justify-center gap-2 text-sm text-gray-500 mb-6">
+                                <h2 className="text-2xl font-bold text-foreground mb-2">Check your phone!</h2>
+                                <p className="text-muted-foreground mb-2">Enter your M-Pesa PIN to complete the payment.</p>
+                                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-6">
                                     <Loader className="h-4 w-4 animate-spin" />
                                     Connecting you automatically once it's received...
                                 </div>
-                                <button
+                                <Button
+                                    variant="secondary"
                                     onClick={() => { setSelectedPlan(null); setPaymentSuccess(false); setPollTimedOut(false); }}
-                                    className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-lg transition"
+                                    className="w-full"
                                 >
                                     Close (keeps checking in the background)
-                                </button>
+                                </Button>
                             </div>
                         ) : (
                             <div className="text-center py-8">
-                                <div className="bg-amber-600/20 text-amber-500 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
+                                <div className="bg-amber-100 text-amber-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
                                     <Loader className="h-10 w-10" />
                                 </div>
-                                <h2 className="text-2xl font-bold text-white mb-2">Still waiting...</h2>
-                                <p className="text-gray-400 mb-6">
+                                <h2 className="text-2xl font-bold text-foreground mb-2">Still waiting...</h2>
+                                <p className="text-muted-foreground mb-6">
                                     This is taking longer than usual. If you've already entered your M-Pesa PIN, check again below --
                                     otherwise the STK prompt may have expired and you can try paying again.
                                 </p>
                                 <div className="flex gap-3">
-                                    <button
+                                    <Button
                                         onClick={() => { setPollTimedOut(false); checkStatus(); }}
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition"
+                                        className="flex-1"
                                     >
                                         Check Again
-                                    </button>
-                                    <button
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
                                         onClick={() => { setSelectedPlan(null); setPaymentSuccess(false); setPollTimedOut(false); }}
-                                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-lg transition"
+                                        className="flex-1"
                                     >
                                         Close
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         )}
-                    </div>
+                    </Card>
                 </div>
             )}
         </div>

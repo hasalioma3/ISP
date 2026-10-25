@@ -8,8 +8,8 @@ and consistent with how the rest of this project talks to external APIs.
 import logging
 
 import requests
-from django.conf import settings
 
+from apps.notifications.models import NotificationSettings
 from apps.payments.services.phone_hash import normalize_phone
 
 logger = logging.getLogger('notifications')
@@ -17,14 +17,23 @@ logger = logging.getLogger('notifications')
 
 class AfricasTalkingService:
     """
-    Africa's Talking SMS API integration.
+    Africa's Talking SMS API integration. Credentials come from
+    NotificationSettings (DB-backed, editable from the admin settings page)
+    rather than env vars -- construct a fresh instance per send rather than
+    caching one, since credentials can change at runtime.
     """
 
     def __init__(self):
-        self.username = settings.AFRICASTALKING_USERNAME
-        self.api_key = settings.AFRICASTALKING_API_KEY
-        self.sender_id = settings.AFRICASTALKING_SENDER_ID or None
-        self.base_url = settings.AFRICASTALKING_BASE_URL
+        ns = NotificationSettings.load()
+        # Credentials are commonly pasted from the provider dashboard.
+        # Whitespace is not part of either credential and causes a 401.
+        self.username = (ns.at_username or '').strip()
+        self.api_key = (ns.at_api_key or '').strip()
+        self.sender_id = (ns.at_sender_id or '').strip() or None
+        self.base_url = (
+            'https://api.africastalking.com' if ns.at_environment == 'production'
+            else 'https://api.sandbox.africastalking.com'
+        )
 
     def send_sms(self, phone_number, message):
         """
@@ -72,10 +81,17 @@ class AfricasTalkingService:
             logger.warning(f"SMS to {to} not accepted: {error_status}")
             return {'success': False, 'error': error_status, 'data': data}
 
+        except requests.exceptions.HTTPError as e:
+            response = e.response
+            detail = response.text.strip() if response is not None else ''
+            if detail:
+                detail = detail[:500].replace(self.api_key, '[redacted]')
+                error = f'Africa\'s Talking returned HTTP {response.status_code}: {detail}'
+            else:
+                error = str(e)
+            logger.error(f"SMS request to {to} failed: {error}")
+            return {'success': False, 'error': error, 'data': None}
+
         except requests.exceptions.RequestException as e:
             logger.error(f"SMS request to {to} failed: {str(e)}")
             return {'success': False, 'error': str(e), 'data': None}
-
-
-# Singleton instance
-africastalking_service = AfricasTalkingService()
