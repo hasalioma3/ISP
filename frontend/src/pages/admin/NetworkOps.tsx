@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -9,10 +9,16 @@ import { format } from 'date-fns';
 import { useAuthStore } from '../../store/authStore';
 
 const PERIODS = [
+    { key: 'live', label: 'Live' },
     { key: 'daily', label: 'Daily' },
     { key: 'weekly', label: 'Weekly' },
     { key: 'monthly', label: 'Monthly' },
 ] as const;
+
+const LIVE_POLL_MS = 3000;
+const LIVE_MAX_POINTS = 60;
+
+type LivePoint = { time: string; down_mbps: number; up_mbps: number };
 
 const CHURN_WINDOWS = [7, 14, 30] as const;
 
@@ -21,7 +27,8 @@ export default function NetworkOps() {
     const canSeeChurn = !!user?.is_superuser || user?.role === 'admin' || user?.role === 'sales';
 
     const [routerId, setRouterId] = useState('');
-    const [period, setPeriod] = useState<typeof PERIODS[number]['key']>('daily');
+    const [period, setPeriod] = useState<typeof PERIODS[number]['key']>('live');
+    const isLive = period === 'live';
     const [date] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [churnDays, setChurnDays] = useState<typeof CHURN_WINDOWS[number]>(30);
 
@@ -39,8 +46,47 @@ export default function NetworkOps() {
             const res = await analyticsAPI.getRouterBandwidthTrend({ router: Number(routerId), period, date });
             return res.data;
         },
-        enabled: !!routerId,
+        enabled: !!routerId && !isLive,
     });
+
+    // Live mode: WAN byte counters are cumulative, so throughput is the diff between polls.
+    const [livePoints, setLivePoints] = useState<LivePoint[]>([]);
+    const prevLiveRef = useRef<{ rx: number; tx: number; ts: number } | null>(null);
+
+    useEffect(() => {
+        setLivePoints([]);
+        prevLiveRef.current = null;
+    }, [routerId, isLive]);
+
+    const { data: liveHealth } = useQuery({
+        queryKey: ['router-live-health', routerId],
+        queryFn: async () => {
+            const res = await adminAPI.getRouterHealth(Number(routerId));
+            return res.data[routerId] as any;
+        },
+        enabled: !!routerId && isLive,
+        refetchInterval: LIVE_POLL_MS,
+        gcTime: 0,
+    });
+
+    useEffect(() => {
+        if (!liveHealth?.success) return;
+        const now = Date.now();
+        const prev = prevLiveRef.current;
+        prevLiveRef.current = { rx: liveHealth.wan_rx_bytes, tx: liveHealth.wan_tx_bytes, ts: now };
+        if (!prev) return;
+        const elapsedSec = (now - prev.ts) / 1000;
+        if (elapsedSec <= 0) return;
+        const toMbps = (delta: number) => Math.round((Math.max(0, delta) * 8) / elapsedSec / 1_000_000 * 100) / 100;
+        const point: LivePoint = {
+            time: format(new Date(now), 'HH:mm:ss'),
+            down_mbps: toMbps(liveHealth.wan_rx_bytes - prev.rx),
+            up_mbps: toMbps(liveHealth.wan_tx_bytes - prev.tx),
+        };
+        setLivePoints((pts) => [...pts, point].slice(-LIVE_MAX_POINTS));
+    }, [liveHealth]);
+
+    const latestLive = livePoints[livePoints.length - 1];
 
     const { data: churn, isLoading: churnLoading } = useQuery({
         queryKey: ['churn-forecast', churnDays],
@@ -84,7 +130,12 @@ export default function NetworkOps() {
                             </button>
                         ))}
                     </div>
-                    {trend?.router && (
+                    {isLive && routerId ? (
+                        <span className="text-sm text-muted-foreground">
+                            Now: <strong className="text-foreground">{latestLive ? `${latestLive.down_mbps} down / ${latestLive.up_mbps} up Mbps` : 'measuring...'}</strong>
+                            {' '}(WAN, every {LIVE_POLL_MS / 1000}s)
+                        </span>
+                    ) : trend?.router && (
                         <span className="text-sm text-muted-foreground">
                             Peak: <strong className="text-foreground">{trend.peak_mbps} Mbps</strong>
                             {trend.router.uplink_mbps ? ` of ${trend.router.uplink_mbps} Mbps capacity` : ' (no capacity set)'}
@@ -97,6 +148,23 @@ export default function NetworkOps() {
                         <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">
                             Select a router to see its bandwidth trend.
                         </div>
+                    ) : isLive ? (
+                        livePoints.length === 0 ? (
+                            <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Collecting live data...</div>
+                        ) : (
+                            <div className="h-72">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={livePoints} margin={{ left: 0, right: 10 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="time" tick={{ fontSize: 11 }} />
+                                        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v} Mbps`} />
+                                        <Tooltip formatter={(v) => `${v} Mbps`} />
+                                        <Area type="monotone" dataKey="down_mbps" stroke="#7c3aed" fill="#c4b5fd" name="Download" isAnimationActive={false} />
+                                        <Area type="monotone" dataKey="up_mbps" stroke="#0ea5e9" fill="#bae6fd" name="Upload" isAnimationActive={false} />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )
                     ) : trendLoading ? (
                         <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Loading...</div>
                     ) : (trend?.series?.length ?? 0) === 0 ? (
@@ -122,7 +190,7 @@ export default function NetworkOps() {
                             </ResponsiveContainer>
                         </div>
                     )}
-                    {trend?.caveat && (
+                    {!isLive && trend?.caveat && (
                         <p className="text-xs text-muted-foreground mt-3 flex items-start gap-1.5">
                             <Gauge className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {trend.caveat}
                         </p>

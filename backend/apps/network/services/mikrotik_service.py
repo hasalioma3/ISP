@@ -1036,6 +1036,73 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    def ensure_service_access(self, services, addresses):
+        """
+        Checks /ip/service entries (winbox, ssh, ...) and fixes what would
+        block `addresses` even with a firewall accept rule: a disabled
+        service is enabled, and an existing address allow-list gets the
+        missing entries appended (an empty list already means "any" and is
+        left alone). Returns a human-readable list of what was found/changed.
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            svc_resource = api.get_resource('/ip/service')
+            report = []
+            for name in services:
+                entries = [e for e in svc_resource.get(name=name) if e.get('id')]
+                if not entries:
+                    report.append(f'{name}: service not found')
+                    continue
+                entry = entries[0]
+                changes = {}
+                if entry.get('disabled') == 'true':
+                    changes['disabled'] = 'no'
+                current = [a for a in (entry.get('address') or '').split(',') if a]
+                missing = [a for a in addresses if a not in current]
+                if current and missing:
+                    changes['address'] = ','.join(current + missing)
+                if changes:
+                    svc_resource.set(id=entry['id'], **changes)
+                    parts = []
+                    if 'disabled' in changes:
+                        parts.append('was disabled, enabled')
+                    if 'address' in changes:
+                        parts.append(f"allow-list extended with {', '.join(missing)}")
+                    report.append(f"{name}: {'; '.join(parts)}")
+                else:
+                    report.append(f'{name}: OK')
+            connection.disconnect()
+            return {'success': True, 'report': report}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def ensure_forward_accept(self, src_address, out_interface_not, comment):
+        """Accept forwarded traffic from `src_address` to anything except
+        `out_interface_not` (the WAN), so LAN/VPN hosts can reach devices
+        behind this router (e.g. radios on a management subnet)."""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            filter_rules = api.get_resource('/ip/firewall/filter')
+            all_rules = [r for r in filter_rules.get() if r.get('id')]
+            first_rule_id = all_rules[0]['id'] if all_rules else None
+            fields = {
+                'src-address': src_address, 'out-interface': f'!{out_interface_not}', 'action': 'accept',
+            }
+            existing = [r for r in filter_rules.get(comment=comment) if r.get('id')]
+            if existing:
+                filter_rules.set(id=existing[0]['id'], disabled='no', **fields)
+            else:
+                add_kwargs = {'chain': 'forward', 'comment': comment, **fields}
+                if first_rule_id:
+                    add_kwargs['place-before'] = first_rule_id
+                filter_rules.add(**add_kwargs)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
     def revoke_management_access(self, comment_prefix):
         """Removes exactly the rules allow_management_access added (matched
         by comment prefix), leaving everything else untouched."""

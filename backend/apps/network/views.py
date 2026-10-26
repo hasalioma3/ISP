@@ -38,7 +38,11 @@ class RouterViewSet(viewsets.ModelViewSet):
         a 10s poll across a handful of routers, not meant for hundreds.
         """
         results = {}
-        for router in Router.objects.filter(is_active=True):
+        routers = Router.objects.filter(is_active=True)
+        router_param = request.query_params.get('router')
+        if router_param:
+            routers = routers.filter(id=router_param)
+        for router in routers:
             mikrotik = MikroTikService(
                 host=router.ip_address, username=router.username,
                 password=router.password, port=router.port, use_ssl=router.use_ssl
@@ -167,7 +171,10 @@ class RouterViewSet(viewsets.ModelViewSet):
         if result.get('error'):
             return Response({'error': result['error']}, status=400)
         scopes = ', '.join([result['subnet']] + result.get('extra_subnets', []))
-        return Response({'success': [f"WAN management access enabled, scoped to {scopes}"], 'failed': []})
+        return Response({
+            'success': [f"WAN management access enabled, scoped to {scopes}"] + [f"Check: {c}" for c in result.get('checks', [])],
+            'failed': [],
+        })
 
     @action(detail=True, methods=['post'])
     def disable_wan_access(self, request, pk=None):

@@ -203,7 +203,7 @@ class SubscriberViewSet(
             customer=OuterRef('pk')
         ).order_by('-created_at').values('framed_ip_address')[:1]
 
-        qs = Customer.objects.annotate(
+        qs = Customer.objects.filter(is_staff=False).annotate(
             calculated_expiry=Coalesce(
                 Subquery(active_subscription.values('expiry_date')[:1]),
                 Subquery(latest_subscription.values('expiry_date')[:1]),

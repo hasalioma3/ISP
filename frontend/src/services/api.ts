@@ -182,7 +182,7 @@ export const adminAPI = {
     restartRouter: (id: number) => api.post(`/network/routers/${id}/restart/`),
     getMaintenanceSchedule: (id: number) => api.get(`/network/routers/${id}/maintenance_schedule/`),
     setMaintenanceSchedule: (id: number, data: any) => api.post(`/network/routers/${id}/maintenance_schedule/`, data),
-    getRouterHealth: () => api.get('/network/routers/health/'),
+    getRouterHealth: (routerId?: number) => api.get('/network/routers/health/', { params: routerId ? { router: routerId } : undefined }),
     testRouterConnection: (data: { ip_address: string; username: string; password: string; port?: number; use_ssl?: boolean }) =>
         api.post('/network/routers/test_connection/', data),
 

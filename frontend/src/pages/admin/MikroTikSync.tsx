@@ -35,7 +35,7 @@ const ACTIONS: { key: ActionKey; label: string; description: string; className: 
     {
         key: 'enable_wan_access',
         label: 'Enable WAN Management Access',
-        description: 'Opens Winbox + SSH on this router’s WAN interface, scoped to whatever subnet it’s currently on (the upstream router that gives it internet) — and all private networks (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) from any interface, so you can reach this router’s admin tools from any LAN or while on the VPN. Public addresses stay blocked. RouterOS blocks this from WAN by default.',
+        description: 'Opens Winbox + SSH on this router’s WAN interface, scoped to whatever subnet it’s currently on (the upstream router that gives it internet) — and all private networks (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) from any interface, so you can reach this router’s admin tools from any LAN or while on the VPN. Also checks that the Winbox/SSH services are enabled and allow-listed, and lets those networks reach devices behind the router. Public addresses stay blocked. RouterOS blocks this from WAN by default.',
         className: 'bg-amber-600 hover:bg-amber-700',
     },
     {

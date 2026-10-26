@@ -792,7 +792,24 @@ class NetworkAutomation:
             if not res.get('success'):
                 return {'error': res.get('error')}
             extra_subnets.append(net)
-        return {'success': True, 'subnet': str(subnet), 'extra_subnets': extra_subnets}
+
+        # Checks + provisioning beyond the input rules: Winbox/SSH services must be
+        # enabled and allow-listed, and LAN/VPN hosts must be able to forward to
+        # devices behind the router (radios etc.).
+        allowed = [str(subnet)] + extra_subnets
+        svc_res = mikrotik.ensure_service_access(['winbox', 'ssh'], allowed)
+        if not svc_res.get('success'):
+            return {'error': f"Service check failed: {svc_res.get('error')}"}
+        checks = svc_res['report']
+        for net in extra_subnets:
+            fwd = mikrotik.ensure_forward_accept(
+                net, wan_interface, f'{self.WAN_MGMT_COMMENT_PREFIX} [{net}] (Forward)'
+            )
+            if not fwd.get('success'):
+                return {'error': f"Forward rule for {net} failed: {fwd.get('error')}"}
+        if extra_subnets:
+            checks.append(f"forward: {', '.join(extra_subnets)} may reach networks behind the router (not WAN)")
+        return {'success': True, 'subnet': str(subnet), 'extra_subnets': extra_subnets, 'checks': checks}
 
     def disable_wan_management_access(self, router, username=None, password=None):
         """Removes exactly the rules enable_wan_management_access added."""
