@@ -173,6 +173,7 @@ export const adminAPI = {
     deleteRouter: (id: number) => api.delete(`/network/routers/${id}/`),
     provisionRouter: (id: number, username: string, password: string, portalUrl?: string) =>
         api.post(`/network/routers/${id}/provision/`, { username, password, portal_url: portalUrl }),
+    syncHotspotLoginPage: (id: number) => api.post(`/network/routers/${id}/sync_hotspot_login_page/`),
     backupRouter: (id: number) => api.post(`/network/routers/${id}/backup/`),
     syncRouterProfiles: (id: number) => api.post(`/network/routers/${id}/sync_profiles/`),
     syncRouterUsers: (id: number) => api.post(`/network/routers/${id}/sync_users/`),

@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import { Loader2, Router as RouterIcon, ShieldCheck, ShieldAlert, Plus, Pencil, Trash2, X, Wifi } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
-type ActionKey = 'backup' | 'sync_profiles' | 'sync_users' | 'enable_acs' | 'enable_wan_access' | 'disable_wan_access' | 'restart';
+type ActionKey = 'backup' | 'sync_profiles' | 'sync_users' | 'enable_acs' | 'enable_wan_access' | 'disable_wan_access' | 'restart' | 'sync_hotspot_login_page';
 
 const ACTIONS: { key: ActionKey; label: string; description: string; className: string }[] = [
     {
@@ -25,6 +25,12 @@ const ACTIONS: { key: ActionKey; label: string; description: string; className: 
         label: 'Sync Users',
         description: 'Push all active subscriptions to this router as secrets/users.',
         className: 'bg-green-600 hover:bg-green-700',
+    },
+    {
+        key: 'sync_hotspot_login_page',
+        label: 'Sync Hotspot Login Page',
+        description: 'Uploads the portal redirect page and points the Hotspot profile to the correct router storage folder, without changing other router settings.',
+        className: 'bg-cyan-600 hover:bg-cyan-700',
     },
     {
         key: 'enable_acs',
@@ -57,6 +63,7 @@ const runAction = (id: number, key: ActionKey) => {
         case 'backup': return adminAPI.backupRouter(id);
         case 'sync_profiles': return adminAPI.syncRouterProfiles(id);
         case 'sync_users': return adminAPI.syncRouterUsers(id);
+        case 'sync_hotspot_login_page': return adminAPI.syncHotspotLoginPage(id);
         case 'enable_acs': return adminAPI.enableAcsProvisioning(id);
         case 'enable_wan_access': return adminAPI.enableWanAccess(id);
         case 'disable_wan_access': return adminAPI.disableWanAccess(id);
@@ -86,7 +93,7 @@ const emptyForm = {
 export default function MikroTikSync() {
     const user = useAuthStore((state) => state.user);
     const canManage = !!user?.is_superuser || user?.role === 'admin';
-    const ADMIN_ONLY_ACTIONS: ActionKey[] = ['backup', 'enable_acs', 'enable_wan_access', 'disable_wan_access', 'restart'];
+    const ADMIN_ONLY_ACTIONS: ActionKey[] = ['backup', 'enable_acs', 'enable_wan_access', 'disable_wan_access', 'restart', 'sync_hotspot_login_page'];
     const visibleActions = canManage ? ACTIONS : ACTIONS.filter((a) => !ADMIN_ONLY_ACTIONS.includes(a.key));
     const [loadingKey, setLoadingKey] = useState<string | null>(null);
     const [logsByRouter, setLogsByRouter] = useState<Record<number, string[]>>({});

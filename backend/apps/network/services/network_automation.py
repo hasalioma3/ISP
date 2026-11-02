@@ -641,8 +641,15 @@ class NetworkAutomation:
              'hotspot_profile', hotspot_gateway)
         step('Hotspot server', mikrotik.add_hotspot_server,
              'hotspot1', interface, 'hotspot_pool', 'hotspot_profile')
-        step('Hotspot login page', mikrotik.upload_file,
-             'hotspot/login.html', build_hotspot_login_html(router.portal_url))
+        login_page_res = mikrotik.configure_hotspot_login_page(
+            'hotspot_profile', build_hotspot_login_html(router.portal_url)
+        )
+        if login_page_res.get('success'):
+            results['success'].append(
+                f"Hotspot login page ({login_page_res['path']}; profile directory: {login_page_res['html_directory']})"
+            )
+        else:
+            results['failed'].append(f"Hotspot login page: {login_page_res.get('error')}")
 
         # --- PPPoE: pool, default profile, server ---
         step('PPPoE IP pool', mikrotik.add_ip_pool, 'pppoe_pool', pppoe_pool_range)
@@ -689,6 +696,23 @@ class NetworkAutomation:
         router.save(update_fields=['provisioned', 'provisioned_at', 'last_sync'])
 
         return results
+
+    def sync_hotspot_login_page(self, router):
+        """Refresh only the custom login page and the profile's HTML folder."""
+        portal_url_error = validate_portal_url(router.portal_url)
+        if portal_url_error:
+            return {'error': portal_url_error}
+
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=router.username,
+            password=router.password, port=router.port, use_ssl=router.use_ssl
+        )
+        result = mikrotik.configure_hotspot_login_page(
+            'hotspot_profile', build_hotspot_login_html(router.portal_url)
+        )
+        if not result.get('success'):
+            return {'error': result.get('error')}
+        return result
 
     def enable_acs_auto_provisioning(self, router, username=None, password=None):
         """

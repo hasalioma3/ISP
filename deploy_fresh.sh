@@ -2,8 +2,8 @@
 set -e
 
 # Configuration
-PI_HOST="192.168.88.249"
-PI_USER="pi"
+PI_HOST="192.168.56.245"
+PI_USER="ali"
 REMOTE_DIR="~/ISP"
 
 echo "🚀 Deploying to Raspberry Pi ($PI_HOST)..."
@@ -14,28 +14,37 @@ echo "🚀 Deploying to Raspberry Pi ($PI_HOST)..."
 # renamed/deleted migration file) -- without it, a deleted file just sits
 # on the Pi forever, which is exactly what caused a migration-graph
 # conflict (two divergent migration chains, old + new) on a prior deploy.
-# Every path below is excluded for the opposite reason: they're Pi-only or
-# gitignored (.env.prod etc, generated per-company secrets) and must never
-# be touched by --delete, since they don't exist in the local source tree
-# to protect them -- plain --exclude keeps them untouched on both the copy
-# and the delete pass.
+# .env.prod is intentionally copied from this machine to configure the
+# deployment. The other excluded paths are server-only or generated secrets.
 echo "📦 Syncing files..."
 rsync -avz --delete --progress \
     --exclude 'node_modules' --exclude '.git' --exclude '__pycache__' \
-    --exclude '.env' --exclude '.env.prod' --exclude 'backend/.env' --exclude 'frontend/.env' \
+    --exclude '.env' --exclude 'backend/.env' --exclude 'frontend/.env' \
     --exclude 'companies/*.env' --exclude 'vps' --exclude 'teststk.py' \
     ./ ${PI_USER}@${PI_HOST}:${REMOTE_DIR}/
 
 # 2. Remote Commands
 echo "🔧 Executing remote rebuild..."
 set +e
-ssh ${PI_USER}@${PI_HOST} "\
+ssh -t ${PI_USER}@${PI_HOST} "\
     if ! command -v docker >/dev/null 2>&1; then \
         echo '🐳 Docker not found on the Pi -- installing...' && \
         curl -fsSL https://get.docker.com | sudo sh && \
         sudo usermod -aG docker \$USER && \
         echo '✅ Docker installed.' && \
         exit 42; \
+    fi && \
+    if ! docker info >/dev/null 2>&1; then \
+        echo '🔐 Checking Docker group permissions...' && \
+        sudo -v && \
+        if sudo -n docker info >/dev/null 2>&1; then \
+            sudo usermod -aG docker \$USER && \
+            echo '✅ Added this account to the docker group.' && \
+            exit 42; \
+        else \
+            echo '❌ Docker is installed but unavailable. Check that the daemon is running and this account can use sudo.'; \
+            exit 1; \
+        fi; \
     fi && \
     cd ${REMOTE_DIR} && \
     echo '📦 Ensuring external volumes exist...' && \
@@ -53,16 +62,13 @@ ssh ${PI_USER}@${PI_HOST} "\
     fi && \
     echo '🛑 Stopping containers...' && \
     docker compose down && \
-    echo '🧹 Pruning unused images and build cache (volumes are left untouched)...' && \
-    docker system prune -af && \
     echo '🏗️ Rebuilding and Starting...' && \
-    docker compose up -d --build --force-recreate && \
+    docker compose --progress=plain up -d --build --force-recreate && \
     echo '✨ Applying migrations...' && \
     docker compose exec -T backend python manage.py migrate && \
     if ! docker compose exec -T backend python manage.py shell -c 'from apps.customers.models import Customer; import sys; sys.exit(0 if Customer.objects.filter(is_superuser=True).exists() else 1)' >/dev/null 2>&1; then \
-        ADMIN_PW=\$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c 14) && \
-        docker compose exec -T -e DJANGO_SUPERUSER_USERNAME=admin -e DJANGO_SUPERUSER_EMAIL=admin@isp.local -e DJANGO_SUPERUSER_PASSWORD=\$ADMIN_PW backend python manage.py createsuperuser --noinput && \
-        echo '✅ No superuser existed -- created one: admin /' \$ADMIN_PW '(SAVE THIS, shown once)'; \
+        echo 'No superuser exists. Create one now:' && \
+        docker compose exec backend python manage.py createsuperuser; \
     else \
         echo 'ℹ️  Superuser already exists, skipping.'; \
     fi"
@@ -70,9 +76,8 @@ DEPLOY_EXIT=$?
 set -e
 
 if [ "$DEPLOY_EXIT" -eq 42 ]; then
-    echo "🐳 Docker was just installed on the Pi for the first time."
-    echo "   Re-run ./deploy_fresh.sh now -- each SSH connection is a fresh login, so"
-    echo "   the new docker group membership is already active for the next run."
+    echo "🔄 Docker setup or group membership changed on the server."
+    echo "   Run ./deploy_fresh.sh again; the next SSH login will apply the change."
     exit 0
 elif [ "$DEPLOY_EXIT" -ne 0 ]; then
     echo "❌ Deploy failed (exit ${DEPLOY_EXIT})."

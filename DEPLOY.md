@@ -9,12 +9,12 @@ confident it's right, push to the Pi (`https://192.168.88.252`).
   new migrations, `.env`/`.env.prod` edits. Fast: reuses Docker's build
   cache, and only recreates containers whose image actually changed.
 - **`./deploy_fresh.sh`** — a genuinely new system from scratch, or a hard
-  reset if the Pi's Docker state is somehow broken/needs to be nuked. Slow
-  by design: it wipes the build cache (`docker system prune -af`) and
-  rebuilds everything unconditionally, every time.
+   reset if the Pi's Docker state is somehow broken. It rebuilds and
+   recreates the main project, but preserves existing Docker images and
+   build cache, including images used by other projects.
 
-Don't reach for `deploy_fresh.sh` out of habit — the cache wipe is the whole
-reason it's slow, and routine changes don't need it.
+Don't reach for `deploy_fresh.sh` out of habit — routine changes don't need
+the full rebuild.
 
 ## Normal deploy (the 95% case: code changes, migrations, env tweaks)
 
@@ -60,15 +60,13 @@ changes.
 
 ## Occasional Pi maintenance
 
-`deploy_update.sh` never prunes anything, so old image layers accumulate on
-the Pi's disk over many updates. Every so often (not every deploy), free up
-space with:
+Neither deploy script prunes images. Old image layers can accumulate on the
+server over time. To remove dangling images/build cache, inspect first and
+prune manually when you are certain they are not needed:
 ```bash
-ssh pi@192.168.88.252 "docker image prune -f"
+ssh pi@192.168.88.252 "docker image prune"
 ```
-That only removes untagged/dangling images — never anything a running
-container is actually using, so it's safe to run anytime, unlike
-`deploy_fresh.sh`'s `system prune -af`.
+Review Docker's prompt before confirming; pruning may remove untagged images.
 
 ## Rollback
 
@@ -97,9 +95,9 @@ anything.
 ## Known limitation
 
 `deploy_fresh.sh` always does a full rebuild of every service
-(`--build --force-recreate`), even for a one-line frontend change. That's
-deliberately simple and safe rather than fast — on a Pi 5 a full rebuild is a
-couple of minutes, which is fine for how often you'll actually deploy.
+(`--build --force-recreate`), even for a one-line frontend change. Existing
+images and build cache are retained; replaced image tags may leave old
+untagged layers on disk.
 
 ## Multi-company (Phase 2)
 

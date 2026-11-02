@@ -770,6 +770,39 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    def configure_hotspot_login_page(self, profile_name, contents):
+        """Place login.html in the router's active storage layout and point
+        the Hotspot profile at that same directory."""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            file_resource = api.get_resource('/file')
+            flash_entries = file_resource.get(name='flash')
+            has_flash = any(entry.get('id') for entry in flash_entries)
+            html_directory = 'flash/hotspot' if has_flash else 'hotspot'
+            path = f'{html_directory}/login.html'
+
+            profiles = api.get_resource('/ip/hotspot/profile')
+            profile_rows = [p for p in profiles.get(name=profile_name) if p.get('id')]
+            if not profile_rows:
+                connection.disconnect()
+                return {'success': False, 'error': f'Hotspot profile {profile_name!r} was not found'}
+            profiles.set(id=profile_rows[0]['id'], **{'html-directory': html_directory})
+
+            for entry in file_resource.get(name=path):
+                if entry.get('id'):
+                    file_resource.remove(id=entry['id'])
+            file_resource.add(name=path, contents=contents)
+            uploaded = [f for f in file_resource.get(name=path) if f.get('id')]
+            if not uploaded:
+                connection.disconnect()
+                return {'success': False, 'error': f'Router did not report the uploaded file {path!r}'}
+
+            connection.disconnect()
+            return {'success': True, 'path': path, 'html_directory': html_directory}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
     def list_interfaces(self):
         """Read-only: real interface names on this router, for picking the
         correct MIKROTIK_PROVISION_INTERFACE value before provisioning."""

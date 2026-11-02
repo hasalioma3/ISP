@@ -2,18 +2,14 @@
 FROM python:3.9-slim
 
 # Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 # Set work directory
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    postgresql-client \
-    netcat-openbsd \
-    && rm -rf /var/lib/apt/lists/*
+RUN python -c 'import os, pty, sys; status = pty.spawn(["/bin/sh", "-c", "set -e; export DEBIAN_FRONTEND=noninteractive; apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Progress::Fancy=1 update; apt-get -o Dpkg::Progress-Fancy=1 install -y gcc postgresql-client netcat-openbsd; rm -rf /var/lib/apt/lists/*"]); sys.exit(os.waitstatus_to_exitcode(status))'
 
 # Install python dependencies
 COPY requirements.txt /app/

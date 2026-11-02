@@ -75,6 +75,18 @@ class RouterViewSet(viewsets.ModelViewSet):
         return Response(result)
 
     @action(detail=True, methods=['post'])
+    def sync_hotspot_login_page(self, request, pk=None):
+        """Refreshes only the custom Hotspot login page, without reprovisioning the router."""
+        router = self.get_object()
+        result = network_automation.sync_hotspot_login_page(router)
+        if result.get('error'):
+            return Response({'error': result['error']}, status=400)
+        return Response({
+            'success': [f"Hotspot login page synced to {result['path']} (profile directory: {result['html_directory']})"],
+            'failed': [],
+        })
+
+    @action(detail=True, methods=['post'])
     def backup(self, request, pk=None):
         """
         Read-only snapshot of the resources provisioning would touch, without
