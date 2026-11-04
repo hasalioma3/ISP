@@ -62,7 +62,6 @@ export default function Plans() {
                     {plans?.map((plan: any) => (
                         <Card
                             key={plan.id}
-                            padding={false}
                             className="overflow-hidden shadow-lg hover:shadow-xl transition"
                         >
                             <div className="bg-gradient-to-r from-primary to-primary/70 p-6 text-primary-foreground">
@@ -94,15 +93,15 @@ export default function Plans() {
                                             <strong>{plan.upload_speed} Mbps</strong> Upload
                                         </span>
                                     </div>
-                                    {plan.data_limit_gb && (
+                                    {plan.data_limit_gb !== null && plan.data_limit_gb !== undefined && (
                                         <div className="flex items-center gap-3">
                                             <Wifi className="w-5 h-5 text-primary" />
                                             <span className="text-foreground/80">
-                                                <strong>{plan.data_limit_gb} GB</strong> Data
+                                                <strong>{Number(plan.data_limit_gb).toLocaleString(undefined, { maximumFractionDigits: 3 })} GB</strong> Data
                                             </span>
                                         </div>
                                     )}
-                                    {!plan.data_limit_gb && (
+                                    {(plan.data_limit_gb === null || plan.data_limit_gb === undefined) && (
                                         <div className="flex items-center gap-3">
                                             <Wifi className="w-5 h-5 text-primary" />
                                             <span className="text-foreground/80">

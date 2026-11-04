@@ -1,11 +1,19 @@
 
 from django.db.models.signals import post_save, post_delete, m2m_changed
+from django.db import transaction
 from django.dispatch import receiver
 from apps.billing.models import BillingPlan
 from apps.network.tasks import sync_plan_to_routers
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _queue_plan_sync(plan_id):
+    try:
+        sync_plan_to_routers.delay(plan_id)
+    except Exception:
+        logger.exception("Could not queue router sync for billing plan %s", plan_id)
 
 @receiver(post_save, sender=BillingPlan)
 def sync_plan_on_save(sender, instance, created, **kwargs):
@@ -22,7 +30,7 @@ def sync_plan_on_save(sender, instance, created, **kwargs):
     the same "fall back to all active routers" treatment activate_customer
     already has).
     """
-    sync_plan_to_routers.delay(instance.id)
+    transaction.on_commit(lambda: _queue_plan_sync(instance.id))
 
 @receiver(m2m_changed, sender=BillingPlan.routers.through)
 def sync_plan_on_routers_change(sender, instance, action, **kwargs):
@@ -30,7 +38,7 @@ def sync_plan_on_routers_change(sender, instance, action, **kwargs):
     Trigger sync when routers are added/removed
     """
     if action in ["post_add", "post_remove", "post_clear"]:
-        sync_plan_to_routers.delay(instance.id)
+        transaction.on_commit(lambda: _queue_plan_sync(instance.id))
 
 from apps.billing.models import Subscription
 from apps.network.services.network_automation import network_automation

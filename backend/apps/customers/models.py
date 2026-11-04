@@ -101,6 +101,19 @@ class Customer(AbstractUser):
     def save(self, *args, **kwargs):
         self.phone_hash = hash_phone(self.phone_number) if self.phone_number else ''
         super().save(*args, **kwargs)
+        self._detach_mac_from_stale_customers()
+
+    def _detach_mac_from_stale_customers(self):
+        """A MAC logs in as one customer; drop it from old accounts with no live subscription."""
+        if not self.hotspot_mac_address:
+            return
+        from django.utils import timezone
+        live = Customer.objects.filter(
+            subscriptions__status='active', subscriptions__expiry_date__gt=timezone.now()
+        ).values('pk')
+        Customer.objects.filter(hotspot_mac_address__iexact=self.hotspot_mac_address).exclude(
+            pk=self.pk
+        ).exclude(pk__in=live).update(hotspot_mac_address=None)
 
     @property
     def full_name(self):

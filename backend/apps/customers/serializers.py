@@ -10,7 +10,7 @@ class CustomerRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
         fields = ['username', 'email', 'password', 'password2', 'phone_number', 
-                  'first_name', 'last_name', 'service_type']
+                  'first_name', 'last_name']
     
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
@@ -20,18 +20,13 @@ class CustomerRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password2')
         password = validated_data.pop('password')
+        validated_data['service_type'] = 'pppoe'
         
         customer = Customer.objects.create(**validated_data)
         customer.set_password(password)
         
-        # Generate PPPoE/Hotspot credentials
-        if customer.service_type in ['pppoe', 'both']:
-            customer.pppoe_username = customer.username
-            customer.pppoe_password = password
-        
-        if customer.service_type in ['hotspot', 'both']:
-            customer.hotspot_username = customer.username
-            customer.hotspot_password = password
+        customer.pppoe_username = customer.username
+        customer.pppoe_password = password
         
         customer.save()
         return customer

@@ -13,7 +13,10 @@ class BillingPlanAdmin(admin.ModelAdmin):
             'fields': ('name', 'description', 'is_active', 'routers')
         }),
         ('Service Details', {
-            'fields': ('service_type', 'mikrotik_profile', 'download_speed', 'upload_speed', 'data_limit_gb')
+            'fields': (
+                'service_type', 'mikrotik_profile', 'download_speed', 'upload_speed', 'data_limit_gb',
+                'fup_limit_gb', 'fup_download_speed', 'fup_upload_speed',
+            )
         }),
         ('Pricing & Duration', {
             'fields': ('price', 'currency', 'duration_value', 'duration_unit')

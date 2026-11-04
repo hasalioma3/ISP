@@ -22,7 +22,6 @@ export default function Register() {
         phone_number: '',
         first_name: '',
         last_name: '',
-        service_type: 'pppoe',
     });
     const [loading, setLoading] = useState(false);
 
@@ -46,7 +45,7 @@ export default function Register() {
         setLoading(true);
 
         try {
-            const response = await authAPI.register(formData);
+            const response = await authAPI.register({ ...formData, service_type: 'pppoe' });
             const { customer, tokens } = response.data;
 
             setAuth(customer, tokens.access, tokens.refresh);
@@ -85,7 +84,7 @@ export default function Register() {
                         <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">{siteSettings.company_name}</p>
                     )}
                     <h1 className="text-2xl font-bold text-foreground">Create Account</h1>
-                    <p className="text-muted-foreground mt-1.5 text-sm">Register for ISP services</p>
+                    <p className="text-muted-foreground mt-1.5 text-sm">Register for PPPoE service</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -145,20 +144,6 @@ export default function Register() {
                                 onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
                             />
                         </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="service_type">Service Type</Label>
-                        <select
-                            id="service_type"
-                            className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            value={formData.service_type}
-                            onChange={(e) => setFormData({ ...formData, service_type: e.target.value })}
-                        >
-                            <option value="pppoe">PPPoE</option>
-                            <option value="hotspot">Hotspot</option>
-                            <option value="both">Both</option>
-                        </select>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

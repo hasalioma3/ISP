@@ -180,6 +180,90 @@ class UsageReportView(APIView):
         return Response(data)
 
 
+class VoucherUsageReportView(APIView):
+    permission_classes = [RoleAllowed('admin', 'sales')]
+
+    def get(self, request):
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        search = request.query_params.get('search', '').strip()
+        export = request.query_params.get('export') == 'csv'
+
+        try:
+            page = max(int(request.query_params.get('page', 1)), 1)
+            page_size = min(max(int(request.query_params.get('page_size', 25)), 1), 200)
+            if start_date:
+                start_date = dt.date.fromisoformat(start_date)
+            if end_date:
+                end_date = dt.date.fromisoformat(end_date)
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'page, page_size, start_date, or end_date is invalid'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        vouchers = Voucher.objects.filter(
+            status='used', used_at__isnull=False
+        ).select_related('used_by', 'plan', 'batch')
+        if start_date:
+            vouchers = vouchers.filter(used_at__date__gte=start_date)
+        if end_date:
+            vouchers = vouchers.filter(used_at__date__lte=end_date)
+        if search:
+            vouchers = vouchers.filter(
+                Q(code__icontains=search)
+                | Q(used_mac__icontains=search)
+                | Q(used_by__username__icontains=search)
+                | Q(used_by__first_name__icontains=search)
+                | Q(used_by__last_name__icontains=search)
+                | Q(plan__name__icontains=search)
+            )
+        vouchers = vouchers.order_by('-used_at', '-id')
+
+        def serialize_voucher(voucher):
+            customer = voucher.used_by
+            customer_name = ''
+            if customer:
+                customer_name = customer.full_name
+            return {
+                'id': voucher.id,
+                'voucher_code': voucher.code,
+                'mac_address': voucher.used_mac or '',
+                'customer_username': customer.username if customer else '',
+                'customer_name': customer_name,
+                'plan_name': voucher.plan.name if voucher.plan else '',
+                'amount': str(voucher.amount) if voucher.amount is not None else '',
+                'used_at': voucher.used_at,
+            }
+
+        if export:
+            response = HttpResponse(content_type='text/csv')
+            response['Content-Disposition'] = 'attachment; filename="voucher_usage_report.csv"'
+            writer = csv.writer(response)
+            writer.writerow([
+                'Voucher Code', 'MAC Address', 'Customer Username', 'Customer Name',
+                'Plan', 'Amount', 'Redeemed At',
+            ])
+            for voucher in vouchers.iterator():
+                row = serialize_voucher(voucher)
+                writer.writerow([
+                    row['voucher_code'], row['mac_address'], row['customer_username'],
+                    row['customer_name'], row['plan_name'], row['amount'], row['used_at'],
+                ])
+            return response
+
+        total = vouchers.count()
+        offset = (page - 1) * page_size
+        results = [serialize_voucher(voucher) for voucher in vouchers[offset:offset + page_size]]
+        return Response({
+            'results': results,
+            'count': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': max((total + page_size - 1) // page_size, 1),
+        })
+
+
 class UsageChartView(APIView):
     """
     Network-wide today / this-week / this-year-by-month data usage, for the

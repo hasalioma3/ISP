@@ -221,15 +221,63 @@ class NetworkAutomation:
             error_msg = ", ".join(errors)
             logger.error(f"Failed to activate customer {customer.username}: {error_msg}")
             raise Exception(error_msg)
+
+    def _customer_has_fup(self, customer, plan):
+        from apps.billing.models import Subscription
+        subscription = Subscription.objects.filter(
+            customer=customer,
+            plan=plan,
+            status='active',
+            expiry_date__gt=timezone.now(),
+        ).order_by('-created_at').first()
+        return bool(subscription and subscription.fup_applied)
+
+    def apply_customer_fup(self, customer, plan):
+        """Apply reduced speeds to this customer's active network account."""
+        plan_routers = plan.routers.filter(is_active=True)
+        target_routers = plan_routers if plan_routers.exists() else Router.objects.filter(is_active=True)
+        all_routers = Router.objects.filter(is_active=True)
+        if not all_routers.exists():
+            return {'success': False, 'error': 'No active router configured'}
+        errors = []
+
+        for router in all_routers:
+            customer_hotspot = customer.service_type in ['hotspot', 'both'] and plan.service_type in ['hotspot', 'both']
+            if not customer_hotspot and not target_routers.filter(pk=router.pk).exists():
+                continue
+            enable_only_hotspot = customer_hotspot and not target_routers.filter(pk=router.pk).exists()
+            mikrotik = MikroTikService(
+                host=router.ip_address,
+                username=router.username,
+                password=router.password,
+                port=router.port,
+                use_ssl=router.use_ssl,
+            )
+            try:
+                if customer.service_type in ['pppoe', 'both'] and plan.service_type in ['pppoe', 'both'] and not enable_only_hotspot:
+                    self._activate_pppoe(customer, plan, router, mikrotik, profile_name=plan.get_fup_mikrotik_profile())
+                if customer_hotspot:
+                    self._activate_hotspot(customer, plan, router, mikrotik, profile_name=plan.get_fup_mikrotik_profile())
+                if customer.service_type == 'static' and plan.service_type == 'static' and not enable_only_hotspot:
+                    self._activate_static(customer, plan, router, mikrotik, fup_applied=True)
+            except Exception as e:
+                errors.append(f"{router.name}: {e}")
+
+        if errors:
+            return {'success': False, 'error': ', '.join(errors)}
+        return {'success': True}
     
-    def _activate_pppoe(self, customer, plan, router, mikrotik):
+    def _activate_pppoe(self, customer, plan, router, mikrotik, profile_name=None):
+        profile_name = profile_name or (
+            plan.get_fup_mikrotik_profile() if self._customer_has_fup(customer, plan) else plan.mikrotik_profile
+        )
         pppoe_secret, created = PPPoESecret.objects.get_or_create(
             customer=customer,
             defaults={
                 'router': router,
                 'username': customer.pppoe_username or customer.username,
                 'password': customer.pppoe_password or customer.username,
-                'profile': plan.mikrotik_profile,
+                'profile': profile_name,
                 'status': 'enabled'
             }
         )
@@ -247,7 +295,7 @@ class NetworkAutomation:
         # state on the router rather than trusting the local record.
         needs_update = False
         if not created:
-             if pppoe_secret.profile != plan.mikrotik_profile:
+             if pppoe_secret.profile != profile_name:
                  needs_update = True
              if pppoe_secret.password != (customer.pppoe_password or customer.username):
                  needs_update = True
@@ -261,7 +309,7 @@ class NetworkAutomation:
             # Try updating first
             res = mikrotik.update_pppoe_secret(
                 username=pppoe_secret.username,
-                profile=plan.mikrotik_profile,
+                profile=profile_name,
                 password=customer.pppoe_password or customer.username,
                 disabled='no'
             )
@@ -278,7 +326,7 @@ class NetworkAutomation:
             res = mikrotik.add_pppoe_secret(
                 username=pppoe_secret.username,
                 password=customer.pppoe_password or customer.username,
-                profile=plan.mikrotik_profile
+                profile=profile_name
             )
             if res['success']:
                 success = True
@@ -299,7 +347,7 @@ class NetworkAutomation:
             raise Exception(f"Failed to activate PPPoE for {customer.username}: {error}")
 
         if not created:
-            pppoe_secret.profile = plan.mikrotik_profile
+            pppoe_secret.profile = profile_name
             pppoe_secret.password = customer.pppoe_password or customer.username
             pppoe_secret.status = 'enabled'
 
@@ -313,14 +361,17 @@ class NetworkAutomation:
         if needs_update or created:
             mikrotik.disconnect_pppoe_session(pppoe_secret.username)
     
-    def _activate_hotspot(self, customer, plan, router, mikrotik):
+    def _activate_hotspot(self, customer, plan, router, mikrotik, profile_name=None):
+        profile_name = profile_name or (
+            plan.get_fup_mikrotik_profile() if self._customer_has_fup(customer, plan) else plan.mikrotik_profile
+        )
         hotspot_user, created = HotspotUser.objects.get_or_create(
             customer=customer,
             defaults={
                 'router': router,
                 'username': customer.hotspot_username or customer.username,
                 'password': customer.hotspot_password or customer.username,
-                'profile': plan.mikrotik_profile,
+                'profile': profile_name,
                 'mac_address': customer.hotspot_mac_address,
                 'status': 'enabled'
             }
@@ -335,7 +386,7 @@ class NetworkAutomation:
         # state on the router rather than trusting the local record.
         needs_update = False
         if not created:
-            if hotspot_user.profile != plan.mikrotik_profile:
+            if hotspot_user.profile != profile_name:
                 needs_update = True
             if hotspot_user.password != (customer.hotspot_password or customer.username):
                 needs_update = True
@@ -351,7 +402,7 @@ class NetworkAutomation:
         if not created:
              res = mikrotik.update_hotspot_user(
                 username=hotspot_user.username,
-                profile=plan.mikrotik_profile,
+                     profile=profile_name,
                 password=customer.hotspot_password or customer.username,
                 disabled='no',
                 mac_address=customer.hotspot_mac_address or ''
@@ -368,7 +419,7 @@ class NetworkAutomation:
             res = mikrotik.add_hotspot_user(
                 username=hotspot_user.username,
                 password=hotspot_user.password,
-                profile=plan.mikrotik_profile,
+                profile=profile_name,
                 mac_address=hotspot_user.mac_address or ''
             )
             if res['success']:
@@ -390,7 +441,7 @@ class NetworkAutomation:
             raise Exception(f"Failed to activate Hotspot for {customer.username}: {error}")
 
         if not created:
-            hotspot_user.profile = plan.mikrotik_profile
+            hotspot_user.profile = profile_name
             hotspot_user.password = customer.hotspot_password or customer.username
             hotspot_user.status = 'enabled'
             if customer.hotspot_mac_address:
@@ -405,7 +456,7 @@ class NetworkAutomation:
         # already-working connection alone.
         if customer.hotspot_mac_address:
             mikrotik.ensure_hotspot_mac_login()
-            res_mac = mikrotik.set_hotspot_mac_user(customer.hotspot_mac_address, plan.mikrotik_profile)
+            res_mac = mikrotik.set_hotspot_mac_user(customer.hotspot_mac_address, profile_name)
             if not res_mac['success']:
                 logger.error(f"{router.name}: MAC login user failed for {customer.username}: {res_mac.get('error')}")
             else:
@@ -416,7 +467,7 @@ class NetworkAutomation:
             if customer.hotspot_mac_address:
                 mikrotik.disconnect_hotspot_by_mac(customer.hotspot_mac_address)
 
-    def _activate_static(self, customer, plan, router, mikrotik):
+    def _activate_static(self, customer, plan, router, mikrotik, fup_applied=None):
         """
         Static IP customers have no PPPoE/Hotspot auth -- their IP is
         configured manually (or by a technician on-site), so "activation"
@@ -426,7 +477,11 @@ class NetworkAutomation:
         if not customer.static_ip_address:
             raise ValueError(f"{customer.username} has service_type='static' but no static_ip_address set")
 
-        rate_limit = f"{plan.upload_speed}M/{plan.download_speed}M"
+        if fup_applied is None:
+            fup_applied = self._customer_has_fup(customer, plan)
+        upload_speed = plan.fup_upload_speed if fup_applied else plan.upload_speed
+        download_speed = plan.fup_download_speed if fup_applied else plan.download_speed
+        rate_limit = f"{upload_speed}M/{download_speed}M"
         res = mikrotik.add_simple_queue(
             name=customer.username,
             target=f"{customer.static_ip_address}/32",
@@ -459,12 +514,31 @@ class NetworkAutomation:
                     res = mikrotik.add_pppoe_profile(plan.mikrotik_profile, rate_limit, remote_address='pppoe_pool', local_address=pppoe_gateway)
                 if res['success']: results['success'].append(f"PPPoE: {plan.name}")
                 else: results['failed'].append(f"PPPoE: {plan.name} - {res.get('error')}")
+                if plan.fup_limit_gb is not None:
+                    fup_profile = plan.get_fup_mikrotik_profile()
+                    fup_rate = f"{plan.fup_upload_speed}M/{plan.fup_download_speed}M"
+                    fup_res = mikrotik.update_pppoe_profile(fup_profile, fup_rate, remote_address='pppoe_pool', local_address=pppoe_gateway)
+                    if not fup_res['success'] and 'not found' in fup_res.get('error', ''):
+                        fup_res = mikrotik.add_pppoe_profile(fup_profile, fup_rate, remote_address='pppoe_pool', local_address=pppoe_gateway)
+                    if fup_res['success']: results['success'].append(f"PPPoE FUP: {plan.name}")
+                    else: results['failed'].append(f"PPPoE FUP: {plan.name} - {fup_res.get('error')}")
             if plan.service_type in ['hotspot', 'both']:
                 res = mikrotik.update_hotspot_profile(plan.mikrotik_profile, rate_limit)
                 if not res['success'] and 'not found' in res.get('error', ''):
                     res = mikrotik.add_hotspot_profile(plan.mikrotik_profile, rate_limit)
                 if res['success']: results['success'].append(f"Hotspot: {plan.name}")
                 else: results['failed'].append(f"Hotspot: {plan.name} - {res.get('error')}")
+                if plan.fup_limit_gb is not None:
+                    fup_profile = plan.get_fup_mikrotik_profile()
+                    fup_rate = f"{plan.fup_upload_speed}M/{plan.fup_download_speed}M"
+                    fup_res = mikrotik.update_hotspot_profile(fup_profile, fup_rate)
+                    if not fup_res['success'] and 'not found' in fup_res.get('error', ''):
+                        fup_res = mikrotik.add_hotspot_profile(fup_profile, fup_rate)
+                    if fup_res['success']: results['success'].append(f"Hotspot FUP: {plan.name}")
+                    else: results['failed'].append(f"Hotspot FUP: {plan.name} - {fup_res.get('error')}")
+        refreshed = mikrotik.refresh_hotspot_sessions()
+        if refreshed.get('refreshed'):
+            results['success'].append(f"Reconnected {len(refreshed['refreshed'])} session(s) to apply new speeds")
         return results
 
     def sync_all_users(self, router=None):

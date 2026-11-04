@@ -1,4 +1,7 @@
 from django.db import models
+from django.db.models import F, Q
+from django.db.models.functions import Lower, Trim
+from django.core.validators import MinValueValidator
 from django.utils.translation import gettext_lazy as _
 from apps.customers.models import Customer
 
@@ -45,11 +48,19 @@ class BillingPlan(models.Model):
     duration_days = models.IntegerField(default=30, help_text="Legacy: Subscription duration in days")
     
     # Data Limits (Optional)
-    data_limit_gb = models.IntegerField(
+    data_limit_gb = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
         null=True,
         blank=True,
-        help_text="Data limit in GB (null for unlimited)"
+        validators=[MinValueValidator(0)],
+        help_text="Data limit in GB (null for unlimited)",
     )
+
+    # After this usage threshold, apply the optional reduced speeds.
+    fup_limit_gb = models.PositiveIntegerField(null=True, blank=True)
+    fup_download_speed = models.PositiveIntegerField(null=True, blank=True, help_text="FUP download speed in Mbps")
+    fup_upload_speed = models.PositiveIntegerField(null=True, blank=True, help_text="FUP upload speed in Mbps")
     
     # MikroTik Profile Names
     mikrotik_profile = models.CharField(
@@ -67,6 +78,8 @@ class BillingPlan(models.Model):
     
     # Status
     is_active = models.BooleanField(default=True)
+    # Promo plans are only sold via vouchers; each MAC may redeem one per week.
+    is_promo = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -75,9 +88,30 @@ class BillingPlan(models.Model):
         ordering = ['price']
         verbose_name = _('Billing Plan')
         verbose_name_plural = _('Billing Plans')
+        constraints = [
+            models.UniqueConstraint(
+                Lower(Trim('name')),
+                name='billing_plan_name_ci_unique',
+            ),
+            models.CheckConstraint(
+                check=(
+                    Q(fup_limit_gb__isnull=True, fup_download_speed__isnull=True, fup_upload_speed__isnull=True)
+                    | (
+                        Q(fup_limit_gb__gt=0, fup_download_speed__gt=0, fup_upload_speed__gt=0)
+                        & Q(fup_download_speed__lte=F('download_speed'))
+                        & Q(fup_upload_speed__lte=F('upload_speed'))
+                        & (Q(data_limit_gb__isnull=True) | Q(fup_limit_gb__lt=F('data_limit_gb')))
+                    )
+                ),
+                name='billing_plan_fup_valid',
+            ),
+        ]
     
     def __str__(self):
         return f"{self.name} - {self.download_speed}/{self.upload_speed} Mbps - KES {self.price}"
+
+    def get_fup_mikrotik_profile(self):
+        return f"{self.mikrotik_profile}-fup"
 
     def get_duration_timedelta(self):
         """
@@ -131,6 +165,7 @@ class Subscription(models.Model):
     
     # Status
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    fup_applied = models.BooleanField(default=False)
     
     # Auto-renewal
     auto_renew = models.BooleanField(default=False)
@@ -352,6 +387,7 @@ class Voucher(models.Model):
         related_name='used_vouchers'
     )
     used_at = models.DateTimeField(null=True, blank=True)
+    used_mac = models.CharField(max_length=17, blank=True, db_index=True)
     
     expiry_date = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

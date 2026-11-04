@@ -1,3 +1,223 @@
-from django.test import TestCase
+from datetime import timedelta
+from unittest.mock import MagicMock, patch
 
-# Create your tests here.
+from django.test import TestCase
+from django.utils import timezone
+
+from apps.billing.models import BillingPlan, Subscription, UsageRecord
+from apps.customers.models import Customer
+from apps.network.services.mikrotik_service import MikroTikService
+from apps.network.tasks import (
+	collect_usage_statistics, enforce_subscription_data_limits, enforce_subscription_fup,
+	update_usage_record,
+)
+
+
+class HotspotSessionRefreshTests(TestCase):
+	def test_rate_pair_parsing(self):
+		parse = MikroTikService._parse_rate_pair
+		self.assertEqual(parse('5M/10M'), (5_000_000, 10_000_000))
+		self.assertEqual(parse('5000000/10000000'), (5_000_000, 10_000_000))
+		self.assertEqual(parse('512k/1M 2M/2M'), (512_000, 1_000_000))
+		self.assertIsNone(parse(None))
+		self.assertIsNone(parse('garbage'))
+
+	def test_only_sessions_with_stale_queue_are_disconnected(self):
+		resources = {
+			'/ip/hotspot/user/profile': MagicMock(**{'get.return_value': [{'name': 'fast', 'rate-limit': '60M/60M'}]}),
+			'/ip/hotspot/user': MagicMock(**{'get.return_value': [
+				{'id': '*1', 'name': 'stale', 'profile': 'fast'},
+				{'id': '*2', 'name': 'fresh', 'profile': 'fast'},
+			]}),
+			'/queue/simple': MagicMock(**{'get.return_value': [
+				{'name': '<hotspot-stale>', 'max-limit': '10000000/10000000'},
+				{'name': '<hotspot-fresh>', 'max-limit': '60000000/60000000'},
+			]}),
+			'/ip/hotspot/active': MagicMock(**{'get.return_value': [
+				{'id': '*a', 'user': 'stale'}, {'id': '*b', 'user': 'fresh'},
+			]}),
+		}
+		api = MagicMock()
+		api.get_resource.side_effect = lambda path: resources[path]
+		connection = MagicMock()
+		connection.get_api.return_value = api
+		service = MikroTikService(host='127.0.0.1', username='u', password='p')
+
+		with patch.object(service, '_get_connection', return_value=connection):
+			result = service.refresh_hotspot_sessions()
+
+		self.assertEqual(result, {'success': True, 'refreshed': ['stale']})
+		resources['/ip/hotspot/active'].remove.assert_called_once_with(id='*a')
+
+
+class SharedMacUsageTests(TestCase):
+	def test_usage_goes_to_customer_with_active_subscription(self):
+		with patch('apps.billing.signals.sync_plan_to_routers.delay'), \
+			 patch('apps.billing.signals.network_automation.activate_customer'):
+			mac = '72:A3:CB:88:E0:03'
+			payer = Customer.objects.create(username='payer_E003')
+			Customer.objects.create(username='OLDVOUCHER')
+			# Legacy rows predate MAC ownership, so set the duplicate without save().
+			Customer.objects.update(hotspot_mac_address=mac)
+			plan = BillingPlan.objects.create(
+				name='Shared MAC plan', service_type='hotspot', download_speed=10,
+				upload_speed=5, price='10.00', mikrotik_profile='shared-mac',
+			)
+			subscription = Subscription.objects.create(
+				customer=payer, plan=plan, expiry_date=timezone.now() + timedelta(days=1),
+			)
+
+			recorded = update_usage_record(mac, 100, 200, mac, '10.5.50.248')
+
+		self.assertTrue(recorded)
+		self.assertEqual(UsageRecord.objects.filter(subscription=subscription).count(), 1)
+
+
+class UsagePollingOrderTests(TestCase):
+	def test_enforcement_runs_right_after_collection(self):
+		calls = []
+		with patch('redis.from_url', side_effect=RuntimeError('no redis')), \
+			 patch('apps.network.tasks._collect_usage_once', side_effect=lambda: calls.append('collect')), \
+			 patch('apps.network.tasks.enforce_subscription_data_limits', side_effect=lambda: calls.append('cap')), \
+			 patch('apps.network.tasks.enforce_subscription_fup', side_effect=lambda: calls.append('fup')):
+			collect_usage_statistics()
+
+		self.assertEqual(calls, ['collect', 'cap', 'fup'])
+
+
+class DataLimitEnforcementTests(TestCase):
+	def setUp(self):
+		patcher = patch('apps.billing.signals.sync_plan_to_routers.delay')
+		self.addCleanup(patcher.stop)
+		patcher.start()
+		self.activate_patcher = patch('apps.billing.signals.network_automation.activate_customer')
+		self.addCleanup(self.activate_patcher.stop)
+		self.activate_patcher.start()
+		suspend_patcher = patch(
+			'apps.billing.signals.network_automation.suspend_customer',
+			return_value={'success': True},
+		)
+		self.addCleanup(suspend_patcher.stop)
+		self.suspend_mock = suspend_patcher.start()
+
+		self.customer = Customer.objects.create(username='data-cap-customer')
+		self.plan = BillingPlan.objects.create(
+			name='1 GB test',
+			service_type='hotspot',
+			download_speed=10,
+			upload_speed=5,
+			price='100.00',
+			data_limit_gb=1,
+			mikrotik_profile='test-profile',
+		)
+		self.subscription = Subscription.objects.create(
+			customer=self.customer,
+			plan=self.plan,
+			expiry_date=timezone.now() + timedelta(days=1),
+		)
+
+	def add_usage(self, upload_bytes, download_bytes):
+		UsageRecord.objects.create(
+			customer=self.customer,
+			subscription=self.subscription,
+			upload_bytes=upload_bytes,
+			download_bytes=download_bytes,
+			start_time=timezone.now(),
+		)
+
+	def test_expires_when_combined_upload_and_download_reach_limit(self):
+		self.add_usage(600 * 1024 ** 2, 424 * 1024 ** 2)
+
+		self.assertEqual(enforce_subscription_data_limits(), 1)
+
+		self.subscription.refresh_from_db()
+		self.assertEqual(self.subscription.status, 'expired')
+		self.suspend_mock.assert_called_once_with(self.customer)
+
+	def test_keeps_subscription_active_below_combined_limit(self):
+		self.add_usage(600 * 1024 ** 2, 423 * 1024 ** 2)
+
+		self.assertEqual(enforce_subscription_data_limits(), 0)
+
+		self.subscription.refresh_from_db()
+		self.assertEqual(self.subscription.status, 'active')
+		self.suspend_mock.assert_not_called()
+
+	def test_half_gigabyte_data_limit_is_enforced(self):
+		self.plan.data_limit_gb = '0.500'
+		self.plan.save(update_fields=['data_limit_gb'])
+		self.add_usage(256 * 1024 ** 2, 256 * 1024 ** 2)
+
+		self.assertEqual(enforce_subscription_data_limits(), 1)
+
+		self.subscription.refresh_from_db()
+		self.assertEqual(self.subscription.status, 'expired')
+
+
+class FupEnforcementTests(TestCase):
+	def setUp(self):
+		patcher = patch('apps.billing.signals.sync_plan_to_routers.delay')
+		self.addCleanup(patcher.stop)
+		patcher.start()
+		activate_patcher = patch('apps.billing.signals.network_automation.activate_customer')
+		self.addCleanup(activate_patcher.stop)
+		activate_patcher.start()
+		self.apply_fup = patch(
+			'apps.network.tasks.network_automation.apply_customer_fup',
+			return_value={'success': True},
+		)
+		self.addCleanup(self.apply_fup.stop)
+		self.apply_fup_mock = self.apply_fup.start()
+		self.customer = Customer.objects.create(username='fup-customer')
+		self.plan = BillingPlan.objects.create(
+			name='FUP test',
+			service_type='hotspot',
+			download_speed=10,
+			upload_speed=5,
+			price='100.00',
+			mikrotik_profile='fup-test',
+			fup_limit_gb=1,
+			fup_download_speed=3,
+			fup_upload_speed=1,
+		)
+		self.subscription = Subscription.objects.create(
+			customer=self.customer,
+			plan=self.plan,
+			expiry_date=timezone.now() + timedelta(days=1),
+		)
+
+	def add_usage(self, upload_bytes, download_bytes):
+		UsageRecord.objects.create(
+			customer=self.customer,
+			subscription=self.subscription,
+			upload_bytes=upload_bytes,
+			download_bytes=download_bytes,
+			start_time=timezone.now(),
+		)
+
+	def test_applies_fup_when_combined_usage_reaches_threshold(self):
+		self.add_usage(600 * 1024 ** 2, 424 * 1024 ** 2)
+
+		self.assertEqual(enforce_subscription_fup(), 1)
+
+		self.subscription.refresh_from_db()
+		self.assertTrue(self.subscription.fup_applied)
+		self.apply_fup_mock.assert_called_once_with(self.customer, self.plan)
+
+	def test_does_not_apply_fup_below_threshold(self):
+		self.add_usage(600 * 1024 ** 2, 423 * 1024 ** 2)
+
+		self.assertEqual(enforce_subscription_fup(), 0)
+
+		self.subscription.refresh_from_db()
+		self.assertFalse(self.subscription.fup_applied)
+		self.apply_fup_mock.assert_not_called()
+
+	def test_router_failure_leaves_fup_eligible_for_retry(self):
+		self.add_usage(1024 ** 3, 0)
+		self.apply_fup_mock.return_value = {'success': False, 'error': 'router unavailable'}
+
+		self.assertEqual(enforce_subscription_fup(), 0)
+
+		self.subscription.refresh_from_db()
+		self.assertFalse(self.subscription.fup_applied)

@@ -14,8 +14,8 @@ class BillingPlanViewSet(viewsets.ModelViewSet):
     """
     Billing plans. List/retrieve are public (the captive portal and
     customer app need to show plans to unauthenticated users) and only ever
-    return active plans for non-staff callers. Create/update/delete are
-    admin-only.
+    return active, non-promo plans for non-staff callers. Create/update/delete
+    are admin-only.
     """
     serializer_class = BillingPlanSerializer
 
@@ -28,7 +28,7 @@ class BillingPlanViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user and user.is_authenticated and user.is_staff:
             return BillingPlan.objects.all()
-        return BillingPlan.objects.filter(is_active=True)
+        return BillingPlan.objects.filter(is_active=True, is_promo=False)
 
     @action(detail=False, methods=['get'], url_path='csv-template')
     def csv_template(self, request):
@@ -41,12 +41,13 @@ class BillingPlanViewSet(viewsets.ModelViewSet):
         writer = csv.writer(response)
         writer.writerow([
             'name', 'service_type', 'price', 'duration_value', 'duration_unit',
-            'download_speed', 'upload_speed', 'data_limit_gb', 'mikrotik_profile',
+            'download_speed', 'upload_speed', 'data_limit_gb', 'fup_limit_gb',
+            'fup_download_speed', 'fup_upload_speed', 'mikrotik_profile',
             'description', 'is_active',
         ])
         writer.writerow([
             'Home 10Mbps', 'pppoe', '2000', '30', 'days',
-            '10', '10', '', 'home-10mb',
+            '10', '10', '', '', '', '', 'home-10mb',
             'Standard home package', 'true',
         ])
         return response
@@ -62,6 +63,8 @@ class BillingPlanViewSet(viewsets.ModelViewSet):
         """
         import csv
         import io
+        from decimal import Decimal, InvalidOperation
+        from django.db.models.functions import Lower, Trim
 
         csv_file = request.FILES.get('file')
         if not csv_file:
@@ -92,6 +95,11 @@ class BillingPlanViewSet(viewsets.ModelViewSet):
             if not name or not mikrotik_profile:
                 errors.append({'row': i, 'name': name, 'error': 'name and mikrotik_profile are required'})
                 continue
+            if BillingPlan.objects.annotate(
+                normalized_name=Lower(Trim('name'))
+            ).filter(normalized_name=name.lower()).exists():
+                errors.append({'row': i, 'name': name, 'error': 'a billing plan with this name already exists'})
+                continue
             if service_type not in valid_service_types:
                 errors.append({'row': i, 'name': name, 'error': f'service_type must be one of {", ".join(sorted(valid_service_types))}'})
                 continue
@@ -108,9 +116,36 @@ class BillingPlanViewSet(viewsets.ModelViewSet):
             data_limit_gb = None
             if data_limit_raw:
                 try:
-                    data_limit_gb = int(data_limit_raw)
+                    data_limit_gb = Decimal(data_limit_raw)
+                    if not data_limit_gb.is_finite() or data_limit_gb < 0:
+                        raise InvalidOperation
+                except (InvalidOperation, ValueError):
+                    errors.append({'row': i, 'name': name, 'error': 'data_limit_gb must be a non-negative number or blank'})
+                    continue
+
+            fup_raw = {
+                'fup_limit_gb': (row.get('fup_limit_gb') or '').strip(),
+                'fup_download_speed': (row.get('fup_download_speed') or '').strip(),
+                'fup_upload_speed': (row.get('fup_upload_speed') or '').strip(),
+            }
+            fup_values = {key: None for key in fup_raw}
+            if any(fup_raw.values()):
+                if not all(fup_raw.values()):
+                    errors.append({'row': i, 'name': name, 'error': 'FUP limit and both FUP speeds must all be set or all be blank'})
+                    continue
+                try:
+                    fup_values = {key: int(value) for key, value in fup_raw.items()}
                 except ValueError:
-                    errors.append({'row': i, 'name': name, 'error': 'data_limit_gb must be a whole number or blank'})
+                    errors.append({'row': i, 'name': name, 'error': 'FUP values must be whole numbers'})
+                    continue
+                if min(fup_values.values()) < 1:
+                    errors.append({'row': i, 'name': name, 'error': 'FUP values must be at least 1'})
+                    continue
+                if fup_values['fup_download_speed'] > download_speed or fup_values['fup_upload_speed'] > upload_speed:
+                    errors.append({'row': i, 'name': name, 'error': 'FUP speeds cannot exceed the plan speeds'})
+                    continue
+                if data_limit_gb is not None and fup_values['fup_limit_gb'] >= data_limit_gb:
+                    errors.append({'row': i, 'name': name, 'error': 'FUP threshold must be below data_limit_gb'})
                     continue
 
             duration_unit = (row.get('duration_unit') or 'days').strip().lower()
@@ -138,6 +173,7 @@ class BillingPlanViewSet(viewsets.ModelViewSet):
                 duration_unit=duration_unit,
                 duration_days=duration_value if duration_unit == 'days' else 30,
                 data_limit_gb=data_limit_gb,
+                **fup_values,
                 mikrotik_profile=mikrotik_profile,
                 is_active=is_active,
             )
@@ -206,6 +242,7 @@ class UsageRecordViewSet(viewsets.ReadOnlyModelViewSet):
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAdminUser
 from django.utils import timezone
+from datetime import timedelta
 from django.db import transaction
 import random
 import string
@@ -327,7 +364,7 @@ class VoucherRedeemView(APIView):
         serializer = VoucherRedeemSerializer(data=request.data)
         if serializer.is_valid():
             code = serializer.validated_data['code']
-            mac_address = serializer.validated_data.get('mac_address') or None
+            mac_address = (serializer.validated_data.get('mac_address') or '').strip().upper().replace('-', ':') or None
             
             try:
                 voucher = Voucher.objects.select_related('plan').get(code=code)
@@ -351,6 +388,18 @@ class VoucherRedeemView(APIView):
                 
                 if voucher.status != 'active':
                      return Response({'error': 'Voucher already used'}, status=status.HTTP_400_BAD_REQUEST)
+
+                if voucher.plan.is_promo:
+                    if not mac_address:
+                        return Response({'error': 'Device MAC address is required to redeem a promo voucher'}, status=status.HTTP_400_BAD_REQUEST)
+                    week_ago = timezone.now() - timedelta(days=7)
+                    if Voucher.objects.filter(
+                        plan__is_promo=True, used_mac=mac_address, used_at__gte=week_ago
+                    ).exists():
+                        return Response(
+                            {'error': 'This device has already used a promo voucher in the last 7 days'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
                 
                 # 1. Create Customer
                 # Check if user already exists
@@ -398,6 +447,7 @@ class VoucherRedeemView(APIView):
                 voucher.status = 'used'
                 voucher.used_by = customer
                 voucher.used_at = timezone.now()
+                voucher.used_mac = mac_address or ''
                 voucher.save()
                 
                 # 3. Create Subscription

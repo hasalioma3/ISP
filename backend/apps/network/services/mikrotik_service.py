@@ -386,6 +386,51 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    @staticmethod
+    def _parse_rate_pair(value):
+        """'5M/10M' or '5000000/10000000' -> (rx, tx) in bps, else None."""
+        if not value:
+            return None
+        parts = value.split()[0].split('/')
+        if len(parts) != 2:
+            return None
+        units = {'k': 1_000, 'M': 1_000_000, 'G': 1_000_000_000}
+        try:
+            return tuple(
+                int(float(p[:-1]) * units[p[-1]]) if p and p[-1] in units else int(p)
+                for p in parts
+            )
+        except ValueError:
+            return None
+
+    def refresh_hotspot_sessions(self):
+        """
+        RouterOS builds a session's queue at login and never updates it, so a
+        changed profile rate only applies after reconnecting. Disconnect only
+        the sessions whose running queue differs from their profile's rate.
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            profiles = {p.get('name'): p.get('rate-limit') for p in api.get_resource('/ip/hotspot/user/profile').get()}
+            users = {u.get('name'): u.get('profile') for u in api.get_resource('/ip/hotspot/user').get() if u.get('id')}
+            queues = {q.get('name'): q.get('max-limit') for q in api.get_resource('/queue/simple').get()}
+            active = api.get_resource('/ip/hotspot/active')
+
+            refreshed = []
+            for session in [s for s in active.get() if s.get('id')]:
+                user = session.get('user')
+                expected = self._parse_rate_pair(profiles.get(users.get(user)))
+                actual = self._parse_rate_pair(queues.get(f'<hotspot-{user}>'))
+                if expected and actual and expected != actual:
+                    active.remove(id=session['id'])
+                    refreshed.append(user)
+            connection.disconnect()
+            return {'success': True, 'refreshed': refreshed}
+        except Exception as e:
+            logger.error(f"Failed to refresh hotspot sessions: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
     # Simple Queue Management (Static IP customers -- no PPPoE/Hotspot auth,
     # just a bandwidth cap tied to their fixed address)
 

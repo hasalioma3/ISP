@@ -6,5 +6,6 @@ vps
 teststk.py
 .env
 .env.prod
+.env.local
 backend/.env
 frontend/.env

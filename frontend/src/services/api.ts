@@ -128,6 +128,9 @@ export const analyticsAPI = {
     getDashboardStats: () => api.get('/analytics/dashboard/'),
     getDashboardExtra: () => api.get('/analytics/dashboard/extra/'),
     getIncomeReport: (params?: any) => api.get('/analytics/income/', { params }),
+    getVoucherUsageReport: (params?: any) => api.get('/analytics/voucher-usage/', { params }),
+    downloadVoucherUsageReport: (params?: any) =>
+        api.get('/analytics/voucher-usage/', { params: { ...params, export: 'csv' }, responseType: 'blob' }),
     getUsageReport: () => api.get('/analytics/usage/'),
     getUsageChart: () => api.get('/analytics/usage-chart/'),
     getExpiringToday: (page: number, pageSize?: number) =>

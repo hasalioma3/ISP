@@ -2,7 +2,8 @@
 import re
 import ipaddress
 from celery import shared_task
-from django.db.models import F
+from django.conf import settings
+from django.db.models import F, Sum
 from django.utils import timezone
 from apps.network.services.network_automation import network_automation
 from apps.network.services.mikrotik_service import MikroTikService
@@ -28,10 +29,37 @@ def parse_uptime_seconds(uptime):
 @shared_task
 def collect_usage_statistics():
     """
+    Poll usage, then enforce data caps and FUP immediately on the fresh
+    totals. Overlapping runs are skipped so a slow router can't double-count.
+    """
+    lock = None
+    try:
+        import redis
+        lock = redis.from_url(settings.CELERY_BROKER_URL).lock('collect-usage-statistics', timeout=120)
+        if not lock.acquire(blocking=False):
+            logger.info("Usage collection already running; skipping this tick.")
+            return
+    except Exception as e:
+        logger.warning(f"Usage collection lock unavailable ({e}); running unlocked.")
+        lock = None
+
+    try:
+        _collect_usage_once()
+        enforce_subscription_data_limits()
+        enforce_subscription_fup()
+    finally:
+        if lock is not None:
+            try:
+                lock.release()
+            except Exception:
+                pass
+
+
+def _collect_usage_once():
+    """
     Collect live usage statistics (bytes in/out) from every active router's
     connected Hotspot + PPPoE sessions, and refresh the ActiveSession table
-    (used for online-user counts on the admin dashboard). Scheduled
-    periodically in celery.py.
+    (used for online-user counts on the admin dashboard).
     """
     from apps.customers.models import Customer
     from apps.network.models import Router, ActiveSession
@@ -118,15 +146,104 @@ def collect_usage_statistics():
 
     logger.info(f"Usage statistics collection completed. {total_updated} sessions updated.")
 
+
+@shared_task
+def enforce_subscription_data_limits():
+    """Expire capped subscriptions once combined upload and download reach the limit."""
+    capped_subscriptions = Subscription.objects.filter(
+        status='active',
+        expiry_date__gt=timezone.now(),
+        plan__data_limit_gb__isnull=False,
+    ).select_related('customer', 'plan')
+
+    expired_count = 0
+    for subscription in capped_subscriptions:
+        usage = UsageRecord.objects.filter(subscription=subscription).aggregate(
+            upload=Sum('upload_bytes'),
+            download=Sum('download_bytes'),
+        )
+        used_bytes = (usage['upload'] or 0) + (usage['download'] or 0)
+        limit_bytes = int(subscription.plan.data_limit_gb * (1024 ** 3))
+
+        if used_bytes >= limit_bytes:
+            subscription.status = 'expired'
+            subscription.save(update_fields=['status', 'updated_at'])
+            expired_count += 1
+            logger.info(
+                "Expired subscription %s for %s after reaching its %s GB data limit",
+                subscription.id,
+                subscription.customer.username,
+                subscription.plan.data_limit_gb,
+            )
+
+    return expired_count
+
+
+@shared_task
+def enforce_subscription_fup():
+    """Apply reduced speeds after an active subscription reaches its FUP threshold."""
+    subscriptions = Subscription.objects.filter(
+        status='active',
+        expiry_date__gt=timezone.now(),
+        fup_applied=False,
+        plan__fup_limit_gb__isnull=False,
+    ).select_related('customer', 'plan')
+
+    applied_count = 0
+    for subscription in subscriptions:
+        usage = UsageRecord.objects.filter(subscription=subscription).aggregate(
+            upload=Sum('upload_bytes'),
+            download=Sum('download_bytes'),
+        )
+        used_bytes = (usage['upload'] or 0) + (usage['download'] or 0)
+        limit_bytes = subscription.plan.fup_limit_gb * (1024 ** 3)
+        if used_bytes < limit_bytes:
+            continue
+
+        result = network_automation.apply_customer_fup(subscription.customer, subscription.plan)
+        if not result.get('success'):
+            logger.error(
+                "Failed to apply FUP for subscription %s: %s",
+                subscription.id,
+                result.get('error'),
+            )
+            continue
+
+        updated = Subscription.objects.filter(
+            pk=subscription.pk,
+            status='active',
+            fup_applied=False,
+        ).update(fup_applied=True, updated_at=timezone.now())
+        applied_count += updated
+        if updated:
+            logger.info(
+                "Applied FUP to subscription %s for %s at %s GB",
+                subscription.id,
+                subscription.customer.username,
+                subscription.plan.fup_limit_gb,
+            )
+
+    return applied_count
+
 def _find_customer(username, mac=None):
     """Roaming MAC-login sessions use the MAC as username, so fall back to it."""
     from apps.customers.models import Customer
     customer = Customer.objects.filter(username=username).first()
-    if not customer and mac:
-        customer = Customer.objects.filter(hotspot_mac_address__iexact=mac).first()
-    if not customer and username and ':' in username:
-        customer = Customer.objects.filter(hotspot_mac_address__iexact=username).first()
-    return customer
+    if customer:
+        return customer
+
+    # Several customers can share one MAC (old voucher/guest accounts); the one
+    # with a live subscription must win or its usage is never recorded.
+    macs = [m for m in (mac, username if username and ':' in username else None) if m]
+    for candidate_mac in macs:
+        matches = Customer.objects.filter(hotspot_mac_address__iexact=candidate_mac)
+        active = matches.filter(
+            subscriptions__status='active', subscriptions__expiry_date__gt=timezone.now()
+        ).order_by('-subscriptions__created_at').first()
+        customer = active or matches.first()
+        if customer:
+            return customer
+    return None
 
 def update_usage_record(username, delta_upload, delta_download, mac, ip, router_ip=''):
     """
@@ -242,6 +359,17 @@ def sync_plan_to_routers(plan_id):
                     res_hotspot = mikrotik.add_hotspot_profile(plan.mikrotik_profile, rate_limit)
                     if not res_hotspot['success']:
                          res_hotspot = mikrotik.update_hotspot_profile(plan.mikrotik_profile, rate_limit)
+                    if plan.fup_limit_gb is not None:
+                        fup_rate_limit = f"{plan.fup_upload_speed}M/{plan.fup_download_speed}M"
+                        fup_profile = plan.get_fup_mikrotik_profile()
+                        fup_hotspot = mikrotik.add_hotspot_profile(fup_profile, fup_rate_limit)
+                        if not fup_hotspot['success']:
+                            fup_hotspot = mikrotik.update_hotspot_profile(fup_profile, fup_rate_limit)
+                        if not fup_hotspot['success']:
+                            logger.error(f"{router.name}: Hotspot FUP profile sync failed: {fup_hotspot.get('error')}")
+                    refreshed = mikrotik.refresh_hotspot_sessions()
+                    if refreshed.get('refreshed'):
+                        logger.info(f"{router.name}: reconnected sessions to apply new speed: {refreshed['refreshed']}")
                 else:
                     res_hotspot = {'success': True} # Skip if not hotspot plan
                 
@@ -286,6 +414,28 @@ def sync_plan_to_routers(plan_id):
                         logger.info(f"{router.name}: PPPoE Profile {plan.mikrotik_profile} synced.")
                     else:
                         logger.error(f"{router.name}: PPPoE Sync Failed: {res_pppoe.get('error')}")
+                    if plan.fup_limit_gb is not None:
+                        fup_profile = plan.get_fup_mikrotik_profile()
+                        fup_rate_limit = f"{plan.fup_upload_speed}M/{plan.fup_download_speed}M"
+                        fup_pppoe = mikrotik.add_pppoe_profile(
+                            name=fup_profile,
+                            rate_limit=fup_rate_limit,
+                            remote_address='pppoe_pool',
+                            local_address=pppoe_gateway,
+                            on_up=on_up,
+                            on_down=on_down,
+                        )
+                        if not fup_pppoe['success']:
+                            fup_pppoe = mikrotik.update_pppoe_profile(
+                                name=fup_profile,
+                                rate_limit=fup_rate_limit,
+                                remote_address='pppoe_pool',
+                                local_address=pppoe_gateway,
+                                on_up=on_up,
+                                on_down=on_down,
+                            )
+                        if not fup_pppoe['success']:
+                            logger.error(f"{router.name}: PPPoE FUP profile sync failed: {fup_pppoe.get('error')}")
                 else:
                     res_pppoe = {'success': True}  # Skip if not a PPPoE plan
 

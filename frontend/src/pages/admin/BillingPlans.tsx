@@ -9,7 +9,8 @@ const emptyForm = {
     name: '', description: '', service_type: 'pppoe',
     download_speed: 5, upload_speed: 5, price: '', currency: 'KES',
     duration_value: 30, duration_unit: 'days',
-    data_limit_gb: '', mikrotik_profile: '', is_active: true, routers: [] as number[],
+    data_limit_gb: '', fup_limit_gb: '', fup_download_speed: '', fup_upload_speed: '',
+    mikrotik_profile: '', is_active: true, is_promo: false, routers: [] as number[],
 };
 
 export default function BillingPlans() {
@@ -77,7 +78,10 @@ export default function BillingPlans() {
             download_speed: plan.download_speed, upload_speed: plan.upload_speed, price: plan.price,
             currency: plan.currency, duration_value: plan.duration_value, duration_unit: plan.duration_unit,
             data_limit_gb: plan.data_limit_gb ?? '', mikrotik_profile: plan.mikrotik_profile,
-            is_active: plan.is_active, routers: plan.routers || [],
+            fup_limit_gb: plan.fup_limit_gb ?? '',
+            fup_download_speed: plan.fup_download_speed ?? '',
+            fup_upload_speed: plan.fup_upload_speed ?? '',
+            is_active: plan.is_active, is_promo: plan.is_promo ?? false, routers: plan.routers || [],
         });
         setEditingId(plan.id);
         setIsFormOpen(true);
@@ -85,7 +89,13 @@ export default function BillingPlans() {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const payload = { ...form, data_limit_gb: form.data_limit_gb === '' ? null : form.data_limit_gb };
+        const payload = {
+            ...form,
+            data_limit_gb: form.data_limit_gb === '' ? null : form.data_limit_gb,
+            fup_limit_gb: form.fup_limit_gb === '' ? null : form.fup_limit_gb,
+            fup_download_speed: form.fup_download_speed === '' ? null : form.fup_download_speed,
+            fup_upload_speed: form.fup_upload_speed === '' ? null : form.fup_upload_speed,
+        };
         if (editingId) {
             updateMutation.mutate({ id: editingId, data: payload });
         } else {
@@ -221,9 +231,28 @@ export default function BillingPlans() {
                                         onChange={e => setForm({ ...form, price: e.target.value })} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-foreground/80 mb-1">Data Limit (GB, blank=unlimited)</label>
-                                    <input type="number" min={0} className="w-full border rounded-lg px-3 py-2 text-sm" value={form.data_limit_gb}
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">Data Limit (GB, e.g. 0.5 = 500 MB, blank=unlimited)</label>
+                                    <input type="number" min={0} step="0.001" className="w-full border rounded-lg px-3 py-2 text-sm" value={form.data_limit_gb}
                                         onChange={e => setForm({ ...form, data_limit_gb: e.target.value })} />
+                                </div>
+                                <div className="sm:col-span-2 border-t border-border pt-4">
+                                    <h3 className="text-sm font-semibold text-foreground">Optional Fair Usage Policy</h3>
+                                    <p className="text-xs text-muted-foreground mt-1">After this usage, the subscriber is throttled until renewal. Leave all fields blank to disable FUP; when a data cap is set, FUP must be lower.</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">FUP Threshold (GB)</label>
+                                    <input type="number" min={1} className="w-full border rounded-lg px-3 py-2 text-sm" value={form.fup_limit_gb}
+                                        onChange={e => setForm({ ...form, fup_limit_gb: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">FUP Download (Mbps)</label>
+                                    <input type="number" min={1} className="w-full border rounded-lg px-3 py-2 text-sm" value={form.fup_download_speed}
+                                        onChange={e => setForm({ ...form, fup_download_speed: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-foreground/80 mb-1">FUP Upload (Mbps)</label>
+                                    <input type="number" min={1} className="w-full border rounded-lg px-3 py-2 text-sm" value={form.fup_upload_speed}
+                                        onChange={e => setForm({ ...form, fup_upload_speed: e.target.value })} />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-foreground/80 mb-1">Duration</label>
@@ -257,6 +286,11 @@ export default function BillingPlans() {
                                     <input type="checkbox" id="is_active" checked={form.is_active}
                                         onChange={e => setForm({ ...form, is_active: e.target.checked })} />
                                     <label htmlFor="is_active" className="text-sm text-foreground/80">Active (visible to customers)</label>
+                                </div>
+                                <div className="sm:col-span-2 flex items-center gap-2">
+                                    <input type="checkbox" id="is_promo" checked={form.is_promo}
+                                        onChange={e => setForm({ ...form, is_promo: e.target.checked })} />
+                                    <label htmlFor="is_promo" className="text-sm text-foreground/80">Promo plan (a device can redeem only one promo voucher per week)</label>
                                 </div>
                             </div>
                             <div className="flex justify-end gap-3 pt-2 border-t">
@@ -348,7 +382,13 @@ export default function BillingPlans() {
 function formatError(err: any): string | null {
     const data = err?.response?.data;
     if (!data) return null;
-    if (typeof data === 'string') return data;
+    if (typeof data === 'string') {
+        const contentType = err?.response?.headers?.['content-type'] || '';
+        if (contentType.includes('text/html') || /<(?:!doctype html|html\b)/i.test(data)) {
+            return 'The server returned an HTML error. Check the backend logs and try again.';
+        }
+        return data;
+    }
     if (data.error) return data.error;
     const first = Object.values(data).flat()[0];
     return typeof first === 'string' ? first : null;
