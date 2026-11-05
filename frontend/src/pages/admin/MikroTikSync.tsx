@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import { Loader2, Router as RouterIcon, ShieldCheck, ShieldAlert, Plus, Pencil, Trash2, X, Wifi } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
-type ActionKey = 'backup' | 'sync_profiles' | 'sync_users' | 'enable_acs' | 'enable_wan_access' | 'disable_wan_access' | 'restart' | 'sync_hotspot_login_page';
+type ActionKey = 'backup' | 'sync_profiles' | 'sync_users' | 'enable_wan_access' | 'disable_wan_access' | 'restart' | 'sync_hotspot_login_page';
 
 const ACTIONS: { key: ActionKey; label: string; description: string; className: string }[] = [
     {
@@ -33,12 +33,6 @@ const ACTIONS: { key: ActionKey; label: string; description: string; className: 
         className: 'bg-cyan-600 hover:bg-cyan-700',
     },
     {
-        key: 'enable_acs',
-        label: 'Enable CPE Auto-Provisioning',
-        description: 'Broadcasts the TR-069 ACS URL via DHCP option 43 on this router’s Hotspot network, so supported CPE devices self-configure. Not every device supports this — see the CPE Onboarding Guide for the manual fallback.',
-        className: 'bg-violet-600 hover:bg-violet-700',
-    },
-    {
         key: 'enable_wan_access',
         label: 'Enable WAN Management Access',
         description: 'Opens Winbox + SSH on this router’s WAN interface, scoped to whatever subnet it’s currently on (the upstream router that gives it internet) — and all private networks (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) from any interface, so you can reach this router’s admin tools from any LAN or while on the VPN. Also checks that the Winbox/SSH services are enabled and allow-listed, and lets those networks reach devices behind the router. Public addresses stay blocked. RouterOS blocks this from WAN by default.',
@@ -64,7 +58,6 @@ const runAction = (id: number, key: ActionKey) => {
         case 'sync_profiles': return adminAPI.syncRouterProfiles(id);
         case 'sync_users': return adminAPI.syncRouterUsers(id);
         case 'sync_hotspot_login_page': return adminAPI.syncHotspotLoginPage(id);
-        case 'enable_acs': return adminAPI.enableAcsProvisioning(id);
         case 'enable_wan_access': return adminAPI.enableWanAccess(id);
         case 'disable_wan_access': return adminAPI.disableWanAccess(id);
         case 'restart': return adminAPI.restartRouter(id);
@@ -93,7 +86,7 @@ const emptyForm = {
 export default function MikroTikSync() {
     const user = useAuthStore((state) => state.user);
     const canManage = !!user?.is_superuser || user?.role === 'admin';
-    const ADMIN_ONLY_ACTIONS: ActionKey[] = ['backup', 'enable_acs', 'enable_wan_access', 'disable_wan_access', 'restart', 'sync_hotspot_login_page'];
+    const ADMIN_ONLY_ACTIONS: ActionKey[] = ['backup', 'enable_wan_access', 'disable_wan_access', 'restart', 'sync_hotspot_login_page'];
     const visibleActions = canManage ? ACTIONS : ACTIONS.filter((a) => !ADMIN_ONLY_ACTIONS.includes(a.key));
     const [loadingKey, setLoadingKey] = useState<string | null>(null);
     const [logsByRouter, setLogsByRouter] = useState<Record<number, string[]>>({});

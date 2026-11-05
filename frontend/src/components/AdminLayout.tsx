@@ -23,7 +23,6 @@ import {
     Wallet,
     Boxes,
     Bell,
-    Wifi,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useSiteSettings } from '../hooks/useSiteSettings';
@@ -64,7 +63,6 @@ export default function AdminLayout() {
         { name: 'Reports', href: '/admin/reports', icon: BarChart, roles: ['admin', 'sales'] },
         { name: 'Vouchers', href: '/admin/vouchers', icon: Ticket, roles: ['admin', 'sales'] },
         { name: 'MikroTik', href: '/admin/mikrotik', icon: RouterIcon, roles: ['admin', 'technician'] },
-        { name: 'CPE Devices', href: '/admin/cpe-devices', icon: Wifi, roles: ['admin', 'technician'] },
         { name: 'Billing Plans', href: '/admin/billing-plans', icon: Package, roles: ['admin'] },
         { name: 'Settings', href: '/admin/settings', icon: Settings, roles: ['admin'] },
     ];

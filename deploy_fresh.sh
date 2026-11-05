@@ -52,7 +52,6 @@ ssh -t ${PI_USER}@${PI_HOST} "\
     docker volume create isp_static_volume >/dev/null && \
     docker volume create isp_media_volume >/dev/null && \
     docker volume create isp_whatsapp_session >/dev/null && \
-    docker volume create isp_genieacs_mongo_data >/dev/null && \
     if docker compose ps -q db 2>/dev/null | grep -q .; then \
         echo '💾 Backing up database before redeploy...' && \
         mkdir -p ~/isp_backups && \

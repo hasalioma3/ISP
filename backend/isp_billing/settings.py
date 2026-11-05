@@ -63,7 +63,6 @@ INSTALLED_APPS = [
     'apps.sitesettings',
     'apps.accounting',
     'apps.inventory',
-    'apps.tr069',
 ]
 
 if DEBUG:
@@ -275,16 +274,6 @@ WHATSAPP_SIDECAR_URL = config('WHATSAPP_SIDECAR_URL', default='http://whatsapp_s
 # that comes with QR-paired (unofficial) WhatsApp automation.
 WHATSAPP_BROADCAST_DELAY_SECONDS = config('WHATSAPP_BROADCAST_DELAY_SECONDS', default=4, cast=int)
 
-# TR-069 (GenieACS NBI) -- internal-only Docker service name, same
-# access-control-via-network-isolation pattern as WHATSAPP_SIDECAR_URL.
-ACS_NBI_URL = config('ACS_NBI_URL', default='http://genieacs_nbi:7557')
-# Public-facing ACS URL handed to CPE devices (via DHCP option 43 --
-# apps.network.services.network_automation.build_acs_option43_value -- and
-# manually during onboarding, see the CPE Onboarding Guide). Different from
-# ACS_NBI_URL above: that's Django's internal admin-API route to GenieACS,
-# this is what devices on the internet actually connect to.
-ACS_PUBLIC_URL = config('ACS_PUBLIC_URL', default='')
-
 # MikroTik Configuration
 MIKROTIK_HOST = config('MIKROTIK_HOST', default='192.168.88.1')
 MIKROTIK_USERNAME = config('MIKROTIK_USERNAME', default='admin')
@@ -389,6 +378,13 @@ LOGGING = {
         'mikrotik': {
             'handlers': ['console', 'file'],
             'level': 'DEBUG',
+        },
+        # SMS/WhatsApp/Telegram senders log here -- unconfigured, only
+        # WARNING+ leaked out via Python's last-resort stderr handler and
+        # nothing reached the log file.
+        'notifications': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
         },
     },
 }

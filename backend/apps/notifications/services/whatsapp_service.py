@@ -34,7 +34,13 @@ class WhatsAppService:
             response = requests.post(
                 f'{self.base_url}/send', json={'phone': to, 'message': message}, timeout=30
             )
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError:
+                # Sidecar mid-restart / proxy error page -- not JSON.
+                error = f'WhatsApp sidecar returned HTTP {response.status_code} (non-JSON)'
+                logger.error(f"WhatsApp send to {to} failed: {error}")
+                return {'success': False, 'error': error, 'data': None}
             if response.ok and data.get('success'):
                 return {'success': True, 'data': data}
             return {'success': False, 'error': data.get('error', 'WhatsApp send failed'), 'data': data}

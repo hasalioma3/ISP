@@ -43,7 +43,6 @@ export ISP_POSTGRES_VOLUME=isp_local_postgres_data
 export ISP_STATIC_VOLUME=isp_local_static_volume
 export ISP_MEDIA_VOLUME=isp_local_media_volume
 export ISP_WHATSAPP_VOLUME=isp_local_whatsapp_session
-export ISP_GENIEACS_VOLUME=isp_local_genieacs_mongo_data
 export ISP_SHARED_NETWORK=isp-local_shared_network
 
 COMPOSE=(docker compose --env-file "$ENV_FILE" --project-name isp-local -f docker-compose.yml)
@@ -52,7 +51,6 @@ docker volume create "$ISP_POSTGRES_VOLUME" >/dev/null
 docker volume create "$ISP_STATIC_VOLUME" >/dev/null
 docker volume create "$ISP_MEDIA_VOLUME" >/dev/null
 docker volume create "$ISP_WHATSAPP_VOLUME" >/dev/null
-docker volume create "$ISP_GENIEACS_VOLUME" >/dev/null
 
 printf 'Building and starting the isolated local web stack...\n'
 "${COMPOSE[@]}" up -d --build db redis backend frontend

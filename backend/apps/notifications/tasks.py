@@ -74,8 +74,10 @@ def send_payment_confirmation_sms(self, customer_id, event_type, amount, subscri
     # send_sms never raises -- a transient failure (network/timeout) shows
     # up as data=None, distinct from AT explicitly rejecting the recipient
     # (data present, just not a 'Success' status, which retrying won't fix).
-    # Only the former is worth retrying.
-    if not result['success'] and result.get('data') is None and self.request.retries < self.max_retries:
+    # Only the former is worth retrying -- not a config_error (missing
+    # credentials / bad number), which fails without ever reaching AT.
+    if (not result['success'] and result.get('data') is None and not result.get('config_error')
+            and self.request.retries < self.max_retries):
         self.retry(exc=Exception(result.get('error', 'SMS send failed')))
         return
 

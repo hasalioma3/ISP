@@ -4,10 +4,44 @@ Handles PPPoE and Hotspot user management via MikroTik API
 """
 
 import logging
+import re
 from routeros_api import RouterOsApiPool
 from django.conf import settings
 
 logger = logging.getLogger('mikrotik')
+
+DURATION_RE = re.compile(r'(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?')
+
+# A static customer's hotspot host entry only counts as online if it passed
+# traffic this recently (its idle-time); the entry itself lingers for the
+# host's whole idle-timeout after the device has gone.
+STATIC_ONLINE_IDLE_SECONDS = 60
+
+# RouterOS v7 ARP neighbour states that mean the address answered recently.
+# 'stale'/'failed'/'incomplete' don't, and 'permanent' (static entries)
+# says nothing either way.
+ARP_LIVE_STATUSES = {'reachable', 'delay', 'probe'}
+
+
+def parse_duration_seconds(value):
+    """Best-effort parse of RouterOS durations like '1w2d3h4m5s' (or '01:02:03')."""
+    if not value:
+        return 0
+    if ':' in value:
+        days, _, clock = value.rpartition('d')
+        try:
+            parts = [int(p) for p in clock.split(':')]
+            seconds = int(days) * 86400 if days else 0
+        except ValueError:
+            return 0
+        for p in parts:
+            seconds = seconds * 60 + p
+        return seconds
+    m = DURATION_RE.fullmatch(value)
+    if not m:
+        return 0
+    w, d, h, mi, s = (int(g) if g else 0 for g in m.groups())
+    return w * 604800 + d * 86400 + h * 3600 + mi * 60 + s
 
 # --- MONKEY PATCH FOR ROUTEROS v7 ---
 # Checks for !empty response and converts to !re to prevent library crash
@@ -514,38 +548,57 @@ class MikroTikService:
 
     def get_static_sessions(self, targets):
         """
-        Static IP customers have no login session, so treat one as online when
-        the router currently sees its address (hotspot host or ARP entry).
+        Static IP customers have no login session, so one is reported for
+        every target that has a simple queue or is visible on the router,
+        with 'online' set only on live evidence: traffic on its queue right
+        now, a hotspot host entry that's been active within
+        STATIC_ONLINE_IDLE_SECONDS, or (RouterOS v7) a reachable ARP entry.
+        Mere presence in either table isn't enough -- hotspot hosts linger
+        until their idle-timeout, and static/DHCP-added ARP entries never
+        expire at all, which is how long-gone devices stayed "online".
         targets: [{'username': ..., 'ip': ...}]. Byte counters come from the
-        customer's simple queue ('bytes' is upload/download for the target).
+        customer's simple queue ('bytes' is upload/download for the target)
+        and are cumulative over the queue's lifetime, not per session.
         """
         try:
             connection = self._get_connection()
             api = connection.get_api()
             seen = {}
             for host in api.get_resource('/ip/hotspot/host').get():
-                if host.get('address'):
-                    seen[host['address']] = {'mac': host.get('mac-address'), 'uptime': host.get('uptime')}
+                if not host.get('address'):
+                    continue
+                idle = host.get('idle-time')
+                active = idle is not None and parse_duration_seconds(idle) <= STATIC_ONLINE_IDLE_SECONDS
+                seen[host['address']] = {'mac': host.get('mac-address'), 'uptime': host.get('uptime'), 'active': active}
             for entry in api.get_resource('/ip/arp').get():
-                if entry.get('address') and entry.get('complete') != 'false' and entry.get('invalid') != 'true':
-                    seen.setdefault(entry['address'], {'mac': entry.get('mac-address'), 'uptime': None})
-            queue_bytes = {q.get('name'): q.get('bytes') for q in api.get_resource('/queue/simple').get()}
+                if not entry.get('address') or entry.get('complete') == 'false' or entry.get('invalid') == 'true':
+                    continue
+                # v7 exposes neighbour state; v6 doesn't, so there only a
+                # dynamic entry (which ages out on its own) counts as live.
+                status = entry.get('status')
+                active = status in ARP_LIVE_STATUSES if status else entry.get('dynamic') == 'true'
+                info = seen.setdefault(entry['address'], {'mac': entry.get('mac-address'), 'uptime': None, 'active': False})
+                info['active'] = info['active'] or active
+            queues = {q.get('name'): q for q in api.get_resource('/queue/simple').get()}
 
             sessions = []
             for target in targets:
                 info = seen.get(target['ip'])
-                if not info:
+                queue = queues.get(target['username'])
+                if not info and not queue:
                     continue
-                up, down = self._parse_rate_pair(queue_bytes.get(target['username'])) or (0, 0)
+                up, down = self._parse_rate_pair((queue or {}).get('bytes')) or (0, 0)
+                rate = self._parse_rate_pair((queue or {}).get('rate')) or (0, 0)
                 sessions.append({
                     'service_type': 'static',
                     'session_id': f"static-{target['username']}",
                     'username': target['username'],
                     'address': target['ip'],
-                    'mac_address': info['mac'],
-                    'uptime': info['uptime'],
+                    'mac_address': (info or {}).get('mac'),
+                    'uptime': (info or {}).get('uptime'),
                     'upload_bytes': up,
                     'download_bytes': down,
+                    'online': bool(any(rate) or (info and info['active'])),
                 })
             connection.disconnect()
             return {'success': True, 'sessions': sessions}
@@ -716,11 +769,8 @@ class MikroTikService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def add_dhcp_network(self, subnet, gateway, dns_servers='', dhcp_option_name=None):
-        """subnet is CIDR form e.g. '10.5.50.0/24'. dhcp_option_name, if
-        given, must already exist (see add_dhcp_option) -- attaches it to
-        this network's `dhcp-option` property so it's sent with every
-        lease on this subnet."""
+    def add_dhcp_network(self, subnet, gateway, dns_servers=''):
+        """subnet is CIDR form e.g. '10.5.50.0/24'."""
         try:
             connection = self._get_connection()
             api = connection.get_api()
@@ -730,34 +780,10 @@ class MikroTikService:
             params = {'gateway': gateway}
             if dns_servers:
                 params['dns-server'] = dns_servers
-            if dhcp_option_name:
-                params['dhcp-option'] = dhcp_option_name
             if existing:
                 dhcp_network.set(id=existing[0]['id'], **params)
             else:
                 dhcp_network.add(address=subnet, **params)
-            connection.disconnect()
-            return {'success': True}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
-
-    def add_dhcp_option(self, name, code, value):
-        """
-        value is a RouterOS-format option value -- a '0x...'-prefixed hex
-        string for a binary payload (e.g. an RFC 2132 encapsulated
-        vendor-specific option), or a plain string for a text option.
-        """
-        try:
-            connection = self._get_connection()
-            api = connection.get_api()
-            option = api.get_resource('/ip/dhcp-server/option')
-            existing = option.get(name=name)
-            existing = [o for o in existing if o.get('id')]
-            params = {'code': str(code), 'value': value}
-            if existing:
-                option.set(id=existing[0]['id'], **params)
-            else:
-                option.add(name=name, **params)
             connection.disconnect()
             return {'success': True}
         except Exception as e:

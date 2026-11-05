@@ -235,3 +235,25 @@ class ActiveSession(models.Model):
     @property
     def total_gb(self):
         return round(self.total_bytes / (1024 ** 3), 2)
+
+
+class StaticQueueCounter(models.Model):
+    """
+    Last-seen byte counters of a static customer's simple queue. Unlike a
+    PPPoE/Hotspot session, a simple queue's counters survive the device
+    going offline, so the baseline can't live on ActiveSession (deleted
+    whenever the IP drops off the online list) -- otherwise every
+    reappearance re-counted the queue's whole lifetime total as new usage.
+    """
+    router = models.ForeignKey(Router, on_delete=models.CASCADE, related_name='static_queue_counters')
+    username = models.CharField(max_length=100)
+    upload_bytes = models.BigIntegerField(default=0)
+    download_bytes = models.BigIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'static_queue_counters'
+        unique_together = ['router', 'username']
+
+    def __str__(self):
+        return f"{self.username} @ {self.router_id}"

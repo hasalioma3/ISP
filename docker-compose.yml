@@ -107,73 +107,6 @@ services:
     # http://whatsapp_service:3000. Never publish this; Django proxies
     # status/QR to the browser through an authenticated endpoint.
 
-  # --- TR-069 (GenieACS) -- remote management of customer CPE routers ---
-  # One image (genieacs-service/Dockerfile, installs the official `genieacs`
-  # npm package), run as three independent services via different
-  # `command:` overrides -- same "build once, run with different commands"
-  # pattern already used above for backend/celery_worker/celery_beat.
-  genieacs_mongo:
-    image: mongo:6
-    volumes:
-      - genieacs_mongo_data:/data/db
-    restart: always
-    networks:
-      - isp_network
-    # No `ports:` -- internal only, reached by the three genieacs_* services
-    # as mongodb://genieacs_mongo/genieacs.
-
-  genieacs_cwmp:
-    build: ./genieacs-service
-    command: genieacs-cwmp
-    environment:
-      GENIEACS_MONGODB_CONNECTION_URL: mongodb://genieacs_mongo/genieacs
-    depends_on:
-      - genieacs_mongo
-    restart: always
-    ports:
-      # MUST be reachable from the public internet -- this is the endpoint
-      # customer CPE devices phone home to. Forward 7547 on the same public
-      # domain/port-forward already used for the M-Pesa callback.
-      - "7547:7547"
-    networks:
-      - isp_network
-
-  genieacs_nbi:
-    build: ./genieacs-service
-    command: genieacs-nbi
-    environment:
-      GENIEACS_MONGODB_CONNECTION_URL: mongodb://genieacs_mongo/genieacs
-    depends_on:
-      - genieacs_mongo
-    restart: always
-    networks:
-      - isp_network
-    # No `ports:` -- internal only (unauthenticated admin API), reached by
-    # backend/celery as http://genieacs_nbi:7557. Never publish this --
-    # same network-isolation-as-access-control pattern as whatsapp_service.
-
-  genieacs_fs:
-    build: ./genieacs-service
-    command: genieacs-fs
-    environment:
-      GENIEACS_MONGODB_CONNECTION_URL: mongodb://genieacs_mongo/genieacs
-    # GENIEACS_FS_URL_PREFIX (the public URL CPE devices use to fetch
-    # pushed firmware/config files -- must match wherever port 7567 is
-    # actually forwarded to) comes from .env.prod, same as every other
-    # environment-specific value in this stack -- set it there rather than
-    # hardcoding a domain here.
-    env_file:
-      - ${ISP_ENV_FILE:-.env.prod}
-    depends_on:
-      - genieacs_mongo
-    restart: always
-    ports:
-      # MUST be reachable from the public internet -- CPE devices fetch
-      # firmware/config downloads from here. Forward 7567 alongside 7547.
-      - "7567:7567"
-    networks:
-      - isp_network
-
 networks:
   isp_network:
     driver: bridge
@@ -193,6 +126,3 @@ volumes:
   whatsapp_session:
     external: true
     name: ${ISP_WHATSAPP_VOLUME:-isp_whatsapp_session}
-  genieacs_mongo_data:
-    external: true
-    name: ${ISP_GENIEACS_VOLUME:-isp_genieacs_mongo_data}

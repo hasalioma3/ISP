@@ -180,7 +180,6 @@ export const adminAPI = {
     backupRouter: (id: number) => api.post(`/network/routers/${id}/backup/`),
     syncRouterProfiles: (id: number) => api.post(`/network/routers/${id}/sync_profiles/`),
     syncRouterUsers: (id: number) => api.post(`/network/routers/${id}/sync_users/`),
-    enableAcsProvisioning: (id: number) => api.post(`/network/routers/${id}/enable_acs_provisioning/`),
     enableWanAccess: (id: number) => api.post(`/network/routers/${id}/enable_wan_access/`),
     disableWanAccess: (id: number) => api.post(`/network/routers/${id}/disable_wan_access/`),
     restartRouter: (id: number) => api.post(`/network/routers/${id}/restart/`),
@@ -265,24 +264,6 @@ export const inventoryAPI = {
     deleteUsage: (id: number) => api.delete(`/inventory/usages/${id}/`),
 
     getDashboard: () => api.get('/inventory/dashboard/'),
-};
-
-// TR-069 CPE devices (Huawei/Tenda/TP-Link customer-premises routers)
-export const cpeDeviceAPI = {
-    getDevices: (params?: { brand?: string; is_online?: boolean; unlinked?: boolean; search?: string; page?: number; page_size?: number }) =>
-        api.get('/tr069/devices/', { params }),
-    getDevice: (id: number) => api.get(`/tr069/devices/${id}/`),
-    createDevice: (data: { genieacs_device_id: string; serial_number: string; brand: string; customer?: number | null }) =>
-        api.post('/tr069/devices/', data),
-    updateDevice: (id: number, data: any) => api.patch(`/tr069/devices/${id}/`, data),
-    deleteDevice: (id: number) => api.delete(`/tr069/devices/${id}/`),
-    linkCustomer: (id: number, customerId: number) => api.post(`/tr069/devices/${id}/link_customer/`, { customer_id: customerId }),
-    unlinkCustomer: (id: number) => api.post(`/tr069/devices/${id}/unlink_customer/`),
-    reboot: (id: number) => api.post(`/tr069/devices/${id}/reboot/`),
-    factoryReset: (id: number) => api.post(`/tr069/devices/${id}/factory_reset/`),
-    setWifi: (id: number, data: { ssid: string; password: string }) => api.post(`/tr069/devices/${id}/set_wifi/`, data),
-    getDiagnostics: (id: number) => api.get(`/tr069/devices/${id}/diagnostics/`),
-    pushFirmware: (id: number, fileName: string) => api.post(`/tr069/devices/${id}/push_firmware/`, { file_name: fileName }),
 };
 
 export default api;

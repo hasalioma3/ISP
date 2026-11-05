@@ -1,29 +1,15 @@
 
-import re
 import ipaddress
 from celery import shared_task
 from django.conf import settings
 from django.db.models import F, Sum
 from django.utils import timezone
 from apps.network.services.network_automation import network_automation
-from apps.network.services.mikrotik_service import MikroTikService
+from apps.network.services.mikrotik_service import MikroTikService, parse_duration_seconds as parse_uptime_seconds
 from apps.billing.models import UsageRecord, Subscription
 import logging
 
 logger = logging.getLogger('apps.network')
-
-UPTIME_RE = re.compile(r'(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?')
-
-
-def parse_uptime_seconds(uptime):
-    """Best-effort parse of RouterOS uptime strings like '1w2d3h4m5s'."""
-    if not uptime:
-        return 0
-    m = UPTIME_RE.fullmatch(uptime)
-    if not m:
-        return 0
-    w, d, h, mi, s = (int(g) if g else 0 for g in m.groups())
-    return w * 604800 + d * 86400 + h * 3600 + mi * 60 + s
 
 
 @shared_task
@@ -77,30 +63,34 @@ def _collect_usage_once():
             logger.error(f"Usage collection failed for router {router.name}: {res.get('error')}")
             continue
 
+        sessions = res['sessions']
         static_targets = _static_targets_for_router(router)
         if static_targets:
             static_res = mikrotik.get_static_sessions(static_targets)
             if static_res.get('success'):
-                res['sessions'] = res['sessions'] + static_res['sessions']
+                sessions = sessions + static_res['sessions']
             else:
                 logger.error(f"Static session read failed for router {router.name}: {static_res.get('error')}")
 
         seen_session_ids = []
-        for session in res['sessions']:
+        for session in sessions:
             session_id = session.get('session_id')
             upload_raw = session['upload_bytes']
             download_raw = session['download_bytes']
 
-            # Delta since the last poll of *this* session_id. RouterOS
-            # resets byte counters to 0 on reconnect, which mints a new
-            # session_id -- so a missing/reset previous row means the raw
-            # counter itself is all-new usage, not that nothing happened.
-            delta_up, delta_down = upload_raw, download_raw
-            if session_id:
-                prev = ActiveSession.objects.filter(router=router, session_id=session_id).first()
-                if prev:
-                    delta_up = upload_raw - prev.upload_bytes if upload_raw >= prev.upload_bytes else upload_raw
-                    delta_down = download_raw - prev.download_bytes if download_raw >= prev.download_bytes else download_raw
+            if session['service_type'] == 'static':
+                delta_up, delta_down = _static_queue_delta(router, session['username'], upload_raw, download_raw)
+            else:
+                # Delta since the last poll of *this* session_id. RouterOS
+                # resets byte counters to 0 on reconnect, which mints a new
+                # session_id -- so a missing/reset previous row means the raw
+                # counter itself is all-new usage, not that nothing happened.
+                delta_up, delta_down = upload_raw, download_raw
+                if session_id:
+                    prev = ActiveSession.objects.filter(router=router, session_id=session_id).first()
+                    if prev:
+                        delta_up = upload_raw - prev.upload_bytes if upload_raw >= prev.upload_bytes else upload_raw
+                        delta_down = download_raw - prev.download_bytes if download_raw >= prev.download_bytes else download_raw
 
             if update_usage_record(
                 session['username'], delta_up, delta_down,
@@ -109,6 +99,13 @@ def _collect_usage_once():
                 total_updated += 1
 
             if not session_id:
+                continue
+            # Static usage is recorded above regardless, but the customer is
+            # only listed online on live evidence (see get_static_sessions)
+            # or traffic since the last poll.
+            if session['service_type'] == 'static' and not (
+                session.get('online') or delta_up > 0 or delta_down > 0
+            ):
                 continue
             seen_session_ids.append(session_id)
             customer = _find_customer(session['username'], session['mac_address'])
@@ -252,6 +249,36 @@ def _static_targets_for_router(router):
     return targets
 
 
+def _static_queue_delta(router, username, upload_raw, download_raw):
+    """
+    Bytes a static customer's simple queue moved since the last poll. Queue
+    counters are cumulative and survive the device going offline, so the
+    baseline is kept in StaticQueueCounter rather than ActiveSession. A
+    counter that went backwards (router reboot, queue re-created) restarted
+    from 0, so its raw value is all new. With no baseline yet, the current
+    value becomes one -- falling back to the ActiveSession left from before
+    StaticQueueCounter existed, so the upgrade doesn't re-count lifetime
+    totals already recorded.
+    """
+    from apps.network.models import ActiveSession, StaticQueueCounter
+
+    counter = StaticQueueCounter.objects.filter(router=router, username=username).first()
+    if counter is None:
+        legacy = ActiveSession.objects.filter(router=router, session_id=f"static-{username}").first()
+        prev_up = legacy.upload_bytes if legacy else upload_raw
+        prev_down = legacy.download_bytes if legacy else download_raw
+    else:
+        prev_up, prev_down = counter.upload_bytes, counter.download_bytes
+
+    delta_up = upload_raw - prev_up if upload_raw >= prev_up else upload_raw
+    delta_down = download_raw - prev_down if download_raw >= prev_down else download_raw
+    StaticQueueCounter.objects.update_or_create(
+        router=router, username=username,
+        defaults={'upload_bytes': upload_raw, 'download_bytes': download_raw},
+    )
+    return delta_up, delta_down
+
+
 def _find_customer(username, mac=None):
     """Roaming MAC-login sessions use the MAC as username, so fall back to it."""
     from apps.customers.models import Customer
@@ -290,10 +317,12 @@ def update_usage_record(username, delta_upload, delta_download, mac, ip, router_
             logger.warning(f"Usage collection: Customer not found for {username}")
             return False
 
+        # Newest first (Meta ordering is -created_at), so a just-lapsed row
+        # still awaiting check_expired_subscriptions can't steal the usage.
         subscription = Subscription.objects.filter(
             customer=customer,
             status='active'
-        ).last()
+        ).first()
 
         if not subscription:
             return False

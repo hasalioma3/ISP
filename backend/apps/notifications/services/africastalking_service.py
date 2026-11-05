@@ -49,6 +49,23 @@ class AfricasTalkingService:
         their own try/except.
         """
         to = normalize_phone(phone_number)
+        # Fail before calling AT: a blank key (never saved, or saved under a
+        # different NOTIFICATIONS_ENCRYPTION_KEY so it no longer decrypts --
+        # EncryptedCharField reads that back as '') only ever earns a 401
+        # that looks like a wrong key. config_error tells callers retrying
+        # is pointless.
+        if not self.username or not self.api_key:
+            error = (
+                "Africa's Talking username/API key not set (or the stored key can't be "
+                "decrypted with this server's NOTIFICATIONS_ENCRYPTION_KEY) -- re-enter "
+                "them under Settings -> Notifications."
+            )
+            logger.error(f"SMS to {to} not sent: {error}")
+            return {'success': False, 'error': error, 'data': None, 'config_error': True}
+        if not to.isdigit() or len(to) != 12:
+            error = f'invalid phone number {phone_number!r} (expected 07XXXXXXXX / 2547XXXXXXXX)'
+            logger.warning(f"SMS not sent: {error}")
+            return {'success': False, 'error': error, 'data': None, 'config_error': True}
         payload = {
             'username': self.username,
             'to': f'+{to}',
@@ -89,6 +106,12 @@ class AfricasTalkingService:
                 error = f'Africa\'s Talking returned HTTP {response.status_code}: {detail}'
             else:
                 error = str(e)
+            if response is not None and response.status_code == 401:
+                error += (
+                    f" -- check the username ({self.username!r}) and API key belong to the same "
+                    f"AT app, and that the environment ({'production' if 'sandbox' not in self.base_url else 'sandbox'}) "
+                    "matches it: sandbox keys only work with username 'sandbox'."
+                )
             logger.error(f"SMS request to {to} failed: {error}")
             return {'success': False, 'error': error, 'data': None}
 

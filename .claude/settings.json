@@ -30,7 +30,13 @@
       "Bash(curl -sk -o /dev/null -w \"Status: %{http_code}\\\\n\" \"https://192.168.88.254/api/network/hotspot/status/?mac=AA:BB:CC:DD:EE:FF\")",
       "Bash(curl -sk -o /dev/null -w \"Pi Frontend HTTP: %{http_code}\\\\n\" https://192.168.88.252/)",
       "WebFetch(domain:help.uisp.com)",
-      "Bash(venv/bin/python3 manage.py makemigrations billing)"
+      "Bash(venv/bin/python3 manage.py makemigrations billing)",
+      "Bash(venv/bin/python manage.py makemigrations network -n static_queue_counter)",
+      "Bash(venv/bin/python manage.py test apps.network apps.billing apps.customers)",
+      "Bash(docker build *)",
+      "Bash(echo \"build exit $?\")",
+      "Bash(docker run *)",
+      "Bash(docker image *)"
     ]
   }
 }

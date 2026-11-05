@@ -102,24 +102,6 @@ class RouterViewSet(viewsets.ModelViewSet):
         return Response({'snapshot': result['snapshot'], 'snapshot_at': router.pre_provision_snapshot_at})
 
     @action(detail=True, methods=['post'])
-    def enable_acs_provisioning(self, request, pk=None):
-        """
-        Broadcasts the TR-069 ACS URL via DHCP option 43 on this router's
-        Hotspot network, so CPE devices that support zero-touch
-        provisioning configure themselves automatically -- see
-        NetworkAutomation.enable_acs_auto_provisioning for the scope/
-        caveats (Hotspot network only, not every CPE device supports this).
-        Explicit opt-in action, admin-only like provision/backup.
-        """
-        router = self.get_object()
-        username = request.data.get('username')
-        password = request.data.get('password')
-        result = network_automation.enable_acs_auto_provisioning(router, username=username, password=password)
-        if result.get('error'):
-            return Response({'error': result['error']}, status=400)
-        return Response({'success': [f"CPE auto-provisioning enabled (ACS URL: {result['acs_url']})"], 'failed': []})
-
-    @action(detail=True, methods=['post'])
     def restart(self, request, pk=None):
         """Reboots the router. Admin-only; clients on it lose connectivity briefly."""
         router = self.get_object()

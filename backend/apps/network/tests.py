@@ -40,11 +40,24 @@ class StaticPlanSyncTests(TestCase):
 
 
 class StaticOnlineDetectionTests(TestCase):
-	def test_only_addresses_seen_by_the_router_are_online(self):
+	def test_only_live_addresses_are_online(self):
 		resources = {
-			'/ip/hotspot/host': MagicMock(**{'get.return_value': [{'address': '10.9.0.5', 'mac-address': 'AA:BB:CC:00:00:05', 'uptime': '1h'}]}),
-			'/ip/arp': MagicMock(**{'get.return_value': [{'address': '10.9.0.9', 'mac-address': 'AA:BB:CC:00:00:09', 'complete': 'true'}]}),
-			'/queue/simple': MagicMock(**{'get.return_value': [{'name': 'online-by-host', 'bytes': '1000/2000'}]}),
+			'/ip/hotspot/host': MagicMock(**{'get.return_value': [
+				{'address': '10.9.0.5', 'mac-address': 'AA:BB:CC:00:00:05', 'uptime': '1h', 'idle-time': '3s'},
+				{'address': '10.9.0.6', 'mac-address': 'AA:BB:CC:00:00:06', 'uptime': '2h', 'idle-time': '4m10s'},
+			]}),
+			'/ip/arp': MagicMock(**{'get.return_value': [
+				{'address': '10.9.0.9', 'mac-address': 'AA:BB:CC:00:00:09', 'complete': 'true', 'status': 'reachable'},
+				{'address': '10.9.0.10', 'mac-address': 'AA:BB:CC:00:00:10', 'complete': 'true', 'status': 'stale'},
+				{'address': '10.9.0.11', 'mac-address': 'AA:BB:CC:00:00:11', 'complete': 'true', 'dynamic': 'false'},
+			]}),
+			'/queue/simple': MagicMock(**{'get.return_value': [
+				{'name': 'online-by-host', 'bytes': '1000/2000', 'rate': '0/0'},
+				{'name': 'idle-host', 'bytes': '50/60', 'rate': '0/0'},
+				{'name': 'stale-arp', 'bytes': '5/5', 'rate': '0/0'},
+				{'name': 'static-arp-busy', 'bytes': '7/8', 'rate': '1200/56000'},
+				{'name': 'unseen', 'bytes': '300/400', 'rate': '0/0'},
+			]}),
 		}
 		api = MagicMock()
 		api.get_resource.side_effect = lambda path: resources[path]
@@ -53,8 +66,12 @@ class StaticOnlineDetectionTests(TestCase):
 		service = MikroTikService(host='127.0.0.1', username='u', password='p')
 		targets = [
 			{'username': 'online-by-host', 'ip': '10.9.0.5'},
+			{'username': 'idle-host', 'ip': '10.9.0.6'},
 			{'username': 'online-by-arp', 'ip': '10.9.0.9'},
-			{'username': 'offline', 'ip': '10.9.0.7'},
+			{'username': 'stale-arp', 'ip': '10.9.0.10'},
+			{'username': 'static-arp-busy', 'ip': '10.9.0.11'},
+			{'username': 'unseen', 'ip': '10.9.0.12'},
+			{'username': 'no-queue-offline', 'ip': '10.9.0.7'},
 		]
 
 		with patch.object(service, '_get_connection', return_value=connection):
@@ -62,10 +79,59 @@ class StaticOnlineDetectionTests(TestCase):
 
 		self.assertTrue(result['success'])
 		by_user = {s['username']: s for s in result['sessions']}
-		self.assertEqual(set(by_user), {'online-by-host', 'online-by-arp'})
+		# Every queue is reported so its counters keep being tracked offline.
+		self.assertNotIn('no-queue-offline', by_user)
+		online = {u for u, s in by_user.items() if s['online']}
+		self.assertEqual(online, {'online-by-host', 'online-by-arp', 'static-arp-busy'})
 		self.assertEqual(by_user['online-by-host']['service_type'], 'static')
 		self.assertEqual((by_user['online-by-host']['upload_bytes'], by_user['online-by-host']['download_bytes']), (1000, 2000))
+		self.assertEqual((by_user['unseen']['upload_bytes'], by_user['unseen']['download_bytes']), (300, 400))
 		self.assertEqual(by_user['online-by-arp']['mac_address'], 'AA:BB:CC:00:00:09')
+
+
+class StaticUsageAccountingTests(TestCase):
+	def _poll(self, sessions):
+		from apps.network.models import Router
+		router = Router.objects.first()
+		mikrotik = MagicMock()
+		mikrotik.get_active_sessions.return_value = {'success': True, 'sessions': []}
+		mikrotik.get_static_sessions.return_value = {'success': True, 'sessions': sessions}
+		with patch('apps.network.tasks.MikroTikService', return_value=mikrotik), \
+			 patch('apps.network.tasks._static_targets_for_router', return_value=[{'username': 'static-u', 'ip': '10.9.0.5'}]):
+			from apps.network.tasks import _collect_usage_once
+			_collect_usage_once()
+		return router
+
+	def _session(self, up, down, online):
+		return {
+			'service_type': 'static', 'session_id': 'static-static-u', 'username': 'static-u',
+			'address': '10.9.0.5', 'mac_address': None, 'uptime': None,
+			'upload_bytes': up, 'download_bytes': down, 'online': online,
+		}
+
+	def test_going_offline_does_not_recount_lifetime_queue_bytes(self):
+		from apps.network.models import ActiveSession, Router
+		Router.objects.create(name='r1', ip_address='10.0.0.1', username='u', password='p')
+		with patch('apps.billing.signals.sync_plan_to_routers.delay'), \
+			 patch('apps.billing.signals.network_automation.activate_customer'):
+			plan = BillingPlan.objects.create(
+				name='Static 10', service_type='static', download_speed=10,
+				upload_speed=5, price='50.00', mikrotik_profile='static-10',
+			)
+			customer = Customer.objects.create(username='static-u', service_type='static', static_ip_address='10.9.0.5')
+			subscription = Subscription.objects.create(customer=customer, plan=plan, expiry_date=timezone.now() + timedelta(days=5))
+
+		self._poll([self._session(1_000_000, 9_000_000, True)])   # first sight: baseline only
+		self._poll([self._session(1_000_100, 9_000_200, True)])   # +100/+200
+		self.assertTrue(ActiveSession.objects.filter(username='static-u').exists())
+		self._poll([self._session(1_000_100, 9_000_200, False)])  # idle, not live
+		self.assertFalse(ActiveSession.objects.filter(username='static-u').exists())
+		self._poll([self._session(1_000_150, 9_000_250, True)])   # back: +50/+50 only
+
+		usage = UsageRecord.objects.filter(subscription=subscription)
+		self.assertEqual(sum(r.upload_bytes for r in usage), 150)
+		self.assertEqual(sum(r.download_bytes for r in usage), 250)
+		self.assertTrue(ActiveSession.objects.filter(username='static-u').exists())
 
 
 class HotspotSessionRefreshTests(TestCase):

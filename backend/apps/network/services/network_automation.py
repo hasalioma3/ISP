@@ -32,27 +32,6 @@ def validate_portal_url(url):
     return None
 
 
-def build_acs_option43_value(acs_url):
-    """
-    Encodes a TR-069 ACS URL as a RouterOS raw-hex DHCP option 43 value
-    (RFC 2132 encapsulated vendor-specific sub-options: [sub-opt code 1
-    byte][length 1 byte][value]). Sub-option 1 = ACS URL -- this is the
-    CWMP convention multiple independent TR-069 implementations agree on
-    (Grandstream's auto-provisioning guide and the iopsys OpenWrt CWMP
-    client both treat sub-option 1 this way), but it's not universal: some
-    CPE firmware ignores option 43 for CWMP entirely, or expects a
-    different sub-option layout. Treat a device not picking this up the
-    same way as a WiFi-parameter-path mismatch -- expected per-vendor
-    variance to calibrate against real hardware, not a bug in this
-    encoding.
-    """
-    url_bytes = acs_url.encode('ascii')
-    if len(url_bytes) > 255:
-        raise ValueError('ACS URL is too long to fit a single DHCP option 43 sub-option (max 255 bytes)')
-    payload = bytes([1, len(url_bytes)]) + url_bytes
-    return '0x' + payload.hex()
-
-
 def build_hotspot_login_html(portal_url):
     """
     RouterOS hotspot login.html: the $(...) tokens are literal text in the
@@ -817,57 +796,6 @@ class NetworkAutomation:
         if not result.get('success'):
             return {'error': result.get('error')}
         return result
-
-    def enable_acs_auto_provisioning(self, router, username=None, password=None):
-        """
-        Broadcasts the TR-069 ACS URL via DHCP option 43 on this router's
-        Hotspot network, so CPE devices that support zero-touch
-        provisioning pick up the ACS URL automatically on the same network
-        segment -- no manual per-device configuration needed (see the CPE
-        Onboarding Guide for the manual fallback, still required for
-        devices that don't support this).
-
-        Applied to the Hotspot network specifically because that's the
-        only DHCP network this system provisions today -- PPPoE customers
-        get their IP via PPP, not DHCP, so option 43 never reaches them.
-        If CPE devices are staged on a different network segment in
-        practice, this won't reach them; it's scoped to Hotspot rather
-        than assumed to cover every case.
-
-        Explicit opt-in, not part of provision_router -- so routers
-        already provisioned aren't silently changed by this being added.
-        """
-        if not settings.ACS_PUBLIC_URL:
-            return {'error': 'ACS_PUBLIC_URL is not configured -- set it in .env.prod before enabling auto-provisioning.'}
-
-        try:
-            hotspot_net = ipaddress.ip_network(router.hotspot_subnet, strict=False)
-        except ValueError as e:
-            return {'error': f'Invalid subnet configured on router: {e}'}
-        hotspot_gateway = str(hotspot_net[1])
-
-        snapshot_res = self.snapshot_router(router, username=username, password=password)
-        if not snapshot_res.get('success'):
-            return {'error': f"Could not connect to router: {snapshot_res.get('error')}"}
-
-        mikrotik = MikroTikService(
-            host=router.ip_address, username=username or router.username,
-            password=password or router.password, port=router.port, use_ssl=router.use_ssl
-        )
-
-        option_value = build_acs_option43_value(settings.ACS_PUBLIC_URL)
-        option_res = mikrotik.add_dhcp_option('tr069-acs-url', 43, option_value)
-        if not option_res.get('success'):
-            return {'error': f"Could not create DHCP option: {option_res.get('error')}"}
-
-        network_res = mikrotik.add_dhcp_network(
-            str(hotspot_net), hotspot_gateway, dns_servers=router.dns_servers,
-            dhcp_option_name='tr069-acs-url',
-        )
-        if not network_res.get('success'):
-            return {'error': f"Could not attach option to network: {network_res.get('error')}"}
-
-        return {'success': True, 'acs_url': settings.ACS_PUBLIC_URL}
 
     # Shared comment prefix so enable/disable find and remove exactly the
     # rules this feature added, never anything an admin configured by hand.
