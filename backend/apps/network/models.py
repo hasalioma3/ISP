@@ -186,6 +186,7 @@ class ActiveSession(models.Model):
     SESSION_TYPE_CHOICES = [
         ('pppoe', 'PPPoE'),
         ('hotspot', 'Hotspot'),
+        ('static', 'Static IP'),
     ]
     
     customer = models.ForeignKey(

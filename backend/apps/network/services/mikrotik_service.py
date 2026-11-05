@@ -479,6 +479,80 @@ class MikroTikService:
             logger.error(f"Failed to remove simple queue {name}: {str(e)}")
             return {'success': False, 'error': str(e)}
 
+    # Hotspot IP bindings: a static customer isn't authenticated, so without a
+    # bypassed binding the hotspot on the same bridge blocks their traffic.
+
+    def add_ip_binding_bypass(self, address, comment):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            bindings = api.get_resource('/ip/hotspot/ip-binding')
+            existing = [b for b in bindings.get() if b.get('id') and b.get('comment') == comment]
+            params = {'address': address, 'type': 'bypassed', 'disabled': 'no', 'comment': comment}
+            if existing:
+                bindings.set(id=existing[0]['id'], **params)
+            else:
+                bindings.add(**params)
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to add IP binding {comment}: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def remove_ip_binding(self, comment):
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            bindings = api.get_resource('/ip/hotspot/ip-binding')
+            for b in [b for b in bindings.get() if b.get('id') and b.get('comment') == comment]:
+                bindings.remove(id=b['id'])
+            connection.disconnect()
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to remove IP binding {comment}: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def get_static_sessions(self, targets):
+        """
+        Static IP customers have no login session, so treat one as online when
+        the router currently sees its address (hotspot host or ARP entry).
+        targets: [{'username': ..., 'ip': ...}]. Byte counters come from the
+        customer's simple queue ('bytes' is upload/download for the target).
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            seen = {}
+            for host in api.get_resource('/ip/hotspot/host').get():
+                if host.get('address'):
+                    seen[host['address']] = {'mac': host.get('mac-address'), 'uptime': host.get('uptime')}
+            for entry in api.get_resource('/ip/arp').get():
+                if entry.get('address') and entry.get('complete') != 'false' and entry.get('invalid') != 'true':
+                    seen.setdefault(entry['address'], {'mac': entry.get('mac-address'), 'uptime': None})
+            queue_bytes = {q.get('name'): q.get('bytes') for q in api.get_resource('/queue/simple').get()}
+
+            sessions = []
+            for target in targets:
+                info = seen.get(target['ip'])
+                if not info:
+                    continue
+                up, down = self._parse_rate_pair(queue_bytes.get(target['username'])) or (0, 0)
+                sessions.append({
+                    'service_type': 'static',
+                    'session_id': f"static-{target['username']}",
+                    'username': target['username'],
+                    'address': target['ip'],
+                    'mac_address': info['mac'],
+                    'uptime': info['uptime'],
+                    'upload_bytes': up,
+                    'download_bytes': down,
+                })
+            connection.disconnect()
+            return {'success': True, 'sessions': sessions}
+        except Exception as e:
+            logger.error(f"Failed to read static sessions: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
     # Address List Management
 
     def add_to_address_list(self, list_name, address, comment=''):

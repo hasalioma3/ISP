@@ -254,7 +254,7 @@ class OnlineUsersView(APIView):
 
         service_type = request.query_params.get('type')
         sessions = ActiveSession.objects.select_related('customer', 'router').order_by('-start_time')
-        if service_type in ('hotspot', 'pppoe'):
+        if service_type in ('hotspot', 'pppoe', 'static'):
             sessions = sessions.filter(session_type=service_type)
 
         data = []
@@ -318,6 +318,11 @@ class DisconnectSessionView(APIView):
             host=router.ip_address, username=router.username,
             password=router.password, port=router.port, use_ssl=router.use_ssl
         )
+        if session.session_type == 'static':
+            return Response(
+                {'error': 'Static IP customers have no login session to disconnect; suspend the customer instead.'},
+                status=400,
+            )
         if session.session_type == 'hotspot':
             result = mikrotik.disconnect_hotspot_session(session.username)
         else:

@@ -77,6 +77,14 @@ def _collect_usage_once():
             logger.error(f"Usage collection failed for router {router.name}: {res.get('error')}")
             continue
 
+        static_targets = _static_targets_for_router(router)
+        if static_targets:
+            static_res = mikrotik.get_static_sessions(static_targets)
+            if static_res.get('success'):
+                res['sessions'] = res['sessions'] + static_res['sessions']
+            else:
+                logger.error(f"Static session read failed for router {router.name}: {static_res.get('error')}")
+
         seen_session_ids = []
         for session in res['sessions']:
             session_id = session.get('session_id')
@@ -224,6 +232,25 @@ def enforce_subscription_fup():
             )
 
     return applied_count
+
+def _static_targets_for_router(router):
+    """Active static customers whose plan is served by this router."""
+    targets = []
+    subscriptions = Subscription.objects.filter(
+        status='active', expiry_date__gt=timezone.now(),
+        plan__service_type='static', customer__service_type='static',
+        customer__static_ip_address__isnull=False,
+    ).select_related('customer', 'plan')
+    for subscription in subscriptions:
+        plan_routers = subscription.plan.routers.filter(is_active=True)
+        if plan_routers.exists() and not plan_routers.filter(pk=router.pk).exists():
+            continue
+        targets.append({
+            'username': subscription.customer.username,
+            'ip': str(subscription.customer.static_ip_address),
+        })
+    return targets
+
 
 def _find_customer(username, mac=None):
     """Roaming MAC-login sessions use the MAC as username, so fall back to it."""
@@ -438,6 +465,13 @@ def sync_plan_to_routers(plan_id):
                             logger.error(f"{router.name}: PPPoE FUP profile sync failed: {fup_pppoe.get('error')}")
                 else:
                     res_pppoe = {'success': True}  # Skip if not a PPPoE plan
+
+                # Static plans have no router profile; each customer has their own queue.
+                if plan.service_type == 'static':
+                    static = network_automation.sync_static_plan(plan, router, mikrotik)
+                    for err in static['failed']:
+                        logger.error(f"{router.name}: Static sync failed: {err}")
+                    logger.info(f"{router.name}: Static plan {plan.name} queues synced: {static['success']}")
 
                 if res_hotspot['success']:
                      logger.info(f"{router.name}: Hotspot Profile {plan.mikrotik_profile} synced.")

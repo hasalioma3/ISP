@@ -11,7 +11,7 @@
 # new/from-scratch system, or if the Pi's Docker state needs a hard reset.
 set -e
 
-PI_HOST="192.168.88.251"
+PI_HOST="192.168.58.252"
 # PI_HOST="192.168.56.117"
 PI_USER="pi"
 REMOTE_DIR="~/ISP"

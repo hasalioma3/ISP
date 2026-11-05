@@ -191,7 +191,7 @@ export const adminAPI = {
         api.post('/network/routers/test_connection/', data),
 
     // Online Users
-    getOnlineUsers: (type?: 'hotspot' | 'pppoe') => api.get('/network/online-users/', { params: { type } }),
+    getOnlineUsers: (type?: 'hotspot' | 'pppoe' | 'static') => api.get('/network/online-users/', { params: { type } }),
     syncOnlineUsers: () => api.post('/network/online-users/'),
     disconnectUser: (sessionId: number) => api.post(`/network/online-users/${sessionId}/disconnect/`),
 

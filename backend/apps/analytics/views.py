@@ -62,6 +62,7 @@ class DashboardStatsView(APIView):
         # celery task, not queried live from routers on every page load)
         hotspot_online = ActiveSession.objects.filter(session_type='hotspot').count()
         pppoe_online = ActiveSession.objects.filter(session_type='pppoe').count()
+        static_online = ActiveSession.objects.filter(session_type='static').count()
 
         # Per-router summary for the Router View panel
         routers = []
@@ -92,7 +93,8 @@ class DashboardStatsView(APIView):
             'total_customers': total_customers,
             'hotspot_online': hotspot_online,
             'pppoe_online': pppoe_online,
-            'total_online': hotspot_online + pppoe_online,
+            'static_online': static_online,
+            'total_online': hotspot_online + pppoe_online + static_online,
             'routers': routers,
         })
 

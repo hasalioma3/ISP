@@ -151,6 +151,8 @@ class NetworkAutomation:
             if customer.service_type == 'static':
                 res1 = mikrotik.disable_simple_queue(customer.username)
                 if not res1['success']: results['errors'].append(f"Static Queue Disable: {res1.get('error')}")
+                res2 = mikrotik.remove_ip_binding(f"static-{customer.username}")
+                if not res2['success']: results['errors'].append(f"Static IP Binding Remove: {res2.get('error')}")
 
             if results['errors']:
                 logger.error(f"Suspend customer {customer.username} errors: {results['errors']}")
@@ -491,6 +493,28 @@ class NetworkAutomation:
         if not res['success']:
             raise Exception(res.get('error'))
 
+        binding = mikrotik.add_ip_binding_bypass(
+            customer.static_ip_address, comment=f"static-{customer.username}"
+        )
+        if not binding['success']:
+            raise Exception(f"IP binding failed: {binding.get('error')}")
+
+    def sync_static_plan(self, plan, router, mikrotik):
+        """Push a static plan's current speed to each active static customer's queue."""
+        from apps.billing.models import Subscription
+        synced, failed = [], []
+        subscriptions = Subscription.objects.filter(
+            plan=plan, status='active', expiry_date__gt=timezone.now(), customer__service_type='static',
+        ).select_related('customer')
+        for subscription in subscriptions:
+            customer = subscription.customer
+            try:
+                self._activate_static(customer, plan, router, mikrotik)
+                synced.append(customer.username)
+            except Exception as e:
+                failed.append(f"{customer.username}: {e}")
+        return {'success': synced, 'failed': failed}
+
     def sync_all_profiles(self, router=None):
         from apps.billing.models import BillingPlan
         results = {'success': [], 'failed': []}
@@ -536,6 +560,12 @@ class NetworkAutomation:
                         fup_res = mikrotik.add_hotspot_profile(fup_profile, fup_rate)
                     if fup_res['success']: results['success'].append(f"Hotspot FUP: {plan.name}")
                     else: results['failed'].append(f"Hotspot FUP: {plan.name} - {fup_res.get('error')}")
+            if plan.service_type == 'static':
+                plan_routers = plan.routers.filter(is_active=True)
+                if not plan_routers.exists() or plan_routers.filter(pk=router.pk).exists():
+                    static = self.sync_static_plan(plan, router, mikrotik)
+                    results['success'].extend(f"Static: {name}" for name in static['success'])
+                    results['failed'].extend(f"Static: {err}" for err in static['failed'])
         refreshed = mikrotik.refresh_hotspot_sessions()
         if refreshed.get('refreshed'):
             results['success'].append(f"Reconnected {len(refreshed['refreshed'])} session(s) to apply new speeds")

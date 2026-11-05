@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI } from '../../services/api';
-import { RefreshCw, Search, UserX, Edit2, Wifi, Share2, Users as UsersIcon } from 'lucide-react';
+import { RefreshCw, Search, UserX, Edit2, Wifi, Share2, Network, Users as UsersIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import SubscriberDetailModal from '../../components/SubscriberDetailModal';
@@ -11,6 +11,7 @@ const TABS = [
     { key: 'all', label: 'All Online', icon: UsersIcon },
     { key: 'hotspot', label: 'Hotspot', icon: Wifi },
     { key: 'pppoe', label: 'PPPoE', icon: Share2 },
+    { key: 'static', label: 'Static IP', icon: Network },
 ] as const;
 
 export default function OnlineUsers() {
@@ -145,17 +146,19 @@ export default function OnlineUsers() {
                                             >
                                                 <Edit2 className="h-4 w-4" />
                                             </button>
-                                            <button
-                                                onClick={() => {
-                                                    if (confirm(`Disconnect ${u.username}?`)) {
-                                                        disconnectMutation.mutate(u.session_id);
-                                                    }
-                                                }}
-                                                title="Disconnect"
-                                                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                                            >
-                                                <UserX className="h-4 w-4" />
-                                            </button>
+                                            {u.type !== 'static' && (
+                                                <button
+                                                    onClick={() => {
+                                                        if (confirm(`Disconnect ${u.username}?`)) {
+                                                            disconnectMutation.mutate(u.session_id);
+                                                        }
+                                                    }}
+                                                    title="Disconnect"
+                                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                                >
+                                                    <UserX className="h-4 w-4" />
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>

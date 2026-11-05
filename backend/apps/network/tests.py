@@ -13,6 +13,61 @@ from apps.network.tasks import (
 )
 
 
+class StaticPlanSyncTests(TestCase):
+	def test_plan_speed_is_pushed_to_active_static_customers_only(self):
+		from apps.network.services.network_automation import network_automation
+		with patch('apps.billing.signals.sync_plan_to_routers.delay'), \
+			 patch('apps.billing.signals.network_automation.activate_customer'):
+			plan = BillingPlan.objects.create(
+				name='Static 20', service_type='static', download_speed=20,
+				upload_speed=8, price='50.00', mikrotik_profile='static-20',
+			)
+			active = Customer.objects.create(username='static-active', service_type='static', static_ip_address='10.9.0.5')
+			expired = Customer.objects.create(username='static-expired', service_type='static', static_ip_address='10.9.0.6')
+			Subscription.objects.create(customer=active, plan=plan, expiry_date=timezone.now() + timedelta(days=5))
+			Subscription.objects.create(customer=expired, plan=plan, status='expired', expiry_date=timezone.now() - timedelta(days=1))
+
+		mikrotik = MagicMock()
+		mikrotik.add_simple_queue.return_value = {'success': True}
+		mikrotik.add_ip_binding_bypass.return_value = {'success': True}
+		result = network_automation.sync_static_plan(plan, MagicMock(), mikrotik)
+
+		self.assertEqual(result, {'success': ['static-active'], 'failed': []})
+		mikrotik.add_simple_queue.assert_called_once_with(
+			name='static-active', target='10.9.0.5/32', max_limit='8M/20M', comment='ISP Billing - Static 20',
+		)
+		mikrotik.add_ip_binding_bypass.assert_called_once_with('10.9.0.5', comment='static-static-active')
+
+
+class StaticOnlineDetectionTests(TestCase):
+	def test_only_addresses_seen_by_the_router_are_online(self):
+		resources = {
+			'/ip/hotspot/host': MagicMock(**{'get.return_value': [{'address': '10.9.0.5', 'mac-address': 'AA:BB:CC:00:00:05', 'uptime': '1h'}]}),
+			'/ip/arp': MagicMock(**{'get.return_value': [{'address': '10.9.0.9', 'mac-address': 'AA:BB:CC:00:00:09', 'complete': 'true'}]}),
+			'/queue/simple': MagicMock(**{'get.return_value': [{'name': 'online-by-host', 'bytes': '1000/2000'}]}),
+		}
+		api = MagicMock()
+		api.get_resource.side_effect = lambda path: resources[path]
+		connection = MagicMock()
+		connection.get_api.return_value = api
+		service = MikroTikService(host='127.0.0.1', username='u', password='p')
+		targets = [
+			{'username': 'online-by-host', 'ip': '10.9.0.5'},
+			{'username': 'online-by-arp', 'ip': '10.9.0.9'},
+			{'username': 'offline', 'ip': '10.9.0.7'},
+		]
+
+		with patch.object(service, '_get_connection', return_value=connection):
+			result = service.get_static_sessions(targets)
+
+		self.assertTrue(result['success'])
+		by_user = {s['username']: s for s in result['sessions']}
+		self.assertEqual(set(by_user), {'online-by-host', 'online-by-arp'})
+		self.assertEqual(by_user['online-by-host']['service_type'], 'static')
+		self.assertEqual((by_user['online-by-host']['upload_bytes'], by_user['online-by-host']['download_bytes']), (1000, 2000))
+		self.assertEqual(by_user['online-by-arp']['mac_address'], 'AA:BB:CC:00:00:09')
+
+
 class HotspotSessionRefreshTests(TestCase):
 	def test_rate_pair_parsing(self):
 		parse = MikroTikService._parse_rate_pair
