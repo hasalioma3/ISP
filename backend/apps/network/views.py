@@ -181,6 +181,40 @@ class RouterViewSet(viewsets.ModelViewSet):
             return Response({'error': result['error']}, status=400)
         return Response({'success': [f"WAN management access disabled ({result['removed_count']} rule(s) removed)"], 'failed': []})
 
+    @action(detail=True, methods=['post'])
+    def enable_mgmt_vlan(self, request, pk=None):
+        """
+        Separate management network for radios/APs (see
+        NetworkAutomation.enable_management_vlan). Admin-only: it adds a
+        VLAN, DHCP server, NAT and firewall rules to the router.
+        """
+        router = self.get_object()
+        result = network_automation.enable_management_vlan(
+            router, username=request.data.get('username'), password=request.data.get('password')
+        )
+        if result.get('error'):
+            return Response({'error': result['error']}, status=400)
+        plan = result['plan']
+        return Response({
+            'success': [f"Radio management VLAN {'updated' if plan['reused'] else 'enabled'}: "
+                        f"VLAN {plan['vlan_id']}, subnet {plan['subnet']}"]
+                       + [f"Done: {line}" for line in result['report']]
+                       + [f"Next: on each radio set Management VLAN = {plan['vlan_id']} with DHCP (bridge mode)",
+                          f"Next: on your LAN router, add a static route {plan['subnet']} via {plan['wan_ip']}"],
+            'failed': [],
+        })
+
+    @action(detail=True, methods=['post'])
+    def disable_mgmt_vlan(self, request, pk=None):
+        """Removes exactly what enable_mgmt_vlan added."""
+        router = self.get_object()
+        result = network_automation.disable_management_vlan(
+            router, username=request.data.get('username'), password=request.data.get('password')
+        )
+        if result.get('error'):
+            return Response({'error': result['error']}, status=400)
+        return Response({'success': [f"Radio management VLAN removed ({result['removed_count']} item(s))"], 'failed': []})
+
     @action(detail=False, methods=['post'])
     def test_connection(self, request):
         """

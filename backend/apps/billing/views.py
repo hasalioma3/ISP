@@ -708,7 +708,9 @@ class PPPoEBulkImportView(APIView):
 
     Existing usernames are rejected per-row rather than modified -- this is
     for onboarding customers who don't exist in the system yet, not for
-    bulk-editing existing ones.
+    bulk-editing existing ones. A PPPoE secret of the same name already on
+    the router (e.g. from a previous billing system) is different: it's
+    overwritten with the imported password/plan (see add_pppoe_secret).
 
     expiry_date (YYYY-MM-DD) is optional: provide it to preserve a
     customer's real remaining time when migrating them in from elsewhere;

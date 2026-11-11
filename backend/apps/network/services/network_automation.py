@@ -32,6 +32,119 @@ def validate_portal_url(url):
     return None
 
 
+def _pool_networks(ranges):
+    """RouterOS pool ranges ('10.5.60.2-10.5.60.254,10.5.61.0/24,...') ->
+    the smallest network covering each range."""
+    networks = []
+    for part in (ranges or '').split(','):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            if '/' in part:
+                networks.append(ipaddress.ip_network(part, strict=False))
+                continue
+            start, _, end = part.partition('-')
+            first = ipaddress.ip_address(start)
+            last = ipaddress.ip_address(end) if end else first
+            for prefix in range(32, -1, -1):
+                net = ipaddress.ip_network(f'{first}/{prefix}', strict=False)
+                if last in net:
+                    networks.append(net)
+                    break
+        except ValueError:
+            continue
+    return networks
+
+
+def plan_management_vlan(layout, wan_interface, bridge, comment_prefix, preferred_vlan_id=90):
+    """
+    Decide the radio management network from what the router actually has
+    configured (layout from MikroTikService.read_network_layout):
+
+    - VLAN ID: an existing management VLAN's (re-run), else
+      preferred_vlan_id, else the next ID no VLAN on the router uses.
+    - Subnet: the existing management VLAN's, else the first /24 in the
+      same /16 as the bridge's own (hotspot) address -- from .90 up, so
+      it reads as "next to" the customer subnets -- that overlaps no
+      address, pool or the WAN subnet already on the router.
+    - LAN subnet (allowed in): the WAN interface's current network.
+    - Blocked: every customer-facing subnet -- the bridge's addresses and
+      every IP pool (hotspot, PPPoE, ...).
+
+    Raises ValueError when there's nothing sensible to plan against.
+    """
+    if bridge not in layout['interfaces']:
+        raise ValueError(f"Interface {bridge!r} doesn't exist on this router -- provision it first.")
+
+    static_addresses = [a for a in layout['addresses'] if not a['dynamic']]
+    wan_addresses = [a for a in static_addresses if a['interface'] == wan_interface] or \
+        [a for a in layout['addresses'] if a['interface'] == wan_interface]
+    if not wan_addresses:
+        raise ValueError(f"{wan_interface} has no IP address right now (DHCP not bound yet?).")
+    wan_if = ipaddress.ip_interface(wan_addresses[0]['address'])
+    lan_subnet = wan_if.network
+
+    existing = next((v for v in layout['vlans'] if (v['comment'] or '').startswith(comment_prefix)), None)
+    mgmt_interface = existing['name'] if existing else None
+
+    used = [lan_subnet]
+    customer = []
+    existing_subnet = None
+    for a in static_addresses:
+        net = ipaddress.ip_interface(a['address']).network
+        if a['interface'] == mgmt_interface:
+            existing_subnet = net
+            continue
+        used.append(net)
+        if a['interface'] == bridge:
+            customer.append(net)
+    for pool in layout['pools']:
+        if pool['name'] == 'isp-mgmt-pool':
+            continue
+        nets = _pool_networks(pool['ranges'])
+        used.extend(nets)
+        customer.extend(nets)
+
+    if existing:
+        vlan_id = int(existing['vlan_id'])
+        vlan_name = existing['name']
+    else:
+        taken_ids = {int(v['vlan_id']) for v in layout['vlans'] if str(v.get('vlan_id') or '').isdigit()}
+        vlan_id = next(i for i in list(range(preferred_vlan_id, 4095)) + list(range(2, preferred_vlan_id))
+                       if i not in taken_ids)
+        vlan_name = f'mgmt-vlan{vlan_id}'
+
+    subnet = existing_subnet
+    if subnet is None or any(subnet.overlaps(u) for u in used):
+        bridge_nets = [ipaddress.ip_interface(a['address']).network for a in static_addresses if a['interface'] == bridge]
+        base = bridge_nets[0] if bridge_nets and bridge_nets[0].prefixlen >= 16 else ipaddress.ip_network('10.5.0.0/16')
+        first_two = '.'.join(str(base.network_address).split('.')[:2])
+        subnet = None
+        for third in list(range(90, 256)) + list(range(0, 90)):
+            candidate = ipaddress.ip_network(f'{first_two}.{third}.0/24')
+            if not any(candidate.overlaps(u) for u in used):
+                subnet = candidate
+                break
+        if subnet is None:
+            raise ValueError(f'No free /24 left in {first_two}.0.0/16 for the management network.')
+
+    blocked = sorted({str(n) for n in customer if not n.overlaps(lan_subnet) and not n.overlaps(subnet)})
+    return {
+        'vlan_id': vlan_id,
+        'vlan_name': vlan_name,
+        'bridge': bridge,
+        'wan_interface': wan_interface,
+        'wan_ip': str(wan_if.ip),
+        'subnet': str(subnet),
+        'gateway': f'{subnet[1]}/{subnet.prefixlen}',
+        'pool_range': f'{subnet[100]}-{subnet[200]}',
+        'lan_subnet': str(lan_subnet),
+        'blocked': blocked,
+        'reused': existing is not None,
+    }
+
+
 def build_hotspot_login_html(portal_url):
     """
     RouterOS hotspot login.html: the $(...) tokens are literal text in the
@@ -342,6 +455,63 @@ class NetworkAutomation:
         if needs_update or created:
             mikrotik.disconnect_pppoe_session(pppoe_secret.username)
     
+    def push_pppoe_secret(self, pppoe_secret, previous_username=None):
+        """
+        Push a PPPoESecret's current username/password/profile/status to its
+        router -- used after a manual edit (Django admin), which otherwise
+        only changes the database. previous_username is the name the router
+        knows it by, if the edit renamed it. Kicks the live session so the
+        new credentials/profile take effect instead of waiting for a
+        reconnect. Returns {'success': bool, 'error'?: str}.
+        """
+        router = pppoe_secret.router
+        if not router:
+            return {'success': False, 'error': 'no router assigned to this secret'}
+
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=router.username,
+            password=router.password, port=router.port, use_ssl=router.use_ssl
+        )
+        lookup = previous_username or pppoe_secret.username
+        disabled = 'no' if pppoe_secret.status == 'enabled' else 'yes'
+        res = mikrotik.update_pppoe_secret(
+            lookup, name=pppoe_secret.username, password=pppoe_secret.password,
+            profile=pppoe_secret.profile, disabled=disabled,
+        )
+        if not res['success'] and 'not found' in res.get('error', '').lower():
+            res = mikrotik.add_pppoe_secret(pppoe_secret.username, pppoe_secret.password, pppoe_secret.profile)
+            if res['success'] and disabled == 'yes':
+                res = mikrotik.disable_pppoe_secret(pppoe_secret.username)
+
+        PPPoESecret.objects.filter(pk=pppoe_secret.pk).update(synced_to_router=res['success'])
+        if res['success']:
+            mikrotik.disconnect_pppoe_session(lookup)
+        else:
+            logger.error(f"Failed to push PPPoE secret {pppoe_secret.username} to {router.name}: {res.get('error')}")
+        return res
+
+    def update_pppoe_credentials(self, customer, username, password):
+        """
+        Change a customer's PPPoE login everywhere it lives: the Customer
+        fields (what the frontend shows and activation reads) and, if they
+        already have a PPPoESecret, that record and the router. Returns
+        push_pppoe_secret's result, or {'success': True, 'synced': False}
+        when the customer was never activated on a router -- their next
+        activation will simply use the new values.
+        """
+        customer.pppoe_username = username
+        customer.pppoe_password = password
+        customer.save(update_fields=['pppoe_username', 'pppoe_password'])
+
+        secret = PPPoESecret.objects.select_related('router').filter(customer=customer).first()
+        if not secret:
+            return {'success': True, 'synced': False}
+        previous_username = secret.username
+        secret.username = username or customer.username
+        secret.password = password or customer.username
+        secret.save(update_fields=['username', 'password'])
+        return {**self.push_pppoe_secret(secret, previous_username=previous_username), 'synced': True}
+
     def _activate_hotspot(self, customer, plan, router, mikrotik, profile_name=None):
         profile_name = profile_name or (
             plan.get_fup_mikrotik_profile() if self._customer_has_fup(customer, plan) else plan.mikrotik_profile
@@ -866,6 +1036,58 @@ class NetworkAutomation:
         if extra_subnets:
             checks.append(f"forward: {', '.join(extra_subnets)} may reach networks behind the router (not WAN)")
         return {'success': True, 'subnet': str(subnet), 'extra_subnets': extra_subnets, 'checks': checks}
+
+    # Shared by every object enable_management_vlan creates, so a re-run
+    # updates them and disable removes exactly those, nothing hand-made.
+    MGMT_VLAN_COMMENT_PREFIX = 'ISP Billing - Radio Mgmt'
+
+    def enable_management_vlan(self, router, username=None, password=None):
+        """
+        Set up a separate management network for radios/APs: a VLAN on the
+        customer bridge with its own subnet, DHCP and NAT, outside the
+        Hotspot (so radios need no login or bypass), reachable from the
+        WAN-side LAN and blocked from customers. VLAN ID and subnet are
+        chosen from what's free on the router -- see plan_management_vlan.
+        Safe to re-run: it updates the existing setup in place.
+        """
+        snapshot_res = self.snapshot_router(router, username=username, password=password)
+        if not snapshot_res.get('success'):
+            return {'error': f"Could not connect to router: {snapshot_res.get('error')}"}
+
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=username or router.username,
+            password=password or router.password, port=router.port, use_ssl=router.use_ssl
+        )
+        layout_res = mikrotik.read_network_layout()
+        if not layout_res.get('success'):
+            return {'error': f"Could not read router configuration: {layout_res.get('error')}"}
+        try:
+            plan = plan_management_vlan(
+                layout_res['layout'], settings.MIKROTIK_WAN_INTERFACE, settings.MIKROTIK_PROVISION_INTERFACE,
+                self.MGMT_VLAN_COMMENT_PREFIX, settings.MIKROTIK_MGMT_VLAN_ID,
+            )
+        except ValueError as e:
+            return {'error': str(e)}
+
+        result = mikrotik.apply_management_vlan(plan, self.MGMT_VLAN_COMMENT_PREFIX, dns_servers=router.dns_servers)
+        if not result.get('success'):
+            return {'error': f"Applying management VLAN failed: {result.get('error')}"}
+        return {'success': True, 'plan': plan, 'report': result['report']}
+
+    def disable_management_vlan(self, router, username=None, password=None):
+        """Removes exactly what enable_management_vlan created."""
+        snapshot_res = self.snapshot_router(router, username=username, password=password)
+        if not snapshot_res.get('success'):
+            return {'error': f"Could not connect to router: {snapshot_res.get('error')}"}
+
+        mikrotik = MikroTikService(
+            host=router.ip_address, username=username or router.username,
+            password=password or router.password, port=router.port, use_ssl=router.use_ssl
+        )
+        result = mikrotik.remove_management_vlan(self.MGMT_VLAN_COMMENT_PREFIX)
+        if not result.get('success'):
+            return {'error': result.get('error')}
+        return {'success': True, 'removed_count': result.get('removed_count', 0)}
 
     def disable_wan_management_access(self, router, username=None, password=None):
         """Removes exactly the rules enable_wan_management_access added."""

@@ -63,3 +63,45 @@ class PppoeOnlyRegistrationTests(TestCase):
 		self.assertEqual(customer.pppoe_username, customer.username)
 		self.assertEqual(customer.pppoe_password, 'StrongPassphrase#2026')
 		self.assertIsNone(customer.hotspot_username)
+
+
+class PppoeCredentialsEndpointTests(TestCase):
+	def setUp(self):
+		from apps.network.models import PPPoESecret, Router
+		router = Router.objects.create(name='r1', ip_address='10.0.0.1', username='u', password='p')
+		self.customer = Customer.objects.create(
+			username='cyrus', service_type='pppoe', pppoe_username='Cyrus', pppoe_password='old1234',
+		)
+		PPPoESecret.objects.create(customer=self.customer, router=router, username='Cyrus', password='old1234', profile='p5')
+		Customer.objects.create(username='other', service_type='pppoe', pppoe_username='Taken')
+		self.url = f'/api/customers/subscribers/{self.customer.pk}/pppoe-credentials/'
+		self.client = APIClient()
+
+	def _login(self, **flags):
+		user = Customer.objects.create(username=f"staff{len(flags)}", is_staff=True, **flags)
+		self.client.force_authenticate(user)
+
+	def test_superuser_change_is_saved_and_pushed(self):
+		from apps.network.models import PPPoESecret
+		self._login(is_superuser=True)
+		with patch('apps.network.services.network_automation.network_automation.push_pppoe_secret',
+				   return_value={'success': True}) as push:
+			res = self.client.post(self.url, {'pppoe_username': 'CyrusK', 'pppoe_password': 'new1234'}, format='json')
+		self.assertEqual(res.status_code, 200)
+		self.assertTrue(res.data['router_synced'])
+		self.assertEqual(push.call_args.kwargs['previous_username'], 'Cyrus')
+		self.customer.refresh_from_db()
+		self.assertEqual((self.customer.pppoe_username, self.customer.pppoe_password), ('CyrusK', 'new1234'))
+		self.assertEqual(PPPoESecret.objects.get(customer=self.customer).username, 'CyrusK')
+
+	def test_regular_admin_is_refused(self):
+		self._login(role='admin')
+		res = self.client.post(self.url, {'pppoe_username': 'CyrusK', 'pppoe_password': 'new1234'}, format='json')
+		self.assertEqual(res.status_code, 403)
+		self.customer.refresh_from_db()
+		self.assertEqual(self.customer.pppoe_password, 'old1234')
+
+	def test_username_of_another_customer_is_rejected(self):
+		self._login(is_superuser=True)
+		res = self.client.post(self.url, {'pppoe_username': 'Taken', 'pppoe_password': 'new1234'}, format='json')
+		self.assertEqual(res.status_code, 400)

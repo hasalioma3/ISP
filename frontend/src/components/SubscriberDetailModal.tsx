@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, billingAPI } from '../services/api';
-import { X, Save, PlusCircle, Eye, EyeOff, KeyRound, Wallet, ArrowLeftRight } from 'lucide-react';
+import { X, Save, PlusCircle, Eye, EyeOff, KeyRound, Wallet, ArrowLeftRight, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import UsageChartPanels from './UsageChartPanels';
@@ -14,6 +14,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
     const [topUpStaticIp, setTopUpStaticIp] = useState('');
     const [balanceAmount, setBalanceAmount] = useState('');
     const [showPasswords, setShowPasswords] = useState(false);
+    const [pppoeDraft, setPppoeDraft] = useState<{ pppoe_username: string; pppoe_password: string } | null>(null);
     const isSuperuser = useAuthStore((state) => state.user?.is_superuser);
     const queryClient = useQueryClient();
 
@@ -53,6 +54,28 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
         },
         onError: () => toast.error('Failed to update subscriber')
     });
+
+    const pppoeMutation = useMutation({
+        mutationFn: (data: { pppoe_username: string; pppoe_password: string }) => adminAPI.updatePppoeCredentials(id, data),
+        onSuccess: (res) => {
+            const { router_synced, router_error, subscriber: updated } = res.data;
+            if (router_synced) toast.success('PPPoE login updated on the router');
+            else if (router_error) toast.error(`Saved, but NOT updated on the router: ${router_error}`, { duration: 8000 });
+            else toast.success('Saved -- applied to the router when this customer is next activated');
+            setForm({ ...form, pppoe_username: updated.pppoe_username, pppoe_password: updated.pppoe_password });
+            setPppoeDraft(null);
+            queryClient.invalidateQueries({ queryKey: ['admin-subscribers'] });
+            queryClient.invalidateQueries({ queryKey: ['subscriber', id] });
+            queryClient.invalidateQueries({ queryKey: ['online-users'] });
+        },
+        onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to update PPPoE login')
+    });
+
+    const savePppoe = () => {
+        if (!pppoeDraft) return;
+        if (!window.confirm('This disconnects the customer. Their router must use the new login to reconnect. Continue?')) return;
+        pppoeMutation.mutate(pppoeDraft);
+    };
 
     const topUpMutation = useMutation({
         mutationFn: () => adminAPI.topUpSubscriber(id, parseInt(topUpPlanId), topUpStaticIp || undefined),
@@ -157,7 +180,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                 )}
                             </div>
 
-                            {isSuperuser && (form.pppoe_username || form.hotspot_username) && (
+                            {isSuperuser && (form.pppoe_username || form.hotspot_username || ['pppoe', 'both'].includes(form.service_type)) && (
                                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                                     <div className="flex justify-between items-center mb-2">
                                         <h4 className="text-sm font-bold text-amber-900 flex items-center gap-2">
@@ -173,8 +196,50 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                         </button>
                                     </div>
                                     <div className="space-y-1 font-mono text-sm text-amber-900">
-                                        {form.pppoe_username && (
-                                            <p>PPPoE: {form.pppoe_username} / {showPasswords ? (form.pppoe_password || '(not set)') : '••••••••'}</p>
+                                        {pppoeDraft ? (
+                                            <div className="font-sans space-y-2 py-1">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    <input
+                                                        className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white"
+                                                        placeholder="PPPoE username" autoComplete="off"
+                                                        value={pppoeDraft.pppoe_username}
+                                                        onChange={e => setPppoeDraft({ ...pppoeDraft, pppoe_username: e.target.value })}
+                                                    />
+                                                    <input
+                                                        className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white"
+                                                        placeholder="PPPoE password" autoComplete="new-password"
+                                                        value={pppoeDraft.pppoe_password}
+                                                        onChange={e => setPppoeDraft({ ...pppoeDraft, pppoe_password: e.target.value })}
+                                                    />
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button" onClick={savePppoe}
+                                                        disabled={pppoeMutation.isPending || !pppoeDraft.pppoe_username || !pppoeDraft.pppoe_password}
+                                                        className="flex items-center px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 text-xs font-medium"
+                                                    >
+                                                        <Save className="h-3.5 w-3.5 mr-1" />
+                                                        {pppoeMutation.isPending ? 'Saving...' : 'Save & Sync to Router'}
+                                                    </button>
+                                                    <button
+                                                        type="button" onClick={() => setPppoeDraft(null)}
+                                                        className="px-3 py-1.5 border border-amber-300 rounded-lg text-xs text-amber-900 hover:bg-amber-100"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (form.pppoe_username || ['pppoe', 'both'].includes(form.service_type)) && (
+                                            <p className="flex items-center gap-2">
+                                                <span>PPPoE: {form.pppoe_username || '(not set)'} / {showPasswords ? (form.pppoe_password || '(not set)') : '••••••••'}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPppoeDraft({ pppoe_username: form.pppoe_username || form.username, pppoe_password: form.pppoe_password || '' })}
+                                                    className="flex items-center font-sans text-xs text-amber-800 hover:text-amber-900 underline"
+                                                >
+                                                    <Pencil className="h-3 w-3 mr-0.5" /> Edit
+                                                </button>
+                                            </p>
                                         )}
                                         {form.hotspot_username && (
                                             <p>Hotspot: {form.hotspot_username} / {showPasswords ? (form.hotspot_password || '(not set)') : '••••••••'}</p>

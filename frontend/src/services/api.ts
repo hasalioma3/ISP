@@ -156,6 +156,8 @@ export const adminAPI = {
     getSubscriber: (id: number) => api.get(`/customers/subscribers/${id}/`),
     updateSubscriber: (id: number, data: any) => api.patch(`/customers/subscribers/${id}/`, data),
     getSubscriberUsage: (id: number) => api.get(`/customers/subscribers/${id}/usage/`),
+    updatePppoeCredentials: (id: number, data: { pppoe_username: string; pppoe_password: string }) =>
+        api.post(`/customers/subscribers/${id}/pppoe-credentials/`, data),
     topUpSubscriber: (id: number, planId: number, staticIpAddress?: string) =>
         api.post(`/customers/subscribers/${id}/topup/`, { plan_id: planId, static_ip_address: staticIpAddress }),
     addSubscriberBalance: (id: number, amount: number) =>
@@ -182,6 +184,8 @@ export const adminAPI = {
     syncRouterUsers: (id: number) => api.post(`/network/routers/${id}/sync_users/`),
     enableWanAccess: (id: number) => api.post(`/network/routers/${id}/enable_wan_access/`),
     disableWanAccess: (id: number) => api.post(`/network/routers/${id}/disable_wan_access/`),
+    enableMgmtVlan: (id: number) => api.post(`/network/routers/${id}/enable_mgmt_vlan/`),
+    disableMgmtVlan: (id: number) => api.post(`/network/routers/${id}/disable_mgmt_vlan/`),
     restartRouter: (id: number) => api.post(`/network/routers/${id}/restart/`),
     getMaintenanceSchedule: (id: number) => api.get(`/network/routers/${id}/maintenance_schedule/`),
     setMaintenanceSchedule: (id: number, data: any) => api.post(`/network/routers/${id}/maintenance_schedule/`, data),

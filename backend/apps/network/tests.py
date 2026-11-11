@@ -342,3 +342,193 @@ class FupEnforcementTests(TestCase):
 
 		self.subscription.refresh_from_db()
 		self.assertFalse(self.subscription.fup_applied)
+
+
+class PppoeSecretUpsertTests(TestCase):
+	def _service(self, existing):
+		secrets = MagicMock(**{'get.return_value': existing})
+		api = MagicMock()
+		api.get_resource.return_value = secrets
+		connection = MagicMock()
+		connection.get_api.return_value = api
+		service = MikroTikService(host='127.0.0.1', username='u', password='p')
+		return service, connection, secrets
+
+	def test_existing_secret_is_overwritten_not_duplicated(self):
+		service, connection, secrets = self._service([{'id': '*7', 'name': 'Cyrus', 'password': 'old'}])
+		with patch.object(service, '_get_connection', return_value=connection):
+			result = service.add_pppoe_secret('Cyrus', 'Cyrus1234', 'Home 5 Mbps')
+		self.assertTrue(result['success'])
+		secrets.add.assert_not_called()
+		secrets.set.assert_called_once_with(
+			id='*7', disabled='no', password='Cyrus1234', profile='Home 5 Mbps', service='any',
+		)
+
+	def test_missing_secret_is_added(self):
+		service, connection, secrets = self._service([{}])  # RouterOS "ghost" empty reply
+		with patch.object(service, '_get_connection', return_value=connection):
+			result = service.add_pppoe_secret('NewUser', 'pw1234', 'Home 5 Mbps')
+		self.assertTrue(result['success'])
+		secrets.set.assert_not_called()
+		secrets.add.assert_called_once_with(name='NewUser', password='pw1234', profile='Home 5 Mbps', service='any')
+
+
+class PppoeSecretAdminSyncTests(TestCase):
+	def setUp(self):
+		from apps.network.models import PPPoESecret, Router
+		self.router = Router.objects.create(name='r1', ip_address='10.0.0.1', username='u', password='p')
+		self.customer = Customer.objects.create(
+			username='cyrus', service_type='pppoe', pppoe_username='Cyrus', pppoe_password='old1234',
+		)
+		self.secret = PPPoESecret.objects.create(
+			customer=self.customer, router=self.router, username='Cyrus', password='old1234', profile='Home 5 Mbps',
+		)
+
+	def test_push_renames_existing_secret_and_kicks_session(self):
+		from apps.network.services.network_automation import network_automation
+		mikrotik = MagicMock()
+		mikrotik.update_pppoe_secret.return_value = {'success': True}
+		self.secret.username, self.secret.password = 'CyrusK', 'new1234'
+		with patch('apps.network.services.network_automation.MikroTikService', return_value=mikrotik):
+			result = network_automation.push_pppoe_secret(self.secret, previous_username='Cyrus')
+		self.assertTrue(result['success'])
+		mikrotik.update_pppoe_secret.assert_called_once_with(
+			'Cyrus', name='CyrusK', password='new1234', profile='Home 5 Mbps', disabled='no',
+		)
+		mikrotik.disconnect_pppoe_session.assert_called_once_with('Cyrus')
+		mikrotik.add_pppoe_secret.assert_not_called()
+
+	def test_push_recreates_secret_missing_on_router(self):
+		from apps.network.services.network_automation import network_automation
+		mikrotik = MagicMock()
+		mikrotik.update_pppoe_secret.return_value = {'success': False, 'error': 'Secret not found'}
+		mikrotik.add_pppoe_secret.return_value = {'success': True}
+		with patch('apps.network.services.network_automation.MikroTikService', return_value=mikrotik):
+			result = network_automation.push_pppoe_secret(self.secret)
+		self.assertTrue(result['success'])
+		mikrotik.add_pppoe_secret.assert_called_once_with('Cyrus', 'old1234', 'Home 5 Mbps')
+
+	def test_admin_edit_updates_customer_and_router(self):
+		from django.contrib.admin.sites import AdminSite
+		from apps.network.admin import PPPoESecretAdmin
+		from apps.network.models import PPPoESecret
+		model_admin = PPPoESecretAdmin(PPPoESecret, AdminSite())
+		self.secret.password = 'new1234'
+		form = MagicMock(changed_data=['password'])
+		with patch('apps.network.admin.network_automation.push_pppoe_secret', return_value={'success': True}) as push, \
+			 patch.object(model_admin, 'message_user'):
+			model_admin.save_model(MagicMock(), self.secret, form, change=True)
+		push.assert_called_once()
+		self.customer.refresh_from_db()
+		self.assertEqual(self.customer.pppoe_password, 'new1234')
+
+
+class ManagementVlanPlanTests(TestCase):
+	PREFIX = 'ISP Billing - Radio Mgmt'
+
+	def _layout(self, **extra):
+		layout = {
+			'interfaces': ['ether1', 'ether2', 'ether3', 'ether4', 'ether5', 'hotspot_bridge'],
+			'addresses': [
+				{'address': '192.168.56.20/24', 'interface': 'ether1', 'dynamic': True},
+				{'address': '10.5.50.1/24', 'interface': 'hotspot_bridge', 'dynamic': False},
+				{'address': '10.5.70.1/24', 'interface': 'hotspot_bridge', 'dynamic': False},
+				{'address': '10.5.60.1/32', 'interface': '<pppoe-cyrus>', 'dynamic': True},
+			],
+			'pools': [
+				{'name': 'hotspot_pool', 'ranges': '10.5.50.2-10.5.50.254'},
+				{'name': 'pppoe_pool', 'ranges': '10.5.60.2-10.5.60.254'},
+			],
+			'vlans': [],
+		}
+		for key, value in extra.items():
+			layout[key] = layout[key] + value
+		return layout
+
+	def _plan(self, layout):
+		from apps.network.services.network_automation import plan_management_vlan
+		return plan_management_vlan(layout, 'ether1', 'hotspot_bridge', self.PREFIX, 90)
+
+	def test_picks_free_subnet_next_to_customer_subnets(self):
+		plan = self._plan(self._layout())
+		self.assertEqual(plan['vlan_id'], 90)
+		self.assertEqual(plan['vlan_name'], 'mgmt-vlan90')
+		self.assertEqual(plan['subnet'], '10.5.90.0/24')
+		self.assertEqual(plan['gateway'], '10.5.90.1/24')
+		self.assertEqual(plan['pool_range'], '10.5.90.100-10.5.90.200')
+		self.assertEqual(plan['lan_subnet'], '192.168.56.0/24')
+		self.assertEqual(plan['wan_ip'], '192.168.56.20')
+		self.assertEqual(plan['blocked'], ['10.5.50.0/24', '10.5.60.0/24', '10.5.70.0/24'])
+		self.assertFalse(plan['reused'])
+
+	def test_skips_vlan_id_and_subnet_already_in_use(self):
+		plan = self._plan(self._layout(
+			pools=[{'name': 'guests', 'ranges': '10.5.90.10-10.5.90.50'}],
+			vlans=[{'name': 'cctv', 'vlan_id': '90', 'interface': 'ether5', 'comment': ''}],
+		))
+		self.assertEqual(plan['vlan_id'], 91)
+		self.assertEqual(plan['subnet'], '10.5.91.0/24')
+
+	def test_rerun_reuses_existing_management_vlan(self):
+		plan = self._plan(self._layout(
+			addresses=[{'address': '10.5.95.1/24', 'interface': 'mgmt-vlan93', 'dynamic': False}],
+			pools=[{'name': 'isp-mgmt-pool', 'ranges': '10.5.95.100-10.5.95.200'}],
+			vlans=[{'name': 'mgmt-vlan93', 'vlan_id': '93', 'interface': 'hotspot_bridge', 'comment': f'{self.PREFIX} (VLAN)'}],
+		))
+		self.assertTrue(plan['reused'])
+		self.assertEqual((plan['vlan_id'], plan['vlan_name'], plan['subnet']), (93, 'mgmt-vlan93', '10.5.95.0/24'))
+		self.assertNotIn('10.5.95.0/24', plan['blocked'])
+
+	def test_errors_without_wan_address_or_bridge(self):
+		from apps.network.services.network_automation import plan_management_vlan
+		layout = self._layout()
+		layout['addresses'] = [a for a in layout['addresses'] if a['interface'] != 'ether1']
+		with self.assertRaisesRegex(ValueError, 'ether1 has no IP'):
+			self._plan(layout)
+		with self.assertRaisesRegex(ValueError, "doesn't exist"):
+			plan_management_vlan(self._layout(), 'ether1', 'bridge-missing', self.PREFIX)
+
+
+class ManagementVlanApplyTests(TestCase):
+	def test_drop_rules_end_up_above_lan_accept(self):
+		plan = {
+			'vlan_id': 90, 'vlan_name': 'mgmt-vlan90', 'bridge': 'hotspot_bridge', 'wan_interface': 'ether1',
+			'wan_ip': '192.168.56.20', 'subnet': '10.5.90.0/24', 'gateway': '10.5.90.1/24',
+			'pool_range': '10.5.90.100-10.5.90.200', 'lan_subnet': '192.168.56.0/24',
+			'blocked': ['10.5.50.0/24'], 'reused': False,
+		}
+		resources = {}
+		filter_rules = []
+
+		def resource(path):
+			if path not in resources:
+				mock = MagicMock()
+				mock.get.return_value = []
+				resources[path] = mock
+			return resources[path]
+
+		fr = resource('/ip/firewall/filter')
+		fr.get.side_effect = lambda **kw: [{'id': r['id'], 'comment': r['comment']} for r in filter_rules]
+
+		def add_rule(**rule):
+			rule['id'] = f"*{len(filter_rules)}"
+			pos = next((i for i, r in enumerate(filter_rules) if r['id'] == rule.get('place-before')), len(filter_rules))
+			filter_rules.insert(pos, rule)
+		fr.add.side_effect = add_rule
+
+		api = MagicMock()
+		api.get_resource.side_effect = resource
+		connection = MagicMock()
+		connection.get_api.return_value = api
+		service = MikroTikService(host='127.0.0.1', username='u', password='p')
+		with patch.object(service, '_get_connection', return_value=connection):
+			result = service.apply_management_vlan(plan, 'ISP Billing - Radio Mgmt', dns_servers='8.8.8.8')
+
+		self.assertTrue(result['success'], result)
+		order = [r['comment'] for r in filter_rules]
+		self.assertLess(order.index('ISP Billing - Radio Mgmt [10.5.50.0/24] (Block)'),
+						order.index('ISP Billing - Radio Mgmt (LAN access)'))
+		resources['/interface/vlan'].add.assert_called_once_with(
+			comment='ISP Billing - Radio Mgmt (VLAN)', name='mgmt-vlan90', **{'vlan-id': '90'},
+			interface='hotspot_bridge', disabled='no',
+		)

@@ -1,8 +1,5 @@
-1. host the site on a rasberry pi 5 with docker
-2. setup wireguard vpn to access the mikrotik remotely
-3. setup actual Mpesa callback url for real payments.
-4. intergrate for sms notifications
-5. intergrate for whatsapp/Telegram
-6. change provisioning to leave out port 2 and 5 and provision wifi(if available), ports 3 and 4 only
-7. be able to view the customer pppoe and portal passwords from the admin portal(only super admin)
-8. register an actual till number and put the app in production.
+1. remove ability of a technician to extend a subscription or add cash to an account
+2. send a notification to a set mobile number when a subscription is extended or cash is added to an account
+3. show how much data has been used by a customer on the online customers page, for the subscription period only.
+4. when setting up a mikrotik that has been reset, give me a script to manually run so that I have WAN access without connecting to it.
+5. the portal hangs if a mikrotik is offline, when opening, load the page with the last sync, then update when the mikrotik comes online, if you cannot reach the mikrotik, report it offline.

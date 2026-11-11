@@ -133,18 +133,31 @@ class MikroTikService:
     # PPPoE Secret Management
     
     def add_pppoe_secret(self, username, password, profile, service='any', local_address='', remote_address=''):
+        """
+        Create the secret, or overwrite it in place if the router already
+        has one by this name (e.g. left over from a previous billing system
+        or added by hand) -- this system is the source of truth for its
+        customers' credentials, so the new password/profile win. Address
+        fields are only touched when passed, so an existing static
+        remote-address on the router is kept.
+        """
         try:
             connection = self._get_connection()
             api = connection.get_api()
             ppp_secret = api.get_resource('/ppp/secret')
-            ppp_secret.add(
-                name=username,
-                password=password,
-                profile=profile,
-                service=service,
+            params = {
+                'password': password,
+                'profile': profile,
+                'service': service,
                 **({'local-address': local_address} if local_address else {}),
-                **({'remote-address': remote_address} if remote_address else {})
-            )
+                **({'remote-address': remote_address} if remote_address else {}),
+            }
+            existing = [s for s in ppp_secret.get(name=username) if s.get('id')]
+            if existing:
+                ppp_secret.set(id=existing[0]['id'], disabled='no', **params)
+                logger.info(f"PPPoE secret {username} already existed on router; overwrote it")
+            else:
+                ppp_secret.add(name=username, **params)
             connection.disconnect()
             return {'success': True}
         except Exception as e:
@@ -1278,6 +1291,153 @@ class MikroTikService:
                 filter_rules.add(**add_kwargs)
             connection.disconnect()
             return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def read_network_layout(self):
+        """
+        Read-only: what's already configured, for plan_management_vlan to
+        pick a VLAN ID and subnet that don't collide with anything --
+        interface names, IPv4 addresses, IP pools and VLAN interfaces.
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+
+            def rows(path, *keys):
+                return [r for r in api.get_resource(path).get() if r.get(keys[0])]
+
+            layout = {
+                'interfaces': [r['name'] for r in rows('/interface', 'name')],
+                'addresses': [
+                    {'address': r['address'], 'interface': r.get('interface', ''),
+                     'dynamic': r.get('dynamic') == 'true'}
+                    for r in rows('/ip/address', 'address')
+                ],
+                'pools': [{'name': r['name'], 'ranges': r.get('ranges', '')} for r in rows('/ip/pool', 'name')],
+                'vlans': [
+                    {'name': r['name'], 'vlan_id': r.get('vlan-id'), 'interface': r.get('interface', ''),
+                     'comment': r.get('comment', '')}
+                    for r in rows('/interface/vlan', 'name')
+                ],
+            }
+            connection.disconnect()
+            return {'success': True, 'layout': layout}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    # Names for the RouterOS objects apply_management_vlan creates; every
+    # object also carries the caller's comment prefix, which is what
+    # re-runs and remove_management_vlan actually match on.
+    MGMT_POOL_NAME = 'isp-mgmt-pool'
+    MGMT_DHCP_NAME = 'isp-mgmt-dhcp'
+
+    def apply_management_vlan(self, plan, comment_prefix, dns_servers=''):
+        """
+        Create (or update in place) the radio management network described
+        by `plan` (see plan_management_vlan): VLAN interface on the bridge,
+        gateway address, DHCP pool/server/network, NAT for internet access,
+        and firewall rules -- LAN (WAN-side subnet) may reach it, customer
+        subnets may not. Objects are found by comment, so a re-run updates
+        them instead of duplicating. Firewall rules are rebuilt each run
+        since the set of customer subnets to block can change.
+        """
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            report = []
+
+            def upsert(path, tag, fields):
+                resource = api.get_resource(path)
+                comment = f'{comment_prefix} ({tag})'
+                existing = [r for r in resource.get(comment=comment) if r.get('id')]
+                if existing:
+                    resource.set(id=existing[0]['id'], **fields)
+                else:
+                    resource.add(comment=comment, **fields)
+
+            vlan = plan['vlan_name']
+            upsert('/interface/vlan', 'VLAN', {
+                'name': vlan, 'vlan-id': str(plan['vlan_id']), 'interface': plan['bridge'], 'disabled': 'no',
+            })
+            upsert('/ip/address', 'Gateway', {'address': plan['gateway'], 'interface': vlan, 'disabled': 'no'})
+            upsert('/ip/pool', 'Pool', {'name': self.MGMT_POOL_NAME, 'ranges': plan['pool_range']})
+            upsert('/ip/dhcp-server', 'DHCP', {
+                'name': self.MGMT_DHCP_NAME, 'interface': vlan, 'address-pool': self.MGMT_POOL_NAME,
+                'lease-time': '1d', 'disabled': 'no',
+            })
+            network_fields = {'address': plan['subnet'], 'gateway': plan['gateway'].split('/')[0]}
+            if dns_servers:
+                network_fields['dns-server'] = dns_servers
+            upsert('/ip/dhcp-server/network', 'DHCP Network', network_fields)
+            upsert('/ip/firewall/nat', 'NAT', {
+                'chain': 'srcnat', 'src-address': plan['subnet'], 'out-interface': plan['wan_interface'],
+                'action': 'masquerade', 'disabled': 'no',
+            })
+            report.append(f"VLAN {plan['vlan_id']} ({vlan}) on {plan['bridge']}, gateway {plan['gateway']}, "
+                          f"DHCP {plan['pool_range']}")
+
+            # Factory-config routers drop input from anything outside the
+            # LAN interface list -- radios couldn't get a DHCP lease.
+            lan_lists = [r for r in api.get_resource('/interface/list').get(name='LAN') if r.get('id')]
+            if lan_lists:
+                upsert('/interface/list/member', 'LAN list', {'list': 'LAN', 'interface': vlan})
+                report.append('added to the LAN interface list')
+
+            filter_rules = api.get_resource('/ip/firewall/filter')
+            for rule in [r for r in filter_rules.get() if r.get('id')]:
+                if (rule.get('comment') or '').startswith(comment_prefix):
+                    filter_rules.remove(id=rule['id'])
+
+            # Each rule is placed above the current first rule, so the
+            # last one added ends up on top: drops go in last, above the
+            # LAN accept, so no broad accept can ever shadow them.
+            new_rules = [
+                {'chain': 'input', 'in-interface': vlan, 'protocol': 'udp', 'dst-port': '67',
+                 'action': 'accept', 'comment': f'{comment_prefix} (DHCP)'},
+                {'chain': 'forward', 'in-interface': plan['wan_interface'], 'src-address': plan['lan_subnet'],
+                 'dst-address': plan['subnet'], 'action': 'accept', 'comment': f'{comment_prefix} (LAN access)'},
+            ] + [
+                {'chain': 'forward', 'src-address': blocked, 'dst-address': plan['subnet'],
+                 'action': 'drop', 'comment': f'{comment_prefix} [{blocked}] (Block)'}
+                for blocked in plan['blocked']
+            ]
+            for rule in new_rules:
+                current = [r for r in filter_rules.get() if r.get('id')]
+                if current:
+                    rule['place-before'] = current[0]['id']
+                filter_rules.add(**rule)
+            report.append(f"reachable from {plan['lan_subnet']}")
+            if plan['blocked']:
+                report.append(f"blocked from customer subnets: {', '.join(plan['blocked'])}")
+
+            connection.disconnect()
+            return {'success': True, 'report': report}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def remove_management_vlan(self, comment_prefix):
+        """Removes exactly what apply_management_vlan created (matched by
+        comment prefix), dependants first, plus the DHCP server's leases."""
+        try:
+            connection = self._get_connection()
+            api = connection.get_api()
+            removed = 0
+
+            leases = api.get_resource('/ip/dhcp-server/lease')
+            for lease in [r for r in leases.get(server=self.MGMT_DHCP_NAME) if r.get('id')]:
+                leases.remove(id=lease['id'])
+
+            for path in ['/ip/firewall/filter', '/ip/firewall/nat', '/ip/dhcp-server/network',
+                         '/ip/dhcp-server', '/ip/pool', '/interface/list/member', '/ip/address',
+                         '/interface/vlan']:
+                resource = api.get_resource(path)
+                for row in [r for r in resource.get() if r.get('id')]:
+                    if (row.get('comment') or '').startswith(comment_prefix):
+                        resource.remove(id=row['id'])
+                        removed += 1
+            connection.disconnect()
+            return {'success': True, 'removed_count': removed}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 

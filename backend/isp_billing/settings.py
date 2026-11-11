@@ -310,6 +310,12 @@ MIKROTIK_MGMT_ALLOWED_SUBNETS = [
     ).split(',') if s.strip()
 ]
 
+# Preferred VLAN ID for the radio management network ("Enable Radio
+# Management VLAN" on the MikroTik page). If this ID is already used on the
+# router, the next free one is picked; the subnet is always chosen
+# automatically from what's free on the router (see plan_management_vlan).
+MIKROTIK_MGMT_VLAN_ID = config('MIKROTIK_MGMT_VLAN_ID', default=90, cast=int)
+
 # Rate-limit applied to the built-in "default" Hotspot/PPPoE profiles at
 # provisioning time. Whoever ends up on "default" isn't on a real billing
 # plan's profile -- either a session that was never (or failed to be)

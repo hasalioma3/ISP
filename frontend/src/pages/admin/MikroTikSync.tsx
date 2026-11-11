@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import { Loader2, Router as RouterIcon, ShieldCheck, ShieldAlert, Plus, Pencil, Trash2, X, Wifi } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
-type ActionKey = 'backup' | 'sync_profiles' | 'sync_users' | 'enable_wan_access' | 'disable_wan_access' | 'restart' | 'sync_hotspot_login_page';
+type ActionKey = 'backup' | 'sync_profiles' | 'sync_users' | 'enable_wan_access' | 'disable_wan_access' | 'enable_mgmt_vlan' | 'disable_mgmt_vlan' | 'restart' | 'sync_hotspot_login_page';
 
 const ACTIONS: { key: ActionKey; label: string; description: string; className: string }[] = [
     {
@@ -45,6 +45,18 @@ const ACTIONS: { key: ActionKey; label: string; description: string; className: 
         className: 'bg-gray-500 hover:bg-gray-600',
     },
     {
+        key: 'enable_mgmt_vlan',
+        label: 'Enable Radio Management VLAN',
+        description: 'Creates a separate management network for radios/APs: a VLAN on the customer bridge with its own subnet and DHCP, outside the Hotspot (no login or bypass needed). VLAN ID and subnet are picked automatically from what’s free on this router. Reachable from your LAN, blocked from customers. Then set each radio’s Management VLAN to the ID shown.',
+        className: 'bg-indigo-600 hover:bg-indigo-700',
+    },
+    {
+        key: 'disable_mgmt_vlan',
+        label: 'Remove Radio Management VLAN',
+        description: 'Removes the management VLAN and everything the action above added. Radios still set to use the VLAN become unreachable until switched back.',
+        className: 'bg-gray-500 hover:bg-gray-600',
+    },
+    {
         key: 'restart',
         label: 'Restart Router',
         description: 'Reboots this router. Connected customers lose service for a minute or two.',
@@ -60,6 +72,8 @@ const runAction = (id: number, key: ActionKey) => {
         case 'sync_hotspot_login_page': return adminAPI.syncHotspotLoginPage(id);
         case 'enable_wan_access': return adminAPI.enableWanAccess(id);
         case 'disable_wan_access': return adminAPI.disableWanAccess(id);
+        case 'enable_mgmt_vlan': return adminAPI.enableMgmtVlan(id);
+        case 'disable_mgmt_vlan': return adminAPI.disableMgmtVlan(id);
         case 'restart': return adminAPI.restartRouter(id);
     }
 };
@@ -86,7 +100,7 @@ const emptyForm = {
 export default function MikroTikSync() {
     const user = useAuthStore((state) => state.user);
     const canManage = !!user?.is_superuser || user?.role === 'admin';
-    const ADMIN_ONLY_ACTIONS: ActionKey[] = ['backup', 'enable_wan_access', 'disable_wan_access', 'restart', 'sync_hotspot_login_page'];
+    const ADMIN_ONLY_ACTIONS: ActionKey[] = ['backup', 'enable_wan_access', 'disable_wan_access', 'enable_mgmt_vlan', 'disable_mgmt_vlan', 'restart', 'sync_hotspot_login_page'];
     const visibleActions = canManage ? ACTIONS : ACTIONS.filter((a) => !ADMIN_ONLY_ACTIONS.includes(a.key));
     const [loadingKey, setLoadingKey] = useState<string | null>(null);
     const [logsByRouter, setLogsByRouter] = useState<Record<number, string[]>>({});
@@ -183,6 +197,8 @@ export default function MikroTikSync() {
 
     const handleAction = async (routerId: number, action: ActionKey) => {
         if (action === 'restart' && !window.confirm('Restart this router? Connected customers will lose service for a minute or two.')) return;
+        if (action === 'enable_mgmt_vlan' && !window.confirm('Add a radio management VLAN (with DHCP, NAT and firewall rules) to this router? Customer traffic is not affected. A config snapshot is taken first.')) return;
+        if (action === 'disable_mgmt_vlan' && !window.confirm('Remove the radio management VLAN? Any radio set to use it becomes unreachable until its Management VLAN is turned off.')) return;
         const loadingId = `${routerId}-${action}`;
         setLoadingKey(loadingId);
         try {

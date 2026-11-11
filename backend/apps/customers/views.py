@@ -350,6 +350,40 @@ class SubscriberViewSet(
             'subscription': self.get_serializer(customer).data,
         })
 
+    @action(detail=True, methods=['post'], url_path='pppoe-credentials')
+    def pppoe_credentials(self, request, pk=None):
+        """
+        Superuser-only: change this customer's PPPoE username/password and
+        push it to their router (see update_pppoe_credentials). Doesn't
+        touch the portal login password, which is a separate one-way hash.
+        """
+        import re
+        from apps.network.models import PPPoESecret
+        from apps.network.services.network_automation import network_automation
+
+        if not request.user.is_superuser:
+            return Response({'error': 'Only a super admin can change PPPoE credentials.'}, status=status.HTTP_403_FORBIDDEN)
+
+        customer = self.get_object()
+        username = (request.data.get('pppoe_username') or '').strip()
+        password = (request.data.get('pppoe_password') or '').strip()
+
+        if not re.fullmatch(r'[A-Za-z0-9._@-]{1,64}', username):
+            return Response({'error': 'Username must be 1-64 characters: letters, digits, . _ @ -'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(password) < 3 or re.search(r'\s', password):
+            return Response({'error': 'Password must be at least 3 characters, with no spaces.'}, status=status.HTTP_400_BAD_REQUEST)
+        if (Customer.objects.exclude(pk=customer.pk).filter(pppoe_username=username).exists()
+                or PPPoESecret.objects.exclude(customer=customer).filter(username=username).exists()):
+            return Response({'error': f'PPPoE username "{username}" is already used by another customer.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = network_automation.update_pppoe_credentials(customer, username, password)
+        return Response({
+            'saved': True,
+            'router_synced': result['synced'] and result['success'],
+            'router_error': None if result['success'] else result.get('error'),
+            'subscriber': self.get_serializer(customer).data,
+        })
+
     @action(detail=True, methods=['post'])
     def add_balance(self, request, pk=None):
         """

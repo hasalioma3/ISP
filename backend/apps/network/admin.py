@@ -102,12 +102,37 @@ class RouterAdmin(admin.ModelAdmin):
                 self.message_user(request, f"Critical error syncing {router.name}: {str(e)}", messages.ERROR)
 
 
+PPPOE_SYNC_FIELDS = {'username', 'password', 'profile', 'status', 'router'}
+
+
+def report_pppoe_push(model_admin, request, pppoe_secret, previous_username=None):
+    result = network_automation.push_pppoe_secret(pppoe_secret, previous_username=previous_username)
+    if result['success']:
+        model_admin.message_user(request, f"PPPoE secret {pppoe_secret.username} updated on {pppoe_secret.router.name}.", messages.SUCCESS)
+    else:
+        model_admin.message_user(
+            request, f"Saved, but NOT updated on the router: {result.get('error')}", messages.ERROR
+        )
+
+
 @admin.register(PPPoESecret)
 class PPPoESecretAdmin(admin.ModelAdmin):
     list_display = ['username', 'customer', 'router', 'profile', 'status', 'synced_to_router']
     list_filter = ['status', 'synced_to_router', 'router']
     search_fields = ['username', 'customer__username']
     raw_id_fields = ['customer', 'router']
+
+    def save_model(self, request, obj, form, change):
+        previous_username = PPPoESecret.objects.filter(pk=obj.pk).values_list('username', flat=True).first() if change else None
+        super().save_model(request, obj, form, change)
+        # Customer.pppoe_username/pppoe_password are what the frontend shows
+        # and what activation pushes -- without this, the next activation
+        # silently reverts the router to the old credentials.
+        type(obj.customer).objects.filter(pk=obj.customer_id).update(
+            pppoe_username=obj.username, pppoe_password=obj.password,
+        )
+        if change and PPPOE_SYNC_FIELDS & set(form.changed_data):
+            report_pppoe_push(self, request, obj, previous_username=previous_username)
 
 
 @admin.register(HotspotUser)
