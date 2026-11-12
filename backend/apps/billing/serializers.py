@@ -103,5 +103,6 @@ class VoucherGenerationSerializer(serializers.Serializer):
 
 
 class VoucherRedeemSerializer(serializers.Serializer):
-    code = serializers.CharField(min_length=6, max_length=20)
+    # 4 letters for new codes; older 6-character codes still redeem.
+    code = serializers.CharField(min_length=4, max_length=20)
     mac_address = serializers.CharField(required=False, allow_blank=True, max_length=17)

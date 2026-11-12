@@ -2,74 +2,160 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * "Savanna" theme (design/HANDOFF.md): deep forest green, M-Pesa leaf green,
+ * sunset orange accent, warm sand background.
+ *
+ * Two layers of tokens:
+ *  1. shadcn-style HSL triplets (--background, --primary, ...). Every page
+ *     already uses these through bg-primary / text-muted-foreground / ..., so
+ *     re-pointing them restyles the whole app at once.
+ *  2. The handoff's own tokens, prefixed --sv-* because several names
+ *     (--primary, --border, --muted, --accent, --radius) are already taken by
+ *     layer 1 with a different format/meaning. Hex values are for charts and
+ *     third-party components (var(--sv-primary)); the *-rgb channels back the
+ *     Tailwind colours in tailwind.config.js (bg-ok-bg, text-warn, ...).
+ *     Handoff `accent` (orange) is `sunset` in Tailwind, and handoff `muted`
+ *     (a text colour) is text-muted-foreground.
+ */
 @layer base {
   :root {
-    /* Primary is the same violet scale as tailwind.config.js's `primary`
-       color (600 = #7c3aed). */
-    --background: 240 23% 97%;
-    --foreground: 230 20% 15%;
+    --background: 42 31.3% 93.7%;        /* #F4F1EA bg */
+    --foreground: 148 27.3% 10.8%;       /* #14231B text */
 
-    --card: 0 0% 100%;
-    --card-foreground: 230 20% 15%;
+    --card: 0 0% 100%;                   /* #FFFFFF surface */
+    --card-foreground: 148 27.3% 10.8%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 230 20% 15%;
+    --popover-foreground: 148 27.3% 10.8%;
 
-    --primary: 262.1 83.3% 57.8%;
-    --primary-foreground: 210 20% 98%;
+    --primary: 156.4 75% 17.3%;          /* #0B4D33 forest */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14.3% 95.9%;
-    --secondary-foreground: 220.9 39.3% 11%;
+    --secondary: 40 34.9% 91.6%;         /* #F1ECE2 chip */
+    --secondary-foreground: 148 27.3% 10.8%;
 
-    --muted: 220 14.3% 95.9%;
-    --muted-foreground: 231 10% 55%;
+    --muted: 40 34.9% 91.6%;
+    --muted-foreground: 138.5 6.5% 39.4%; /* #5E6B62 */
 
-    --accent: 262.1 83.3% 96%;
-    --accent-foreground: 262.1 83.3% 30%;
+    /* shadcn "accent" = subtle hover/selected tint, not the orange */
+    --accent: 144 26.3% 92.5%;           /* #E7F1EB */
+    --accent-foreground: 156.4 75% 17.3%;
 
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 210 20% 98%;
+    --destructive: 0 73.7% 41.8%;        /* #B91C1C bad */
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 230 20% 93%;
-    --input: 230 20% 90%;
-    --ring: 262.1 83.3% 57.8%;
+    --border: 41.1 30.2% 87.6%;          /* #E9E3D6 */
+    --input: 40.8 28.7% 82.9%;           /* #E0D8C7 border-strong */
+    --ring: 156.4 75% 17.3%;
 
     --radius: 1rem;
+
+    --sv-bg: #F4F1EA;
+    --sv-surface: #FFFFFF;
+    --sv-surface2: #FBF9F4;
+    --sv-border: #E9E3D6;
+    --sv-border-soft: #F1ECE2;
+    --sv-border-strong: #E0D8C7;
+    --sv-text: #14231B;
+    --sv-muted: #5E6B62;
+    --sv-faint: #8F978F;
+    --sv-primary: #0B4D33;
+    --sv-on-primary: #FFFFFF;
+    --sv-accent: #F2772E;
+    --sv-ok: #15803D;
+    --sv-ok-bg: #E7F6EC;
+    --sv-warn: #C2410C;
+    --sv-warn-bg: #FFF1E6;
+    --sv-bad: #B91C1C;
+    --sv-bad-bg: #FDECEC;
+    --sv-chip: #F1ECE2;
+    --sv-mpesa: #3BB54A;
+    --sv-chart-fill: #CFE8D8;
+    --sv-radius: 20px;
+    --sv-shadow: 0 1px 0 rgba(20, 35, 27, .04), 0 8px 24px -12px rgba(20, 35, 27, .12);
+
+    --sv-surface2-rgb: 251 249 244;
+    --sv-border-soft-rgb: 241 236 226;
+    --sv-border-strong-rgb: 224 216 199;
+    --sv-faint-rgb: 143 151 143;
+    --sv-accent-rgb: 242 119 46;
+    --sv-ok-rgb: 21 128 61;
+    --sv-ok-bg-rgb: 231 246 236;
+    --sv-warn-rgb: 194 65 12;
+    --sv-warn-bg-rgb: 255 241 230;
+    --sv-bad-rgb: 185 28 28;
+    --sv-bad-bg-rgb: 253 236 236;
+    --sv-chip-rgb: 241 236 226;
+    --sv-mpesa-rgb: 59 181 74;
+    --sv-band-rgb: 11 77 51;
   }
 
-  /* Dark theme -- toggled via a `dark` class on <html> (see
-     src/store/themeStore.ts), matching tailwind.config.js's darkMode:
-     ["class"]. Same violet primary, lightened for contrast on a dark
-     background; every other token gets its own dark value rather than
-     relying on opacity tricks, so text stays readable at every surface. */
+  /* Dark theme -- toggled via a `dark` class on <html> (src/store/themeStore.ts).
+     Not part of the handoff; derived from the same palette (forest-tinted
+     surfaces, lifted green primary) so the existing toggle keeps working. */
   .dark {
-    --background: 240 14% 8%;
-    --foreground: 220 20% 92%;
+    --background: 146.7 24.3% 7.3%;
+    --foreground: 120 12.2% 92%;
 
-    --card: 240 12% 11%;
-    --card-foreground: 220 20% 92%;
+    --card: 145 22.2% 10.6%;
+    --card-foreground: 120 12.2% 92%;
 
-    --popover: 240 12% 11%;
-    --popover-foreground: 220 20% 92%;
+    --popover: 145 22.2% 10.6%;
+    --popover-foreground: 120 12.2% 92%;
 
-    --primary: 262.1 83.3% 66%;
-    --primary-foreground: 240 14% 8%;
+    --primary: 149.4 45.2% 45.1%;
+    --primary-foreground: 146.7 24.3% 7.3%;
 
-    --secondary: 240 9% 17%;
-    --secondary-foreground: 220 20% 92%;
+    --secondary: 140 18.5% 15.9%;
+    --secondary-foreground: 120 12.2% 92%;
 
-    --muted: 240 9% 17%;
-    --muted-foreground: 230 10% 65%;
+    --muted: 140 18.5% 15.9%;
+    --muted-foreground: 133.8 7.6% 66.5%;
 
-    --accent: 262.1 40% 22%;
-    --accent-foreground: 262.1 83.3% 85%;
+    --accent: 146.4 30.9% 15.9%;
+    --accent-foreground: 149.4 45.2% 70%;
 
-    --destructive: 0 62.8% 50.6%;
-    --destructive-foreground: 210 20% 98%;
+    --destructive: 0 70% 58%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 240 9% 20%;
-    --input: 240 9% 20%;
-    --ring: 262.1 83.3% 66%;
+    --border: 131.2 17.4% 18%;
+    --input: 135.8 16.8% 22.2%;
+    --ring: 149.4 45.2% 45.1%;
+
+    --sv-bg: #0E1712;
+    --sv-surface: #15211A;
+    --sv-surface2: #1A281F;
+    --sv-border: #263629;
+    --sv-border-soft: #1F2E23;
+    --sv-border-strong: #2F4234;
+    --sv-text: #E8EDE8;
+    --sv-muted: #A3B0A6;
+    --sv-faint: #7D8A80;
+    --sv-primary: #3FA772;
+    --sv-on-primary: #0E1712;
+    --sv-ok: #4ADE80;
+    --sv-ok-bg: #173323;
+    --sv-warn: #FB923C;
+    --sv-warn-bg: #3A2416;
+    --sv-bad: #F87171;
+    --sv-bad-bg: #3B1C1C;
+    --sv-chip: #213026;
+    --sv-chart-fill: #1F4A33;
+    --sv-shadow: 0 1px 0 rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .5);
+
+    --sv-surface2-rgb: 26 40 31;
+    --sv-border-soft-rgb: 31 46 35;
+    --sv-border-strong-rgb: 47 66 52;
+    --sv-faint-rgb: 125 138 128;
+    --sv-ok-rgb: 74 222 128;
+    --sv-ok-bg-rgb: 23 51 35;
+    --sv-warn-rgb: 251 146 60;
+    --sv-warn-bg-rgb: 58 36 22;
+    --sv-bad-rgb: 248 113 113;
+    --sv-bad-bg-rgb: 59 28 28;
+    --sv-chip-rgb: 33 48 38;
+    --sv-band-rgb: 10 46 32;
   }
 }
 
@@ -77,11 +163,25 @@
   * {
     @apply border-border;
   }
+
+  /* Visible focus ring in primary for keyboard users (WCAG AA). */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Numbers (money, counts, data) line up in columns. */
+  .num {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
 }
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.45;
   font-weight: 400;
 
   font-synthesis: none;
@@ -100,5 +200,6 @@
 body {
   margin: 0;
   min-height: 100vh;
+  font-size: 14px;
   @apply bg-background text-foreground;
 }

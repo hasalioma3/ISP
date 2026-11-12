@@ -14,7 +14,80 @@ from apps.customers.models import Customer
 from apps.network.models import Router, ActiveSession, PPPoESecret, HotspotUser
 from apps.customers.permissions import RoleAllowed
 from apps.payments.models import C2BPayment
+from apps.payments.services.payer_name import payer_display_name
 from apps.analytics.utils import report_window
+
+
+def mask_msisdn(value):
+    """
+    '254722618418' / '0722618418' -> '0722 ••• 418' for admin lists. A C2B
+    payer may only have Safaricom's SHA-256 hash, which isn't a number at
+    all -- that (or anything else unparseable) masks to ''.
+    """
+    raw = (value or '').strip().replace(' ', '').replace('-', '').lstrip('+')
+    if not raw.isdigit():
+        return ''  # e.g. a hex hash -- picking its digits out would invent a number
+    digits = raw
+    if len(digits) == 12 and digits.startswith('254'):
+        digits = '0' + digits[3:]
+    if len(digits) != 10:
+        return ''
+    return f'{digits[:4]} ••• {digits[-3:]}'
+
+
+def _last_transactions(limit=6):
+    """
+    Latest completed payments for the dashboard's live Payments feed.
+    Phone numbers are masked here, not in the browser, so the admin list
+    never receives the full number.
+    """
+    return [
+        {
+            'username': t.customer.username,
+            'name': t.customer.get_full_name() or t.customer.username,
+            'amount': float(t.amount),
+            'date': t.created_at,
+            'method': t.payment_method,
+            'receipt': t.mpesa_receipt_number or '',
+            'phone': mask_msisdn(t.mpesa_phone_number or t.customer.phone_number),
+            'service_type': t.customer.service_type,
+            'plan': t.subscription.plan.name if t.subscription_id and t.subscription.plan_id else '',
+        }
+        for t in Transaction.objects.filter(status='completed').select_related(
+            'customer', 'subscription__plan'
+        ).order_by('-created_at')[:limit]
+    ]
+
+
+GATEWAY_FAILED_KEY = 'dashboard:mpesa_gateway_failed'
+GATEWAY_CHECKING_KEY = 'dashboard:mpesa_gateway_checking'
+
+
+def _check_gateway():
+    from django.core.cache import cache
+    from apps.payments.services.mpesa_service import mpesa_service
+    try:
+        if not mpesa_service.get_access_token():
+            # Remember the failure for a while so every dashboard load
+            # doesn't start another 30s attempt against an unreachable API.
+            cache.set(GATEWAY_FAILED_KEY, True, 120)
+    finally:
+        cache.delete(GATEWAY_CHECKING_KEY)
+
+
+def _gateway_status():
+    """True/False when known, None while a background check is running."""
+    import threading
+    from django.core.cache import cache
+    if cache.get('mpesa_access_token'):
+        return True
+    if cache.get(GATEWAY_FAILED_KEY):
+        return False
+    # add() only succeeds for the first caller, so concurrent loads start
+    # one check between them; the 60s expiry covers a thread that dies.
+    if cache.add(GATEWAY_CHECKING_KEY, True, 60):
+        threading.Thread(target=_check_gateway, daemon=True).start()
+    return None
 
 
 def can_see_income(user):
@@ -56,7 +129,30 @@ class DashboardStatsView(APIView):
 
         # New Customers
         new_customers = Customer.objects.filter(created_at__gte=start_of_month).count()
+        new_this_week = Customer.objects.filter(created_at__gte=now - timedelta(days=7)).count()
         total_customers = Customer.objects.count()
+
+        # Rolling 30-day collections vs the 30 days before, for the
+        # dashboard's revenue KPI and its % change.
+        completed = Transaction.objects.filter(status='completed')
+        revenue_30d = completed.filter(created_at__gte=now - timedelta(days=30)).aggregate(
+            total=Sum('amount'), n=Count('id'))
+        revenue_prev_30d = completed.filter(
+            created_at__gte=now - timedelta(days=60), created_at__lt=now - timedelta(days=30)
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        avg_ticket_30d = (
+            float(revenue_30d['total']) / revenue_30d['n'] if revenue_30d['n'] else 0
+        )
+
+        # STK push success rate over 30 days: of the prompts that reached a
+        # final state, how many were paid. Still-open prompts are left out so
+        # a burst of in-flight requests doesn't read as failures.
+        from apps.payments.models import PaymentRequest
+        stk = PaymentRequest.objects.filter(created_at__gte=now - timedelta(days=30)).aggregate(
+            done=Count('id', filter=Q(status='completed')),
+            final=Count('id', filter=Q(status__in=['completed', 'failed', 'timeout', 'cancelled'])),
+        )
+        stk_success_rate = round(stk['done'] / stk['final'] * 100, 1) if stk['final'] else None
 
         # Live online counts (kept fresh by the collect_usage_statistics
         # celery task, not queried live from routers on every page load)
@@ -79,6 +175,11 @@ class DashboardStatsView(APIView):
                     PPPoESecret.objects.filter(router=router, status='disabled').count() +
                     HotspotUser.objects.filter(router=router, status='disabled').count()
                 ),
+                # Last known state (see apps.network.services.router_status),
+                # so the Sites card renders before the live health poll lands.
+                'is_online': router.is_online,
+                'last_seen_at': router.last_seen_at,
+                'board_name': (router.last_health or {}).get('board_name'),
             })
 
         show_income = can_see_income(request.user)
@@ -90,7 +191,12 @@ class DashboardStatsView(APIView):
             'monthly_revenue': revenue_month if show_income else None,
             'monthly_usage_gb': usage_gb,
             'new_customers': new_customers,
+            'new_this_week': new_this_week,
             'total_customers': total_customers,
+            'revenue_30d': float(revenue_30d['total'] or 0) if show_income else None,
+            'revenue_prev_30d': float(revenue_prev_30d) if show_income else None,
+            'avg_ticket_30d': round(avg_ticket_30d, 2) if show_income else None,
+            'stk_success_rate': stk_success_rate if show_income else None,
             'hotspot_online': hotspot_online,
             'pppoe_online': pppoe_online,
             'static_online': static_online,
@@ -290,6 +396,14 @@ class DashboardExtraView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
+        # The dashboard polls just the payments feed every 15s; skip the
+        # heavy aggregations below (the per-router loop walks every
+        # transaction) for that.
+        if request.query_params.get('section') == 'payments':
+            return Response({
+                'last_transactions': _last_transactions() if can_see_income(request.user) else [],
+            })
+
         today = timezone.now().date()
         year_start = today.replace(month=1, day=1)
         start_of_month = today.replace(day=1)
@@ -351,16 +465,19 @@ class DashboardExtraView(APIView):
             for s in service_counts
         ]
 
-        # Payment gateway status -- a real live connectivity check, not just
-        # reading config back
-        from apps.payments.services.mpesa_service import mpesa_service
+        # Payment gateway status -- a real connectivity check (can we get a
+        # Daraja token?), but never made inside this request: a token fetch
+        # can take up to 30s (after every restart, hourly on expiry, and on
+        # every load while Safaricom is unreachable), and the dashboard sat
+        # on "Loading..." meanwhile. A cached token means connected; else
+        # the check runs in a background thread and this load reports
+        # connected=None ("checking") -- the next load has the answer.
         from django.conf import settings as dj_settings
-        gateway_token = mpesa_service.get_access_token()
         payment_gateway = {
             'name': 'M-Pesa STK Push',
             'environment': dj_settings.MPESA_ENVIRONMENT,
             'shortcode': dj_settings.MPESA_SHORTCODE,
-            'connected': bool(gateway_token),
+            'connected': _gateway_status(),
         }
 
         # Transactions per router, via each customer's PPPoE/Hotspot router
@@ -391,10 +508,7 @@ class DashboardExtraView(APIView):
                 for name, data in sorted(router_totals.items(), key=lambda kv: -kv[1]['transactions'])
             ]
 
-            last_transactions = [
-                {'username': t.customer.username, 'amount': float(t.amount), 'date': t.created_at}
-                for t in Transaction.objects.select_related('customer').order_by('-created_at')[:5]
-            ]
+            last_transactions = _last_transactions()
 
         # Voucher stock per plan
         voucher_rows = Voucher.objects.values('plan__name').annotate(
@@ -593,9 +707,15 @@ class RecentPaymentsView(APIView):
         # that ever changes.
         fetch_limit = min(page * page_size, 1000)
 
-        transactions = Transaction.objects.filter(
-            payment_method='mpesa'
-        ).select_related('customer').order_by('-created_at')[:fetch_limit]
+        # A matched C2B payment also produces a Transaction carrying the same
+        # M-Pesa code (payment_processor / assign_c2b_payment), so listing
+        # both tables showed every Paybill/Till payment twice. Keep the C2B
+        # row (it carries matched/assign state) and drop its Transaction twin.
+        c2b_codes = C2BPayment.objects.values('transaction_id')
+        stk_transactions = Transaction.objects.filter(payment_method='mpesa').exclude(
+            transaction_id__in=c2b_codes
+        ).exclude(mpesa_receipt_number__in=c2b_codes)
+        transactions = stk_transactions.select_related('customer').order_by('-created_at')[:fetch_limit]
 
         c2b_payments = C2BPayment.objects.select_related(
             'matched_customer'
@@ -608,6 +728,7 @@ class RecentPaymentsView(APIView):
                 'transaction_id': t.transaction_id,
                 'customer': t.customer.username,
                 'matched': True,
+                'payer_name': t.customer.get_full_name(),
                 'amount': float(t.amount),
                 'method': 'stk',
                 'status': 'utilized' if t.status == 'completed' else 'open',
@@ -622,6 +743,9 @@ class RecentPaymentsView(APIView):
                 # for why we never attempt to reverse it back to a real number.
                 'customer': c.matched_customer.username if c.matched_customer else c.msisdn,
                 'matched': c.matched_customer_id is not None,
+                # Name Safaricom sent with a Buy Goods/Paybill payment, so an
+                # unmatched payer is recognisable without their phone number.
+                'payer_name': payer_display_name(c),
                 'amount': float(c.amount),
                 'method': 'c2b',
                 'status': 'utilized' if c.status == 'activated' else 'open',
@@ -632,10 +756,7 @@ class RecentPaymentsView(APIView):
         start = (page - 1) * page_size
         page_rows = rows[start:start + page_size]
 
-        total = (
-            Transaction.objects.filter(payment_method='mpesa').count()
-            + C2BPayment.objects.count()
-        )
+        total = stk_transactions.count() + C2BPayment.objects.count()
 
         return Response({
             'results': page_rows,
@@ -771,3 +892,135 @@ class ChurnForecastView(APIView):
                 'renewal_rate_pct': round(renewed_count / lapsed_count * 100, 1) if lapsed_count else None,
             },
         })
+
+
+def _parse_day(value):
+    """'YYYY-MM-DD' -> date, or None."""
+    try:
+        return dt.date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+class DailyUsageView(APIView):
+    """
+    Whole-network data usage per day (GB) between start_date and end_date
+    (default: last 30 days), for the Reports "Data usage overview" chart.
+    Days are Nairobi days (TruncDate uses the active TIME_ZONE).
+    """
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        today = timezone.localdate()
+        end = _parse_day(request.query_params.get('end_date')) or today
+        start = _parse_day(request.query_params.get('start_date')) or end - timedelta(days=29)
+        if (end - start).days > 366:
+            return Response({'error': 'Pick a range of at most a year.'}, status=status.HTTP_400_BAD_REQUEST)
+        rows = UsageRecord.objects.filter(
+            start_time__date__gte=start, start_time__date__lte=end,
+        ).annotate(date=TruncDate('start_time')).values('date').annotate(
+            up=Sum('upload_bytes'), down=Sum('download_bytes'), users=Count('customer', distinct=True),
+        )
+        gb = 1024 ** 3
+        by_day = {r['date']: r for r in rows}
+        out = []
+        day = start
+        while day <= end:
+            r = by_day.get(day)
+            up, down = (r['up'] or 0, r['down'] or 0) if r else (0, 0)
+            out.append({
+                'date': day.isoformat(),
+                'upload_gb': round(up / gb, 2),
+                'download_gb': round(down / gb, 2),
+                'total_gb': round((up + down) / gb, 2),
+                'users': r['users'] if r else 0,
+            })
+            day += timedelta(days=1)
+        return Response(out)
+
+
+class DayBreakdownView(APIView):
+    """
+    Drill-down for one bar on the Reports charts.
+    ?kind=revenue&date=YYYY-MM-DD -> totals by plan and payment method, plus
+      that day's completed payments (admin/sales, like the income report).
+    ?kind=usage&date=YYYY-MM-DD -> usage by service type and the top
+      subscribers that day.
+    """
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        kind = request.query_params.get('kind')
+        day = _parse_day(request.query_params.get('date'))
+        if not day or kind not in ('revenue', 'usage'):
+            return Response({'error': 'kind (revenue|usage) and date (YYYY-MM-DD) are required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if kind == 'revenue':
+            if not can_see_income(request.user):
+                return Response({'error': 'Not allowed.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(self._revenue(day))
+        return Response(self._usage(day))
+
+    @staticmethod
+    def _revenue(day):
+        qs = Transaction.objects.filter(status='completed', created_at__date=day)
+        total = qs.aggregate(total=Sum('amount'), n=Count('id'))
+        by_plan = [
+            {'name': r['subscription__plan__name'] or 'Balance / no plan', 'count': r['n'], 'amount': float(r['amount'] or 0)}
+            for r in qs.values('subscription__plan__name').annotate(n=Count('id'), amount=Sum('amount')).order_by('-amount')
+        ]
+        method_labels = dict(Transaction.PAYMENT_METHOD_CHOICES)
+        by_method = [
+            {'name': method_labels.get(r['payment_method'], r['payment_method']), 'count': r['n'], 'amount': float(r['amount'] or 0)}
+            for r in qs.values('payment_method').annotate(n=Count('id'), amount=Sum('amount')).order_by('-amount')
+        ]
+        items = [
+            {
+                'time': t.created_at,
+                'customer': t.customer.get_full_name() or t.customer.username,
+                'username': t.customer.username,
+                'plan': t.subscription.plan.name if t.subscription_id and t.subscription.plan_id else '',
+                'method': method_labels.get(t.payment_method, t.payment_method),
+                'reference': t.mpesa_receipt_number or t.transaction_id,
+                'amount': float(t.amount),
+            }
+            for t in qs.select_related('customer', 'subscription__plan').order_by('-created_at')[:200]
+        ]
+        return {
+            'kind': 'revenue', 'date': day.isoformat(),
+            'total': float(total['total'] or 0), 'count': total['n'],
+            'by_plan': by_plan, 'by_method': by_method, 'items': items,
+        }
+
+    @staticmethod
+    def _usage(day):
+        gb = 1024 ** 3
+        qs = UsageRecord.objects.filter(start_time__date=day)
+        agg = qs.aggregate(up=Sum('upload_bytes'), down=Sum('download_bytes'), users=Count('customer', distinct=True))
+        by_type = [
+            {'name': (r['customer__service_type'] or 'unknown').upper(),
+             'total_gb': round(((r['up'] or 0) + (r['down'] or 0)) / gb, 2), 'users': r['users']}
+            for r in qs.values('customer__service_type').annotate(
+                up=Sum('upload_bytes'), down=Sum('download_bytes'), users=Count('customer', distinct=True))
+        ]
+        by_type.sort(key=lambda r: -r['total_gb'])
+        users = qs.values('customer__username', 'customer__first_name', 'customer__last_name').annotate(
+            up=Sum('upload_bytes'), down=Sum('download_bytes'),
+        ).annotate(total=F('up') + F('down')).order_by('-total')[:50]
+        items = [
+            {
+                'customer': f"{u['customer__first_name']} {u['customer__last_name']}".strip() or u['customer__username'],
+                'username': u['customer__username'],
+                'upload_gb': round((u['up'] or 0) / gb, 2),
+                'download_gb': round((u['down'] or 0) / gb, 2),
+                'total_gb': round((u['total'] or 0) / gb, 2),
+            }
+            for u in users
+        ]
+        up, down = agg['up'] or 0, agg['down'] or 0
+        return {
+            'kind': 'usage', 'date': day.isoformat(),
+            'total_gb': round((up + down) / gb, 2), 'users': agg['users'],
+            'upload_gb': round(up / gb, 2), 'download_gb': round(down / gb, 2),
+            'by_type': by_type, 'items': items,
+        }

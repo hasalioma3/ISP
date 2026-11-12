@@ -71,6 +71,8 @@ export const billingAPI = {
     getSubscriptions: () => api.get('/billing/subscriptions/'),
     getTransactions: () => api.get('/billing/transactions/'),
     getUsage: () => api.get('/billing/usage/'),
+    // { plan_totals, totals }: current plan period and all-time usage.
+    getUsageSummary: () => api.get('/billing/usage/summary/'),
     downloadPlanTemplate: () => api.get('/billing/plans/csv-template/', { responseType: 'blob' }),
     importPlansCSV: (file: File) => {
         const formData = new FormData();
@@ -127,12 +129,19 @@ export const notificationAPI = {
 export const analyticsAPI = {
     getDashboardStats: () => api.get('/analytics/dashboard/'),
     getDashboardExtra: () => api.get('/analytics/dashboard/extra/'),
+    // Just the live payments feed (cheap; polled every 15s on the dashboard).
+    getDashboardFeed: () => api.get('/analytics/dashboard/extra/', { params: { section: 'payments' } }),
     getIncomeReport: (params?: any) => api.get('/analytics/income/', { params }),
+    downloadIncomeReport: (params?: any) =>
+        api.get('/analytics/income/', { params: { ...params, export: 'csv' }, responseType: 'blob' }),
     getVoucherUsageReport: (params?: any) => api.get('/analytics/voucher-usage/', { params }),
     downloadVoucherUsageReport: (params?: any) =>
         api.get('/analytics/voucher-usage/', { params: { ...params, export: 'csv' }, responseType: 'blob' }),
     getUsageReport: () => api.get('/analytics/usage/'),
     getUsageChart: () => api.get('/analytics/usage-chart/'),
+    getDailyUsage: (params: { start_date: string; end_date: string }) => api.get('/analytics/usage-daily/', { params }),
+    getDayBreakdown: (kind: 'revenue' | 'usage', date: string) =>
+        api.get('/analytics/day-breakdown/', { params: { kind, date } }),
     getExpiringToday: (page: number, pageSize?: number) =>
         api.get('/analytics/expiring-today/', { params: { page, page_size: pageSize } }),
     getRecentActivity: () => api.get('/analytics/recent-activity/'),
@@ -151,8 +160,12 @@ export const analyticsAPI = {
 // Admin Management API
 export const adminAPI = {
     // Subscribers
-    getSubscribers: (params?: { search?: string; service_type?: string; status?: string; ordering?: string; router?: string; is_new?: string; page?: number; page_size?: number }) =>
+    getSubscribers: (params?: { search?: string; service_type?: string; status?: string; expiring?: string; plan?: string; ordering?: string; router?: string; is_new?: string; page?: number; page_size?: number }) =>
         api.get('/customers/subscribers/', { params }),
+    // Tab counts (all/active/expiring/expired/suspended/new) under the same filters as the list.
+    getSubscriberSummary: (params?: { search?: string; service_type?: string; plan?: string; router?: string }) =>
+        api.get('/customers/subscribers/summary/', { params }),
+    bulkStkReminder: (ids: number[]) => api.post('/customers/subscribers/bulk-stk-reminder/', { ids }),
     getSubscriber: (id: number) => api.get(`/customers/subscribers/${id}/`),
     updateSubscriber: (id: number, data: any) => api.patch(`/customers/subscribers/${id}/`, data),
     getSubscriberUsage: (id: number) => api.get(`/customers/subscribers/${id}/usage/`),
@@ -160,6 +173,9 @@ export const adminAPI = {
         api.post(`/customers/subscribers/${id}/pppoe-credentials/`, data),
     topUpSubscriber: (id: number, planId: number, staticIpAddress?: string) =>
         api.post(`/customers/subscribers/${id}/topup/`, { plan_id: planId, static_ip_address: staticIpAddress }),
+    // Superadmin only: move the latest subscription's expiry (reactivating it if expired).
+    extendSubscriber: (id: number, expiryDate: string) =>
+        api.post(`/customers/subscribers/${id}/extend/`, { expiry_date: expiryDate }),
     addSubscriberBalance: (id: number, amount: number) =>
         api.post(`/customers/subscribers/${id}/add_balance/`, { amount }),
     switchSubscriberPlan: (id: number, planId: number) =>
@@ -182,6 +198,7 @@ export const adminAPI = {
     backupRouter: (id: number) => api.post(`/network/routers/${id}/backup/`),
     syncRouterProfiles: (id: number) => api.post(`/network/routers/${id}/sync_profiles/`),
     syncRouterUsers: (id: number) => api.post(`/network/routers/${id}/sync_users/`),
+    getSyncUsersStatus: (id: number) => api.get(`/network/routers/${id}/sync_users_status/`),
     enableWanAccess: (id: number) => api.post(`/network/routers/${id}/enable_wan_access/`),
     disableWanAccess: (id: number) => api.post(`/network/routers/${id}/disable_wan_access/`),
     enableMgmtVlan: (id: number) => api.post(`/network/routers/${id}/enable_mgmt_vlan/`),
@@ -209,9 +226,10 @@ export const adminAPI = {
 // Site Settings (branding: company name + logo)
 export const siteSettingsAPI = {
     get: () => api.get('/settings/site/'),
-    update: (data: { company_name?: string; logo?: File }) => {
+    update: (data: { company_name?: string; logo?: File; support_phone?: string }) => {
         const form = new FormData();
         if (data.company_name !== undefined) form.append('company_name', data.company_name);
+        if (data.support_phone !== undefined) form.append('support_phone', data.support_phone);
         if (data.logo) form.append('logo', data.logo);
         return api.patch('/settings/site/', form, { headers: { 'Content-Type': 'multipart/form-data' } });
     },

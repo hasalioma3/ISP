@@ -1,35 +1,49 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store/authStore';
 import { useSiteSettings } from './hooks/useSiteSettings';
 
-// Pages
-import Login from './pages/Login';
-import Register from './pages/Register';
-import CustomerDashboard from './pages/customer/Dashboard';
-import Plans from './pages/customer/Plans';
-import Payment from './pages/customer/Payment';
-import Usage from './pages/customer/Usage';
-import OrderHistory from './pages/customer/OrderHistory';
-import ActivationHistory from './pages/customer/ActivationHistory';
+// The captive portal and login pages load eagerly; everything behind a
+// login is split into its own chunk. The portal runs on hotspot phones
+// behind a MikroTik walled garden, so it must not download Recharts, Radix
+// or the admin pages just to show a package list.
 import CaptivePortal from './pages/portal/CaptivePortal';
-import CustomerLayout from './components/CustomerLayout';
-import AdminLayout from './components/AdminLayout';
-import AdminDashboard from './pages/admin/Dashboard';
-import Subscribers from './pages/admin/Subscribers';
-import Reports from './pages/admin/Reports';
-import Settings from './pages/admin/Settings';
-import VoucherManager from './pages/admin/VoucherManager';
-import MikroTikSync from './pages/admin/MikroTikSync';
-import OnlineUsers from './pages/admin/OnlineUsers';
-import BillingPlans from './pages/admin/BillingPlans';
-import DataUsage from './pages/admin/DataUsage';
-import Payments from './pages/admin/Payments';
-import Accounting from './pages/admin/Accounting';
-import Inventory from './pages/admin/Inventory';
-import NetworkOps from './pages/admin/NetworkOps';
+
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+
+const CustomerDashboard = lazy(() => import('./pages/customer/Dashboard'));
+const Plans = lazy(() => import('./pages/customer/Plans'));
+const Payment = lazy(() => import('./pages/customer/Payment'));
+const Usage = lazy(() => import('./pages/customer/Usage'));
+const OrderHistory = lazy(() => import('./pages/customer/OrderHistory'));
+const ActivationHistory = lazy(() => import('./pages/customer/ActivationHistory'));
+const CustomerLayout = lazy(() => import('./components/CustomerLayout'));
+const AdminLayout = lazy(() => import('./components/AdminLayout'));
+const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
+const Subscribers = lazy(() => import('./pages/admin/Subscribers'));
+const Reports = lazy(() => import('./pages/admin/Reports'));
+const Settings = lazy(() => import('./pages/admin/Settings'));
+const VoucherManager = lazy(() => import('./pages/admin/VoucherManager'));
+const MikroTikSync = lazy(() => import('./pages/admin/MikroTikSync'));
+const OnlineUsers = lazy(() => import('./pages/admin/OnlineUsers'));
+const BillingPlans = lazy(() => import('./pages/admin/BillingPlans'));
+const DataUsage = lazy(() => import('./pages/admin/DataUsage'));
+const Payments = lazy(() => import('./pages/admin/Payments'));
+const Accounting = lazy(() => import('./pages/admin/Accounting'));
+const Inventory = lazy(() => import('./pages/admin/Inventory'));
+const NetworkOps = lazy(() => import('./pages/admin/NetworkOps'));
+
+/** Shown while a lazily loaded page's chunk downloads. */
+function PageFallback() {
+  return (
+    <div className="grid min-h-[40vh] place-items-center" aria-busy="true" aria-label="Loading">
+      <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-chip border-t-primary" />
+    </div>
+  );
+}
 
 const queryClient = new QueryClient();
 
@@ -78,6 +92,7 @@ function App() {
       <BrowserRouter>
         <Toaster position="top-right" />
         <FaviconUpdater />
+        <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/portal" element={<CaptivePortal />} />
           <Route path="/login" element={<Login />} />
@@ -127,6 +142,7 @@ function App() {
 
           <Route path="/" element={<Navigate to="/dashboard" />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </QueryClientProvider>
   );

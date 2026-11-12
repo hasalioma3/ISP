@@ -6,6 +6,7 @@ from django.db.models import F, Sum
 from django.utils import timezone
 from apps.network.services.network_automation import network_automation
 from apps.network.services.mikrotik_service import MikroTikService, parse_duration_seconds as parse_uptime_seconds
+from apps.network.services import router_status
 from apps.billing.models import UsageRecord, Subscription
 import logging
 
@@ -61,7 +62,12 @@ def _collect_usage_once():
         res = mikrotik.get_active_sessions()
         if not res.get('success'):
             logger.error(f"Usage collection failed for router {router.name}: {res.get('error')}")
+            # This poll is also the router's heartbeat: pages read
+            # is_online instead of trying an offline router themselves, and
+            # the next successful poll flips it back.
+            router_status.mark_offline(router, res.get('error'))
             continue
+        router_status.mark_online(router)
 
         sessions = res['sessions']
         static_targets = _static_targets_for_router(router)
@@ -358,6 +364,35 @@ def update_usage_record(username, delta_upload, delta_download, mac, ip, router_
     except Exception as e:
         logger.error(f"Error updating usage for {username}: {e}")
         return False
+
+@shared_task
+def sync_router_users(router_id):
+    """
+    Background "Sync Users" (see RouterViewSet.sync_users): push every
+    active subscription to one router and record the outcome on
+    Router.last_user_sync for the MikroTik page to poll. Any crash is
+    recorded too, so it shows up on the page instead of being lost.
+    """
+    from apps.network.models import Router
+
+    router = Router.objects.filter(pk=router_id).first()
+    if not router:
+        return
+    state = dict(router.last_user_sync or {})
+    try:
+        result = network_automation.sync_all_users(router=router)
+        state.update(
+            status='error' if result.get('error') else 'done',
+            success=result.get('success', []), failed=result.get('failed', []), error=result.get('error'),
+        )
+        if not result.get('error'):
+            Router.objects.filter(pk=router_id).update(last_sync=timezone.now())
+    except Exception as e:
+        logger.exception("Sync users crashed for router %s", router_id)
+        state.update(status='error', error=f'{type(e).__name__}: {e}')
+    state['finished_at'] = timezone.now().isoformat()
+    Router.objects.filter(pk=router_id).update(last_user_sync=state)
+
 
 @shared_task
 def sync_plan_to_routers(plan_id):

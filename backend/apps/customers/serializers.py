@@ -42,6 +42,8 @@ class CustomerSerializer(serializers.ModelSerializer):
     calculated_expiry = serializers.DateTimeField(read_only=True)
     current_plan_name = serializers.CharField(read_only=True)
     current_plan_status = serializers.CharField(read_only=True)
+    current_plan_id = serializers.IntegerField(read_only=True)
+    current_plan_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     router_name = serializers.CharField(read_only=True)
     last_ip = serializers.CharField(read_only=True)
 
@@ -64,7 +66,7 @@ class CustomerSerializer(serializers.ModelSerializer):
                   'hotspot_mac_address', 'static_ip_address',
                   'address', 'id_number', 'notes', 'created_at', 'is_staff', 'is_superuser',
                   'role', 'calculated_expiry', 'current_plan_name', 'current_plan_status',
-                  'router_name', 'last_ip']
+                  'current_plan_id', 'current_plan_price', 'router_name', 'last_ip']
         read_only_fields = ['id', 'status', 'account_balance', 'is_verified', 'created_at', 'is_staff', 'is_superuser']
 
     def _may_see_passwords(self, obj):

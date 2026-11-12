@@ -100,6 +100,26 @@ def patched_parse(cls, serialized):
 routeros_api.sentence.ResponseSentence.parse = classmethod(patched_parse)
 # --- END MONKEY PATCH ---
 
+class _TimedApiPool(RouterOsApiPool):
+    """
+    routeros-api uses one socket timeout for connect, login and reads.
+    Connect and log in with a short timeout so an offline router fails fast,
+    then raise it for the reads that follow (large lists and exports can
+    legitimately take several seconds).
+    """
+
+    def get_api(self):
+        if self.connected:
+            return self.api
+        self.socket_timeout = settings.MIKROTIK_CONNECT_TIMEOUT
+        try:
+            api = super().get_api()
+        finally:
+            self.socket_timeout = settings.MIKROTIK_READ_TIMEOUT
+        self.socket.settimeout(settings.MIKROTIK_READ_TIMEOUT)
+        return api
+
+
 class MikroTikService:
     """
     MikroTik RouterOS API integration
@@ -117,7 +137,7 @@ class MikroTikService:
         Get connection to MikroTik router
         """
         try:
-            connection = RouterOsApiPool(
+            connection = _TimedApiPool(
                 self.host,
                 username=self.username,
                 password=self.password,
@@ -1391,12 +1411,18 @@ class MikroTikService:
 
             # Each rule is placed above the current first rule, so the
             # last one added ends up on top: drops go in last, above the
-            # LAN accept, so no broad accept can ever shadow them.
+            # LAN/VPN accepts, so no broad accept can ever shadow them.
+            # Accepts match in-interface=WAN too: LAN and VPN traffic (e.g.
+            # UniFi Teleport) arrives via the LAN router on that port, and a
+            # customer spoofing one of those sources can't come in that way.
+            allowed = plan.get('allowed') or [plan['lan_subnet']]
             new_rules = [
                 {'chain': 'input', 'in-interface': vlan, 'protocol': 'udp', 'dst-port': '67',
                  'action': 'accept', 'comment': f'{comment_prefix} (DHCP)'},
-                {'chain': 'forward', 'in-interface': plan['wan_interface'], 'src-address': plan['lan_subnet'],
-                 'dst-address': plan['subnet'], 'action': 'accept', 'comment': f'{comment_prefix} (LAN access)'},
+            ] + [
+                {'chain': 'forward', 'in-interface': plan['wan_interface'], 'src-address': net,
+                 'dst-address': plan['subnet'], 'action': 'accept', 'comment': f'{comment_prefix} [{net}] (Access)'}
+                for net in allowed
             ] + [
                 {'chain': 'forward', 'src-address': blocked, 'dst-address': plan['subnet'],
                  'action': 'drop', 'comment': f'{comment_prefix} [{blocked}] (Block)'}
@@ -1407,7 +1433,7 @@ class MikroTikService:
                 if current:
                     rule['place-before'] = current[0]['id']
                 filter_rules.add(**rule)
-            report.append(f"reachable from {plan['lan_subnet']}")
+            report.append(f"reachable from {', '.join(allowed)}")
             if plan['blocked']:
                 report.append(f"blocked from customer subnets: {', '.join(plan['blocked'])}")
 

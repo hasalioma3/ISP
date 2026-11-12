@@ -7,5 +7,6 @@ teststk.py
 .env
 .env.prod
 .env.local
+.env.test
 backend/.env
 frontend/.env

@@ -14,14 +14,24 @@ echo "🚀 Deploying to Raspberry Pi ($PI_HOST)..."
 # renamed/deleted migration file) -- without it, a deleted file just sits
 # on the Pi forever, which is exactly what caused a migration-graph
 # conflict (two divergent migration chains, old + new) on a prior deploy.
-# .env.prod is intentionally copied from this machine to configure the
-# deployment. The other excluded paths are server-only or generated secrets.
+# The test server gets its own env file: this Mac's .env.prod runs the
+# local stack on SQLite, and copying it over left the test server writing
+# to backend/db.sqlite3 (which every rsync then overwrote with this Mac's
+# copy) while its Postgres container sat uninitialised. .env.test is
+# installed as the Pi's .env.prod below. The other excluded paths are
+# server-only, generated secrets, or local data.
+if [ ! -f .env.test ]; then
+    echo "❌ .env.test not found -- create it (Postgres settings for the test server) first."
+    exit 1
+fi
 echo "📦 Syncing files..."
 rsync -avz --delete --progress \
     --exclude 'node_modules' --exclude '.git' --exclude '__pycache__' \
-    --exclude '.env' --exclude 'backend/.env' --exclude 'frontend/.env' \
+    --exclude '.env' --exclude '.env.prod' --exclude '.env.test' --exclude 'backend/.env' --exclude 'frontend/.env' \
+    --exclude 'backend/db.sqlite3' \
     --exclude 'companies/*.env' --exclude 'vps' --exclude 'teststk.py' \
     ./ ${PI_USER}@${PI_HOST}:${REMOTE_DIR}/
+rsync -av .env.test ${PI_USER}@${PI_HOST}:${REMOTE_DIR}/.env.prod
 
 # 2. Remote Commands
 echo "🔧 Executing remote rebuild..."
@@ -63,6 +73,11 @@ ssh -t ${PI_USER}@${PI_HOST} "\
     docker compose down && \
     echo '🏗️ Rebuilding and Starting...' && \
     docker compose --progress=plain up -d --build --force-recreate && \
+    echo '⏳ Waiting for Postgres to accept connections...' && \
+    for i in \$(seq 1 60); do \
+        docker compose exec -T db sh -c 'pg_isready -h localhost -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\"' >/dev/null 2>&1 && break; \
+        sleep 2; \
+    done && \
     echo '✨ Applying migrations...' && \
     docker compose exec -T backend python manage.py migrate && \
     if ! docker compose exec -T backend python manage.py shell -c 'from apps.customers.models import Customer; import sys; sys.exit(0 if Customer.objects.filter(is_superuser=True).exists() else 1)' >/dev/null 2>&1; then \

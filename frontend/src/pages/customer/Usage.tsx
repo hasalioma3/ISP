@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { billingAPI } from '../../services/api';
 import { Activity } from 'lucide-react';
+import { Panel, formatDateEAT } from '../../components/savanna';
 
 export default function Usage() {
     const { data: usageRecords, isLoading } = useQuery({
@@ -11,11 +12,39 @@ export default function Usage() {
         },
     });
 
+    const { data: summary } = useQuery({
+        queryKey: ['usage-summary'],
+        queryFn: async () => (await billingAPI.getUsageSummary()).data,
+    });
+    const cards = [
+        {
+            title: summary?.plan_totals ? `Current plan · ${summary.plan_totals.plan_name}` : 'Current plan',
+            note: summary?.plan_totals
+                ? `Since ${formatDateEAT(summary.plan_totals.start_date)}`
+                  + (summary.plan_totals.data_limit_gb ? ` · cap ${summary.plan_totals.data_limit_gb} GB` : '')
+                : 'No active plan',
+            t: summary?.plan_totals,
+        },
+        { title: 'All time', note: 'Everything recorded on your account', t: summary?.totals },
+    ];
+
     return (
         <div>
             <h1 className="text-2xl font-bold text-foreground mb-6 flex items-center gap-2">
                 <Activity className="h-6 w-6 text-muted-foreground" /> Data Usage
             </h1>
+            <div className="mb-6 grid grid-cols-1 gap-[18px] sm:grid-cols-2">
+                {cards.map(({ title, note, t }) => (
+                    <Panel key={title}>
+                        <p className="text-[15px] font-bold text-foreground">{title}</p>
+                        <p className="text-[12.5px] text-muted-foreground">{note}</p>
+                        <p className="num mt-4 text-[32px] font-extrabold leading-none text-foreground">
+                            {t ? t.total_gb : '—'} {t && <span className="text-[15px] font-medium text-muted-foreground">GB</span>}
+                        </p>
+                        {t && <p className="num mt-2 text-[13px] text-muted-foreground">↑ {t.upload_gb} GB upload · ↓ {t.download_gb} GB download</p>}
+                    </Panel>
+                ))}
+            </div>
 
             {isLoading ? (
                 <div className="text-center py-12 text-muted-foreground">

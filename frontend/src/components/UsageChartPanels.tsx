@@ -16,16 +16,16 @@ export default function UsageChartPanels({ chart, loading, title }: { chart: any
         <div>
             {title && <h4 className="text-sm font-bold mb-3">{title}</h4>}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="border rounded-lg overflow-hidden">
-                    <div className="bg-primary text-white text-sm font-bold px-4 py-2">Today's Data Usage</div>
+                <div className="rounded-2xl border border-border-soft bg-surface2 overflow-hidden">
+                    <div className="px-4 pt-3.5 text-[13px] font-bold text-foreground">Today's Data Usage</div>
                     <div className="p-4">
                         <div className="h-40">
                             {hasToday ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
-                                        <Pie data={donutData} dataKey="value" innerRadius={40} outerRadius={65} paddingAngle={2}>
-                                            <Cell fill="#a78bfa" />
-                                            <Cell fill="#2dd4bf" />
+                                        <Pie data={donutData} dataKey="value" innerRadius={44} outerRadius={66} paddingAngle={2} stroke="var(--sv-surface)">
+                                            <Cell fill="#F2772E" />
+                                            <Cell fill="#0B4D33" />
                                         </Pie>
                                         <Tooltip formatter={(v: number) => `${v} GB`} />
                                     </PieChart>
@@ -42,31 +42,31 @@ export default function UsageChartPanels({ chart, loading, title }: { chart: any
                     </div>
                 </div>
 
-                <div className="border rounded-lg overflow-hidden">
-                    <div className="bg-primary text-white text-sm font-bold px-4 py-2">Weekly Data Usage</div>
+                <div className="rounded-2xl border border-border-soft bg-surface2 overflow-hidden">
+                    <div className="px-4 pt-3.5 text-[13px] font-bold text-foreground">Weekly Data Usage</div>
                     <div className="p-4 h-56">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={chart.weekly}>
-                                <XAxis dataKey="day" tick={{ fontSize: 10 }} tickFormatter={(d: string) => d.slice(0, 3)} />
-                                <YAxis tick={{ fontSize: 10 }} />
+                                <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'var(--sv-faint)' }} tickLine={false} axisLine={false} tickFormatter={(d: string) => d.slice(0, 3)} />
+                                <YAxis tick={{ fontSize: 10, fill: 'var(--sv-faint)' }} tickLine={false} axisLine={false} />
                                 <Tooltip formatter={(v: number) => `${v} GB`} />
-                                <Bar dataKey="upload_gb" stackId="a" fill="#a78bfa" name="Upload" />
-                                <Bar dataKey="download_gb" stackId="a" fill="#2dd4bf" name="Download" />
+                                <Bar dataKey="upload_gb" stackId="a" fill="#F2772E" name="Upload" />
+                                <Bar dataKey="download_gb" stackId="a" fill="#0B4D33" name="Download" radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                <div className="border rounded-lg overflow-hidden">
-                    <div className="bg-primary text-white text-sm font-bold px-4 py-2">Monthly Data Usage</div>
+                <div className="rounded-2xl border border-border-soft bg-surface2 overflow-hidden">
+                    <div className="px-4 pt-3.5 text-[13px] font-bold text-foreground">Monthly Data Usage</div>
                     <div className="p-4 h-56">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={chart.monthly}>
-                                <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                                <YAxis tick={{ fontSize: 10 }} />
+                                <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--sv-faint)' }} tickLine={false} axisLine={false} />
+                                <YAxis tick={{ fontSize: 10, fill: 'var(--sv-faint)' }} tickLine={false} axisLine={false} />
                                 <Tooltip formatter={(v: number) => `${v} GB`} />
-                                <Bar dataKey="upload_gb" stackId="a" fill="#a78bfa" name="Upload" />
-                                <Bar dataKey="download_gb" stackId="a" fill="#2dd4bf" name="Download" />
+                                <Bar dataKey="upload_gb" stackId="a" fill="#F2772E" name="Upload" />
+                                <Bar dataKey="download_gb" stackId="a" fill="#0B4D33" name="Download" radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>

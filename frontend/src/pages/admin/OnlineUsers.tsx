@@ -110,15 +110,17 @@ export default function OnlineUsers() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Expires On</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Method</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Router</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase" title="Data recorded during the current plan period">This plan</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase" title="All data ever recorded for this customer">All time</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Status</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Manage</th>
                             </tr>
                         </thead>
                         <tbody className="bg-card divide-y divide-border">
                             {isLoading ? (
-                                <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
+                                <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
                             ) : filtered.length === 0 ? (
-                                <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">No users currently online.</td></tr>
+                                <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">No users currently online.</td></tr>
                             ) : filtered.map((u: any) => (
                                 <tr key={u.session_id} className="hover:bg-secondary">
                                     <td className="px-6 py-4 text-sm font-medium text-primary">{u.username}</td>
@@ -132,10 +134,21 @@ export default function OnlineUsers() {
                                     </td>
                                     <td className="px-6 py-4 text-sm text-muted-foreground">{u.method}</td>
                                     <td className="px-6 py-4 text-sm text-muted-foreground">{u.router}</td>
+                                    <td className="num px-6 py-4 text-right text-sm font-semibold text-foreground whitespace-nowrap">
+                                        {u.period_usage_gb != null ? `${u.period_usage_gb} GB` : '—'}
+                                    </td>
+                                    <td className="num px-6 py-4 text-right text-sm text-muted-foreground whitespace-nowrap">{u.total_usage_gb} GB</td>
                                     <td className="px-6 py-4">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            Online
-                                        </span>
+                                        {u.router_online === false ? (
+                                            // Last known session on a router the poll can't reach.
+                                            <span title="This router is unreachable, so this is the last known session." className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                Router offline
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                Online
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2">

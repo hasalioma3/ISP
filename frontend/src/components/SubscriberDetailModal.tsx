@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, billingAPI } from '../services/api';
-import { X, Save, PlusCircle, Eye, EyeOff, KeyRound, Wallet, ArrowLeftRight, Pencil } from 'lucide-react';
+import { X, Save, PlusCircle, Eye, EyeOff, KeyRound, Wallet, ArrowLeftRight, Pencil, CalendarClock } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import UsageChartPanels from './UsageChartPanels';
@@ -16,6 +16,10 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
     const [showPasswords, setShowPasswords] = useState(false);
     const [pppoeDraft, setPppoeDraft] = useState<{ pppoe_username: string; pppoe_password: string } | null>(null);
     const isSuperuser = useAuthStore((state) => state.user?.is_superuser);
+    const role = useAuthStore((state) => state.user?.role);
+    // Technicians can't extend subscriptions or add money (enforced by the API too).
+    const canHandleMoney = !!isSuperuser || role !== 'technician';
+    const [extendTo, setExtendTo] = useState('');
     const queryClient = useQueryClient();
 
     const { data: subscriber, isLoading } = useQuery({
@@ -114,6 +118,28 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
         },
         onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to switch plan')
     });
+
+    const extendMutation = useMutation({
+        mutationFn: () => adminAPI.extendSubscriber(id, extendTo),
+        onSuccess: (res) => {
+            toast.success(res.data.message || 'Subscription extended');
+            setExtendTo('');
+            queryClient.invalidateQueries({ queryKey: ['admin-subscribers'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-subscriber-summary'] });
+            queryClient.invalidateQueries({ queryKey: ['subscriber', id] });
+            queryClient.invalidateQueries({ queryKey: ['subscriber-usage', id] });
+        },
+        onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to extend subscription'),
+    });
+    const isExpired = !subscriber?.calculated_expiry || new Date(subscriber.calculated_expiry).getTime() <= Date.now()
+        || subscriber?.current_plan_status !== 'active';
+    const confirmExtend = () => {
+        const when = new Date(extendTo).toLocaleString('en-GB', { timeZone: 'Africa/Nairobi', dateStyle: 'medium', timeStyle: 'short' });
+        const what = isExpired ? 'Reactivate and extend' : 'Extend';
+        if (window.confirm(`${what} ${subscriber?.current_plan_name || 'the plan'} until ${when}? No payment is recorded; the customer and the staff alert number are notified.`)) {
+            extendMutation.mutate();
+        }
+    };
 
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
@@ -279,19 +305,28 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                                 <div className="mb-6">
                                     <UsageChartPanels chart={usageData?.chart} loading={false} />
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                                    <div className="bg-secondary rounded-lg p-4 text-center">
-                                        <p className="text-xs text-muted-foreground uppercase">All-Time Upload</p>
-                                        <p className="text-xl font-bold">{usageData?.totals.upload_gb} GB</p>
-                                    </div>
-                                    <div className="bg-secondary rounded-lg p-4 text-center">
-                                        <p className="text-xs text-muted-foreground uppercase">All-Time Download</p>
-                                        <p className="text-xl font-bold">{usageData?.totals.download_gb} GB</p>
-                                    </div>
-                                    <div className="bg-secondary rounded-lg p-4 text-center">
-                                        <p className="text-xs text-muted-foreground uppercase">All-Time Total</p>
-                                        <p className="text-xl font-bold">{usageData?.totals.total_gb} GB</p>
-                                    </div>
+                                {/* Current plan period alongside all time. */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                                    {[
+                                        {
+                                            title: usageData?.plan_totals ? `Current plan · ${usageData.plan_totals.plan_name}` : 'Current plan',
+                                            note: usageData?.plan_totals
+                                                ? `Since ${format(new Date(usageData.plan_totals.start_date), 'd MMM yyyy')}`
+                                                  + (usageData.plan_totals.data_limit_gb ? ` · cap ${usageData.plan_totals.data_limit_gb} GB` : '')
+                                                : 'No active plan',
+                                            t: usageData?.plan_totals,
+                                        },
+                                        { title: 'All time', note: 'Everything recorded for this subscriber', t: usageData?.totals },
+                                    ].map(({ title, note, t }) => (
+                                        <div key={title} className="rounded-2xl border border-border bg-secondary/60 p-4">
+                                            <p className="text-sm font-bold text-foreground">{title}</p>
+                                            <p className="text-xs text-muted-foreground">{note}</p>
+                                            <p className="num mt-3 text-2xl font-extrabold text-foreground">{t ? `${t.total_gb} GB` : '—'}</p>
+                                            {t && (
+                                                <p className="num mt-1 text-xs text-muted-foreground">↑ {t.upload_gb} GB · ↓ {t.download_gb} GB</p>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
                                 <h4 className="text-sm font-bold mb-2">Session History</h4>
                                 <div className="overflow-x-auto">
@@ -322,74 +357,114 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                         )
                     ) : (
                         <div className="space-y-6">
-                            <div className="bg-primary/10 rounded-lg p-4">
-                                <h4 className="text-sm font-bold mb-1 flex items-center gap-2"><Wallet className="h-4 w-4" /> Account Balance</h4>
-                                <p className="text-2xl font-bold text-primary mb-3">KES {Number(subscriber?.account_balance || 0).toLocaleString()}</p>
-                                <div className="flex flex-col sm:flex-row gap-2">
-                                    <input
-                                        type="number" min="0" step="0.01" placeholder="Amount to add"
-                                        className="flex-1 border rounded-lg px-3 py-2 text-sm"
-                                        value={balanceAmount}
-                                        onChange={e => setBalanceAmount(e.target.value)}
-                                    />
-                                    <button
-                                        disabled={!balanceAmount || addBalanceMutation.isPending}
-                                        onClick={() => addBalanceMutation.mutate()}
-                                        className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm font-medium"
-                                    >
-                                        <PlusCircle className="h-4 w-4 mr-2" />
-                                        {addBalanceMutation.isPending ? 'Adding...' : 'Add to Balance'}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="bg-secondary rounded-lg p-4">
-                                <h4 className="text-sm font-bold mb-3">Assign / Top Up / Switch Plan</h4>
-                                <div className="flex flex-col sm:flex-row gap-2">
-                                    <select
-                                        className="flex-1 border rounded-lg px-3 py-2 text-sm"
-                                        value={topUpPlanId}
-                                        onChange={e => setTopUpPlanId(e.target.value)}
-                                    >
-                                        <option value="">Select a plan...</option>
-                                        {plans?.map((plan: any) => (
-                                            <option key={plan.id} value={plan.id}>{plan.name} - KES {plan.price}</option>
-                                        ))}
-                                    </select>
-                                    <button
-                                        disabled={!topUpPlanId || topUpMutation.isPending}
-                                        onClick={() => topUpMutation.mutate()}
-                                        title="Record a fresh cash payment for this plan"
-                                        className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium"
-                                    >
-                                        <PlusCircle className="h-4 w-4 mr-2" />
-                                        {topUpMutation.isPending ? 'Assigning...' : 'Confirm (Cash)'}
-                                    </button>
-                                    <button
-                                        disabled={!topUpPlanId || switchPlanMutation.isPending}
-                                        onClick={() => switchPlanMutation.mutate()}
-                                        title="Pay for this plan from the customer's existing account balance instead"
-                                        className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm font-medium"
-                                    >
-                                        <ArrowLeftRight className="h-4 w-4 mr-2" />
-                                        {switchPlanMutation.isPending ? 'Switching...' : 'Switch (Use Balance)'}
-                                    </button>
-                                </div>
-                                {plans?.find((p: any) => String(p.id) === topUpPlanId)?.service_type === 'static' && !subscriber?.static_ip_address && (
-                                    <div className="mt-3">
-                                        <label className="block text-sm font-medium text-foreground/80 mb-1">Static IP Address</label>
+                            {isSuperuser && (
+                                <div className="rounded-lg border border-primary/30 bg-accent p-4">
+                                    <h4 className="text-sm font-bold mb-1 flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Extend to a date</h4>
+                                    <p className="text-xs text-muted-foreground mb-3">
+                                        {subscriber?.current_plan_name
+                                            ? <>Current: <span className="font-semibold text-foreground">{subscriber.current_plan_name}</span>{' '}
+                                                {subscriber.calculated_expiry ? `${isExpired ? 'expired' : 'expires'} ${format(new Date(subscriber.calculated_expiry), 'd MMM yyyy HH:mm')}` : ''}.
+                                                {isExpired && ' Extending reactivates it on the router.'}</>
+                                            : 'This subscriber has no plan yet; assign one first.'}
+                                        {' '}Superadmin only. No payment is recorded.
+                                    </p>
+                                    <div className="flex flex-col sm:flex-row gap-2">
                                         <input
-                                            type="text" placeholder="10.5.70.50"
-                                            className="w-full border rounded-lg px-3 py-2 text-sm"
-                                            value={topUpStaticIp}
-                                            onChange={e => setTopUpStaticIp(e.target.value)}
+                                            type="datetime-local"
+                                            aria-label="New expiry date and time"
+                                            className="flex-1 border rounded-lg px-3 py-2 text-sm"
+                                            min={format(new Date(), "yyyy-MM-dd'T'HH:mm")}
+                                            value={extendTo}
+                                            onChange={(e) => setExtendTo(e.target.value)}
                                         />
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            This customer has no static IP on file yet -- enter the fixed IP already configured on their device.
-                                        </p>
+                                        <button
+                                            disabled={!extendTo || !subscriber?.current_plan_name || extendMutation.isPending}
+                                            onClick={confirmExtend}
+                                            className="flex items-center justify-center px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm font-medium"
+                                        >
+                                            <CalendarClock className="h-4 w-4 mr-2" />
+                                            {extendMutation.isPending ? 'Saving...' : isExpired ? 'Reactivate & extend' : 'Extend'}
+                                        </button>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
+
+                            {canHandleMoney ? (
+                                <>
+                                <div className="bg-primary/10 rounded-lg p-4">
+                                    <h4 className="text-sm font-bold mb-1 flex items-center gap-2"><Wallet className="h-4 w-4" /> Account Balance</h4>
+                                    <p className="text-2xl font-bold text-primary mb-3">KES {Number(subscriber?.account_balance || 0).toLocaleString()}</p>
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                        <input
+                                            type="number" min="0" step="0.01" placeholder="Amount to add"
+                                            className="flex-1 border rounded-lg px-3 py-2 text-sm"
+                                            value={balanceAmount}
+                                            onChange={e => setBalanceAmount(e.target.value)}
+                                        />
+                                        <button
+                                            disabled={!balanceAmount || addBalanceMutation.isPending}
+                                            onClick={() => addBalanceMutation.mutate()}
+                                            className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm font-medium"
+                                        >
+                                            <PlusCircle className="h-4 w-4 mr-2" />
+                                            {addBalanceMutation.isPending ? 'Adding...' : 'Add to Balance'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="bg-secondary rounded-lg p-4">
+                                    <h4 className="text-sm font-bold mb-3">Assign / Top Up / Switch Plan</h4>
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                        <select
+                                            className="flex-1 border rounded-lg px-3 py-2 text-sm"
+                                            value={topUpPlanId}
+                                            onChange={e => setTopUpPlanId(e.target.value)}
+                                        >
+                                            <option value="">Select a plan...</option>
+                                            {plans?.map((plan: any) => (
+                                                <option key={plan.id} value={plan.id}>{plan.name} - KES {plan.price}</option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            disabled={!topUpPlanId || topUpMutation.isPending}
+                                            onClick={() => topUpMutation.mutate()}
+                                            title="Record a fresh cash payment for this plan"
+                                            className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium"
+                                        >
+                                            <PlusCircle className="h-4 w-4 mr-2" />
+                                            {topUpMutation.isPending ? 'Assigning...' : 'Confirm (Cash)'}
+                                        </button>
+                                        <button
+                                            disabled={!topUpPlanId || switchPlanMutation.isPending}
+                                            onClick={() => switchPlanMutation.mutate()}
+                                            title="Pay for this plan from the customer's existing account balance instead"
+                                            className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm font-medium"
+                                        >
+                                            <ArrowLeftRight className="h-4 w-4 mr-2" />
+                                            {switchPlanMutation.isPending ? 'Switching...' : 'Switch (Use Balance)'}
+                                        </button>
+                                    </div>
+                                    {plans?.find((p: any) => String(p.id) === topUpPlanId)?.service_type === 'static' && !subscriber?.static_ip_address && (
+                                        <div className="mt-3">
+                                            <label className="block text-sm font-medium text-foreground/80 mb-1">Static IP Address</label>
+                                            <input
+                                                type="text" placeholder="10.5.70.50"
+                                                className="w-full border rounded-lg px-3 py-2 text-sm"
+                                                value={topUpStaticIp}
+                                                onChange={e => setTopUpStaticIp(e.target.value)}
+                                            />
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                This customer has no static IP on file yet -- enter the fixed IP already configured on their device.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                                </>
+                            ) : (
+                                <div className="rounded-lg bg-secondary p-4 text-sm text-muted-foreground">
+                                    Recharging plans and adding money are handled by admins and sales. Ask one of them, or the superadmin, to renew this subscriber.
+                                </div>
+                            )}
 
                             <div>
                                 <h4 className="text-sm font-bold mb-2">Subscription History</h4>

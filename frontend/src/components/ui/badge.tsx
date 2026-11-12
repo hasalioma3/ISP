@@ -14,8 +14,8 @@ const badgeVariants = cva(
         outline: "text-foreground",
         // Semantic status variants -- kept separate from the brand accent so
         // status is readable at a glance without borrowing purple.
-        success: "border-transparent bg-green-100 text-green-800",
-        warning: "border-transparent bg-amber-100 text-amber-800",
+        success: "border-transparent bg-ok-bg text-ok",
+        warning: "border-transparent bg-warn-bg text-warn",
       },
     },
     defaultVariants: {

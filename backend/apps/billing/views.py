@@ -238,6 +238,12 @@ class UsageRecordViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         return UsageRecord.objects.filter(customer=self.request.user)
 
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        """This customer's usage: current plan period and all time."""
+        from apps.billing.usage_stats import usage_summary
+        return Response(usage_summary(request.user))
+
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAdminUser
@@ -251,6 +257,66 @@ from apps.billing.models import Voucher, VoucherBatch
 from apps.billing.serializers import (
     VoucherBatchSerializer, VoucherGenerationSerializer, VoucherRedeemSerializer
 )
+
+
+# Voucher codes: 4 letters, typed on a phone at a hotspot, so short and
+# unambiguous. I and O are left out (read as 1 and 0); stored uppercase and
+# matched case-insensitively. 24^4 = 331,776 possible codes.
+VOUCHER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+VOUCHER_CODE_LENGTH = 4
+
+# A 4-letter code is guessable, and redeem is public, so wrong guesses are
+# limited. Hotspot users at one site share the router's public IP, so the
+# per-IP limit is generous (it mainly stops someone scripting from outside)
+# and the per-device (MAC) limit is the tight one.
+REDEEM_FAILURES_PER_MAC = 5
+REDEEM_FAILURES_PER_IP = 30
+REDEEM_FAILURE_WINDOW = 15 * 60
+
+
+def _new_voucher_codes(count):
+    """`count` unique codes that don't clash with any voucher or username (any case)."""
+    import secrets
+    from apps.customers.models import Customer
+
+    codes = set()
+    attempts = 0
+    while len(codes) < count:
+        attempts += 1
+        if attempts > count * 50:
+            raise ValueError('Ran out of free voucher codes; use up or delete old vouchers first.')
+        code = ''.join(secrets.choice(VOUCHER_CODE_ALPHABET) for _ in range(VOUCHER_CODE_LENGTH))
+        if code in codes:
+            continue
+        if Voucher.objects.filter(code__iexact=code).exists() or Customer.objects.filter(username__iexact=code).exists():
+            continue
+        codes.add(code)
+    return list(codes)
+
+
+def _redeem_client_keys(request, mac_address):
+    forwarded = (request.META.get('HTTP_X_FORWARDED_FOR') or '').split(',')[0].strip()
+    ip = forwarded or request.META.get('REMOTE_ADDR', '')
+    keys = [(f'voucher-fail:ip:{ip}', REDEEM_FAILURES_PER_IP)]
+    if mac_address:
+        keys.append((f'voucher-fail:mac:{mac_address}', REDEEM_FAILURES_PER_MAC))
+    return keys
+
+
+def _redeem_blocked(keys):
+    from django.core.cache import cache
+    return any((cache.get(key) or 0) >= limit for key, limit in keys)
+
+
+def _record_redeem_failure(keys):
+    from django.core.cache import cache
+    for key, _ in keys:
+        if cache.add(key, 1, REDEEM_FAILURE_WINDOW):
+            continue
+        try:
+            cache.incr(key)
+        except ValueError:
+            cache.set(key, 1, REDEEM_FAILURE_WINDOW)
 
 
 class VoucherBatchViewSet(viewsets.ReadOnlyModelViewSet):
@@ -295,16 +361,13 @@ class VoucherGenerationView(APIView):
                 )
                 
                 vouchers_to_create = []
-                # Use uppercase and digits for 6-char codes to ensure enough entropy
-                chars = string.ascii_uppercase + string.digits
-                
-                for _ in range(quantity):
-                    # Generate 6-char alphanumeric code
-                    code = ''.join(random.choices(chars, k=6))
-                    # Ensure uniqueness
-                    while Voucher.objects.filter(code=code).exists():
-                        code = ''.join(random.choices(chars, k=6))
-                        
+                try:
+                    codes = _new_voucher_codes(quantity)
+                except ValueError as e:
+                    transaction.set_rollback(True)
+                    return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
+
+                for code in codes:
                     vouchers_to_create.append(Voucher(
                         batch=batch,
                         code=code,
@@ -363,12 +426,20 @@ class VoucherRedeemView(APIView):
     def post(self, request):
         serializer = VoucherRedeemSerializer(data=request.data)
         if serializer.is_valid():
-            code = serializer.validated_data['code']
+            # Not case sensitive: "abcd", "AbCd" and "ABCD" are the same code.
+            code = serializer.validated_data['code'].strip().upper()
             mac_address = (serializer.validated_data.get('mac_address') or '').strip().upper().replace('-', ':') or None
-            
-            try:
-                voucher = Voucher.objects.select_related('plan').get(code=code)
-            except Voucher.DoesNotExist:
+
+            client_keys = _redeem_client_keys(request, mac_address)
+            if _redeem_blocked(client_keys):
+                return Response(
+                    {'error': 'Too many wrong voucher codes. Please wait 15 minutes and try again.'},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
+            voucher = Voucher.objects.select_related('plan').filter(code__iexact=code).first()
+            if not voucher:
+                _record_redeem_failure(client_keys)
                 return Response({'error': 'Invalid voucher code'}, status=status.HTTP_400_BAD_REQUEST)
             
             if voucher.status != 'active':

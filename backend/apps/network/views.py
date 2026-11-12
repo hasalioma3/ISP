@@ -25,7 +25,7 @@ class RouterViewSet(viewsets.ModelViewSet):
     serializer_class = RouterSerializer
 
     def get_permissions(self):
-        if self.action in ['list', 'retrieve', 'sync_profiles', 'sync_users', 'health']:
+        if self.action in ['list', 'retrieve', 'sync_profiles', 'sync_users', 'sync_users_status', 'health']:
             return [RoleAllowed('admin', 'technician')()]
         return [RoleAllowed('admin')()]
 
@@ -33,21 +33,48 @@ class RouterViewSet(viewsets.ModelViewSet):
     def health(self, request):
         """
         Live CPU/RAM/disk + WAN traffic counters for every active router,
-        for the admin dashboard's Router View card. Hits each router
-        directly (not DB-cached, unlike the online-user counts) -- fine for
-        a 10s poll across a handful of routers, not meant for hundreds.
+        for the admin dashboard's Router View card and Network Ops' live
+        graph. Reachable routers are read live (the WAN counters are diffed
+        between polls, so they must be fresh). A router already known to be
+        offline is answered from its stored state without being contacted:
+        before this, every 10s dashboard poll waited out the connect timeout
+        on each offline router and the portal hung. The usage poll keeps
+        re-checking offline routers, so they come back by themselves.
+        Live reads run in parallel so one slow router doesn't delay the rest.
         """
-        results = {}
-        routers = Router.objects.filter(is_active=True)
+        from concurrent.futures import ThreadPoolExecutor
+        from apps.network.services import router_status
+
+        routers = list(Router.objects.filter(is_active=True))
         router_param = request.query_params.get('router')
         if router_param:
-            routers = routers.filter(id=router_param)
+            routers = [r for r in routers if str(r.id) == router_param]
+
+        results = {}
+        live = []
         for router in routers:
-            mikrotik = MikroTikService(
+            if router_status.known_offline(router):
+                results[router.id] = router_status.cached_health(router)
+            else:
+                live.append(router)
+
+        def read(router):
+            return MikroTikService(
                 host=router.ip_address, username=router.username,
                 password=router.password, port=router.port, use_ssl=router.use_ssl
-            )
-            results[router.id] = mikrotik.get_system_health()
+            ).get_system_health()
+
+        if live:
+            with ThreadPoolExecutor(max_workers=min(len(live), 8)) as pool:
+                healths = list(pool.map(read, live))
+            # DB writes stay on this thread (Django connections are per-thread).
+            for router, health in zip(live, healths):
+                if health.get('success'):
+                    router_status.mark_online(router, health)
+                    results[router.id] = {**health, 'online': True}
+                else:
+                    router_status.mark_offline(router, health.get('error'))
+                    results[router.id] = router_status.cached_health(router)
         return Response(results)
 
     @action(detail=True, methods=['post'])
@@ -247,12 +274,38 @@ class RouterViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def sync_users(self, request, pk=None):
-        """Push all active subscriptions to this router as PPPoE secrets / Hotspot users."""
+        """
+        Push all active subscriptions to this router as PPPoE secrets /
+        Hotspot users / static queues -- in the background (see
+        tasks.sync_router_users): with dozens of customers this outlasts
+        the web request timeout. Poll sync_users_status for the result.
+        """
+        from datetime import timedelta
+        from django.utils import timezone
+        from django.utils.dateparse import parse_datetime
+        from apps.network.tasks import sync_router_users
+
         router = self.get_object()
-        result = network_automation.sync_all_users(router=router)
-        if result.get('error'):
-            return Response(result, status=400)
-        return Response(result)
+        current = router.last_user_sync or {}
+        started = parse_datetime(current.get('started_at') or '')
+        # A run that never reported back (worker restarted mid-sync) mustn't
+        # block new runs forever.
+        if current.get('status') == 'running' and started and timezone.now() - started < timedelta(minutes=15):
+            return Response({'running': True, 'started_at': current['started_at']})
+
+        state = {'status': 'running', 'started_at': timezone.now().isoformat()}
+        Router.objects.filter(pk=router.pk).update(last_user_sync=state)
+        try:
+            sync_router_users.delay(router.pk)
+        except Exception as e:
+            Router.objects.filter(pk=router.pk).update(last_user_sync=None)
+            return Response({'error': f'Could not start the sync -- is the Celery worker running? ({e})'}, status=503)
+        return Response({'running': True, 'started_at': state['started_at']}, status=202)
+
+    @action(detail=True, methods=['get'])
+    def sync_users_status(self, request, pk=None):
+        """Outcome of the last background Sync Users run (see sync_users)."""
+        return Response(self.get_object().last_user_sync or {'status': 'none'})
 
 
 class OnlineUsersView(APIView):
@@ -273,12 +326,32 @@ class OnlineUsersView(APIView):
         if service_type in ('hotspot', 'pppoe', 'static'):
             sessions = sessions.filter(session_type=service_type)
 
+        from django.db.models import Sum
+        from apps.billing.models import UsageRecord
+
+        sessions = list(sessions)
+        customer_ids = {s.customer_id for s in sessions}
+        active_subs = {}
+        for sub in Subscription.objects.filter(customer_id__in=customer_ids, status='active').order_by('created_at'):
+            active_subs[sub.customer_id] = sub  # latest active wins
+        GB = 1024 ** 3
+
+        def totals(qs, key):
+            return {
+                row[key]: ((row['up'] or 0) + (row['down'] or 0)) / GB
+                for row in qs.values(key).annotate(up=Sum('upload_bytes'), down=Sum('download_bytes'))
+            }
+        # Two grouped queries for the whole page rather than two per row.
+        all_time = totals(UsageRecord.objects.filter(customer_id__in=customer_ids), 'customer_id')
+        period = totals(
+            UsageRecord.objects.filter(subscription_id__in=[sub.id for sub in active_subs.values()]),
+            'subscription_id',
+        )
+
         data = []
         for s in sessions:
             customer = s.customer
-            subscription = Subscription.objects.filter(
-                customer=customer, status='active'
-            ).order_by('-created_at').first()
+            subscription = active_subs.get(customer.id)
             transaction = Transaction.objects.filter(
                 customer=customer, status='completed'
             ).order_by('-created_at').first()
@@ -302,10 +375,16 @@ class OnlineUsersView(APIView):
                 'expires_on': subscription.expiry_date if subscription else None,
                 'method': method,
                 'router': s.router.name,
-                'status': 'online',
+                # The usage poll can't refresh (or drop) sessions on a router
+                # it can't reach, so these are the last known sessions there.
+                'router_online': s.router.is_online is not False,
+                'status': 'online' if s.router.is_online is not False else 'router offline',
                 'last_seen': s.last_update,
                 'upload_gb': round(s.upload_bytes / (1024 ** 3), 2),
                 'download_gb': round(s.download_bytes / (1024 ** 3), 2),
+                # Recorded usage (UsageRecord): this plan period, and ever.
+                'period_usage_gb': round(period.get(subscription.id, 0), 2) if subscription else None,
+                'total_usage_gb': round(all_time.get(customer.id, 0), 2),
             })
 
         return Response(data)
@@ -370,6 +449,12 @@ class MySessionView(APIView):
 
         if not router:
             return Response({'active': False})
+
+        # Don't make the customer's widget wait on a router we already know
+        # is down (see router_status).
+        from apps.network.services import router_status
+        if router_status.known_offline(router):
+            return Response({'active': False, 'router_offline': True})
 
         mikrotik = MikroTikService(
             host=router.ip_address, username=router.username,

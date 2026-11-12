@@ -325,3 +325,51 @@ def send_voucher_notification(voucher_id, recipient, channel, customer_id=None):
         channel=channel, recipient=recipient, message=message,
         event_type='voucher_send', customer=customer,
     )
+
+
+@shared_task
+def send_staff_alert(message, customer_id=None, subscription_id=None):
+    """
+    Tell the configured manager number (NotificationSettings.staff_alert_phone)
+    about a money-affecting manual action: a subscription extended or cash
+    added to an account. Enqueued with transaction.on_commit by the admin
+    actions in apps.customers.views, so it only goes out once the change is
+    saved. Logged like every other message; does nothing if no number is set.
+    """
+    from apps.customers.models import Customer
+    from apps.billing.models import Subscription
+
+    settings_obj = NotificationSettings.load()
+    if not settings_obj.staff_alert_phone:
+        return
+    send_and_log(
+        channel=settings_obj.staff_alert_channel or 'sms',
+        recipient=settings_obj.staff_alert_phone,
+        message=message,
+        event_type='staff_alert',
+        customer=Customer.objects.filter(id=customer_id).first() if customer_id else None,
+        subscription=Subscription.objects.filter(id=subscription_id).first() if subscription_id else None,
+    )
+
+
+@shared_task
+def send_customer_account_notice(customer_id, message, event_type, subscription_id=None):
+    """
+    SMS the customer about a change staff made to their account (plan
+    recharged or extended, cash credited). Skipped, but still logged as a
+    failure by send_and_log, when they have no phone number.
+    """
+    from apps.customers.models import Customer
+    from apps.billing.models import Subscription
+
+    customer = Customer.objects.filter(id=customer_id).first()
+    if not customer:
+        return
+    send_and_log(
+        channel='sms',
+        recipient=customer.phone_number,
+        message=message,
+        event_type=event_type,
+        customer=customer,
+        subscription=Subscription.objects.filter(id=subscription_id).first() if subscription_id else None,
+    )

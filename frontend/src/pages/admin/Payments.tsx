@@ -20,6 +20,8 @@ interface PaymentRow {
     c2b_payment_id: number | null;
     transaction_id: string;
     customer: string;
+    // Decoded name Safaricom sent with a Buy Goods/Paybill payment (or the matched customer's name).
+    payer_name?: string;
     matched: boolean;
     amount: number;
     method: 'stk' | 'c2b';
@@ -111,7 +113,10 @@ export default function Payments() {
                                 payments.map((p) => (
                                     <tr key={`${p.method}-${p.transaction_id}`} className="hover:bg-secondary transition">
                                         <td className="px-4 py-4 whitespace-nowrap text-sm font-mono text-foreground">{p.transaction_id}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-foreground/80 font-mono">{p.customer}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm">
+                                            {p.payer_name && <span className="block font-semibold text-foreground">{p.payer_name}</span>}
+                                            <span className="block max-w-[220px] truncate font-mono text-xs text-muted-foreground" title={p.customer}>{p.customer}</span>
+                                        </td>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-foreground">KES {Number(p.amount).toLocaleString()}</td>
                                         <td className="px-4 py-4 whitespace-nowrap">
                                             <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium uppercase ${METHOD_BADGE[p.method]}`}>
@@ -209,7 +214,7 @@ function AssignPaymentModal({ payment, onClose, onAssigned }: { payment: Payment
                     <div>
                         <h3 className="text-lg font-bold">Assign Payment</h3>
                         <p className="text-sm text-muted-foreground">
-                            {payment.transaction_id} &middot; KES {Number(payment.amount).toLocaleString()} &middot; unmatched payer {payment.customer.slice(0, 8)}&hellip;
+                            {payment.transaction_id} &middot; KES {Number(payment.amount).toLocaleString()} &middot; unmatched payer {payment.payer_name || `${payment.customer.slice(0, 8)}…`}
                         </p>
                     </div>
                     <button onClick={onClose} className="p-1 text-muted-foreground hover:text-muted-foreground">

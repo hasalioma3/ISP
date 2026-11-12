@@ -44,6 +44,10 @@ export ISP_STATIC_VOLUME=isp_local_static_volume
 export ISP_MEDIA_VOLUME=isp_local_media_volume
 export ISP_WHATSAPP_VOLUME=isp_local_whatsapp_session
 export ISP_SHARED_NETWORK=isp-local_shared_network
+# Distinct from the production defaults (172.28/172.29.0.0/24) so a local
+# stack can never collide with a production-style one on the same host.
+export ISP_NETWORK_SUBNET=172.28.10.0/24
+export ISP_SHARED_SUBNET=172.29.10.0/24
 
 COMPOSE=(docker compose --env-file "$ENV_FILE" --project-name isp-local -f docker-compose.yml)
 

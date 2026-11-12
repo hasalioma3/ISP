@@ -26,6 +26,7 @@ class NotificationSettingsSerializer(serializers.ModelSerializer):
             'whatsapp_enabled', 'whatsapp_sender_number', 'whatsapp_provider', 'whatsapp_at_number',
             'telegram_bot_token', 'telegram_webhook_secret', 'telegram_bot_username',
             'telegram_bot_token_is_set', 'telegram_webhook_secret_is_set',
+            'staff_alert_phone', 'staff_alert_channel',
             'updated_at',
         ]
         read_only_fields = ['updated_at']

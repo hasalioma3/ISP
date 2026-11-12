@@ -280,6 +280,18 @@ MIKROTIK_USERNAME = config('MIKROTIK_USERNAME', default='admin')
 MIKROTIK_PASSWORD = config('MIKROTIK_PASSWORD', default='')
 MIKROTIK_PORT = config('MIKROTIK_PORT', default=8728, cast=int)
 MIKROTIK_USE_SSL = config('MIKROTIK_USE_SSL', default=False, cast=bool)
+# TCP connect + login timeout for the RouterOS API. A reachable router
+# answers in well under a second; routeros-api's own default (15s) meant
+# every request touching an offline router stalled a web worker that long.
+# Reads after login keep the longer MIKROTIK_READ_TIMEOUT so big lists and
+# exports still finish.
+MIKROTIK_CONNECT_TIMEOUT = config('MIKROTIK_CONNECT_TIMEOUT', default=4.0, cast=float)
+MIKROTIK_READ_TIMEOUT = config('MIKROTIK_READ_TIMEOUT', default=15.0, cast=float)
+# How long a router marked offline is trusted as offline before a page
+# request is allowed to try it live again. The usage poll re-checks offline
+# routers every USAGE_POLL_SECONDS regardless, so this only matters when
+# the Celery workers are down.
+MIKROTIK_OFFLINE_RECHECK_SECONDS = config('MIKROTIK_OFFLINE_RECHECK_SECONDS', default=60, cast=int)
 
 # Bridge that Hotspot and PPPoE servers are bound to on every router.
 # Provisioning creates this bridge itself (if missing) and enslaves
@@ -315,6 +327,16 @@ MIKROTIK_MGMT_ALLOWED_SUBNETS = [
 # router, the next free one is picked; the subnet is always chosen
 # automatically from what's free on the router (see plan_management_vlan).
 MIKROTIK_MGMT_VLAN_ID = config('MIKROTIK_MGMT_VLAN_ID', default=90, cast=int)
+
+# Subnets besides the router's own WAN-side LAN that may reach the radio
+# management VLAN -- they arrive through the WAN port via the LAN router,
+# e.g. the UniFi Teleport VPN (192.168.2.0/24). The default lives here, not
+# in .env.prod, because deploy_update.sh doesn't sync .env.prod to the Pi.
+# Customer subnets are always blocked above these, even if they overlap.
+MIKROTIK_MGMT_VLAN_ALLOWED_SUBNETS = [
+    s.strip() for s in config('MIKROTIK_MGMT_VLAN_ALLOWED_SUBNETS', default='192.168.2.0/24').split(',')
+    if s.strip()
+]
 
 # Rate-limit applied to the built-in "default" Hotspot/PPPoE profiles at
 # provisioning time. Whoever ends up on "default" isn't on a real billing

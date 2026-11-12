@@ -57,7 +57,7 @@ def _pool_networks(ranges):
     return networks
 
 
-def plan_management_vlan(layout, wan_interface, bridge, comment_prefix, preferred_vlan_id=90):
+def plan_management_vlan(layout, wan_interface, bridge, comment_prefix, preferred_vlan_id=90, extra_allowed=()):
     """
     Decide the radio management network from what the router actually has
     configured (layout from MikroTikService.read_network_layout):
@@ -68,7 +68,8 @@ def plan_management_vlan(layout, wan_interface, bridge, comment_prefix, preferre
       same /16 as the bridge's own (hotspot) address -- from .90 up, so
       it reads as "next to" the customer subnets -- that overlaps no
       address, pool or the WAN subnet already on the router.
-    - LAN subnet (allowed in): the WAN interface's current network.
+    - Allowed in (through the WAN port): the WAN interface's current
+      network, plus extra_allowed (e.g. a VPN like UniFi Teleport).
     - Blocked: every customer-facing subnet -- the bridge's addresses and
       every IP pool (hotspot, PPPoE, ...).
 
@@ -85,10 +86,15 @@ def plan_management_vlan(layout, wan_interface, bridge, comment_prefix, preferre
     wan_if = ipaddress.ip_interface(wan_addresses[0]['address'])
     lan_subnet = wan_if.network
 
+    try:
+        extra_nets = [ipaddress.ip_network(s, strict=False) for s in extra_allowed]
+    except ValueError as e:
+        raise ValueError(f'Invalid MIKROTIK_MGMT_VLAN_ALLOWED_SUBNETS entry: {e}')
+
     existing = next((v for v in layout['vlans'] if (v['comment'] or '').startswith(comment_prefix)), None)
     mgmt_interface = existing['name'] if existing else None
 
-    used = [lan_subnet]
+    used = [lan_subnet] + extra_nets
     customer = []
     existing_subnet = None
     for a in static_addresses:
@@ -130,6 +136,10 @@ def plan_management_vlan(layout, wan_interface, bridge, comment_prefix, preferre
             raise ValueError(f'No free /24 left in {first_two}.0.0/16 for the management network.')
 
     blocked = sorted({str(n) for n in customer if not n.overlaps(lan_subnet) and not n.overlaps(subnet)})
+    allowed = [str(lan_subnet)]
+    for net in extra_nets:
+        if str(net) not in allowed and not net.overlaps(subnet):
+            allowed.append(str(net))
     return {
         'vlan_id': vlan_id,
         'vlan_name': vlan_name,
@@ -140,6 +150,7 @@ def plan_management_vlan(layout, wan_interface, bridge, comment_prefix, preferre
         'gateway': f'{subnet[1]}/{subnet.prefixlen}',
         'pool_range': f'{subnet[100]}-{subnet[200]}',
         'lan_subnet': str(lan_subnet),
+        'allowed': allowed,
         'blocked': blocked,
         'reused': existing is not None,
     }
@@ -1065,6 +1076,7 @@ class NetworkAutomation:
             plan = plan_management_vlan(
                 layout_res['layout'], settings.MIKROTIK_WAN_INTERFACE, settings.MIKROTIK_PROVISION_INTERFACE,
                 self.MGMT_VLAN_COMMENT_PREFIX, settings.MIKROTIK_MGMT_VLAN_ID,
+                extra_allowed=settings.MIKROTIK_MGMT_VLAN_ALLOWED_SUBNETS,
             )
         except ValueError as e:
             return {'error': str(e)}

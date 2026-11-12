@@ -15,6 +15,9 @@ class SiteSettings(models.Model):
     # "wordmark"-shaped) uploaded logo needs to be fitted/padded into a
     # proper square icon rather than used as-is.
     favicon = models.ImageField(upload_to='site/', blank=True, null=True)
+    # Shown to customers on the self-care "Need help?" card and the
+    # captive portal footer. Blank hides them.
+    support_phone = models.CharField(max_length=30, blank=True, default='')
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { ArrowLeft, Smartphone, CreditCard, CheckCircle, XCircle, Loader, Wallet } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { filterSelfServicePlans } from '../../utils/plans';
+import { formatPlanDuration } from '../../components/savanna/format';
 
 export default function Payment() {
     const [searchParams] = useSearchParams();
@@ -161,7 +162,7 @@ export default function Payment() {
                                     <option value="">Choose a plan...</option>
                                     {plans?.map((plan: any) => (
                                         <option key={plan.id} value={plan.id}>
-                                            {plan.name} - KES {plan.price} ({plan.duration_days} days)
+                                            {plan.name} - KES {plan.price} ({formatPlanDuration(plan)})
                                         </option>
                                     ))}
                                 </select>

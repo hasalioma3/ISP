@@ -1,682 +1,608 @@
-import { useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'react-hot-toast';
 import {
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-    PieChart,
-    Pie,
-    Cell,
-    Legend,
-} from 'recharts';
-import { format } from 'date-fns';
-import { analyticsAPI, adminAPI } from '../../services/api';
-import {
-    Users, CreditCard, ShoppingBag, BarChart3, Wifi, Share2, Radio, UsersRound,
-    RouterIcon, ChevronDown, RefreshCw, ArrowRight, Smartphone, CheckCircle2, XCircle,
+    AlertTriangle, CalendarClock, CheckCircle2, Clock, CreditCard, Download, Gauge, Plus,
+    RefreshCw, Users, Wifi, WifiOff,
 } from 'lucide-react';
+import { analyticsAPI } from '../../services/api';
+import { useSites } from '../../hooks/useSites';
 import UsageChartPanels from '../../components/UsageChartPanels';
 import { useAuthStore } from '../../store/authStore';
+import {
+    AlertRow, Chip, EmptyState, KpiCard, MpesaBadge, Panel, PanelHeader, PaymentsFeedRow,
+    SegmentedControl, ShellHeader, SiteHealthRow, Skeleton, StatusBadge,
+    bandButtonClass, bandCtaClass, formatAmount, formatCompact, formatCount, formatDateEAT,
+    formatKES, percentChange, timeAgo, TIME_ZONE,
+    type FeedPayment,
+} from '../../components/savanna';
+import { AreaTrend, BarTrend, Donut, DONUT_COLORS } from '../../components/savanna/charts';
 
-const INSIGHT_COLORS = ['#16a34a', '#7c2d3f', '#475569'];
+type Range = '7D' | '30D' | '90D' | '12M';
+const RANGE_DAYS: Record<Exclude<Range, '12M'>, number> = { '7D': 7, '30D': 30, '90D': 90 };
 
-const CARD_STYLES: Record<string, string> = {
-    teal: 'bg-teal-600',
-    sky: 'bg-sky-700',
-    slate: 'bg-slate-700',
-    indigo: 'bg-primary',
-    emerald: 'bg-emerald-600',
-    cyan: 'bg-cyan-700',
-    violet: 'bg-violet-800',
-    green: 'bg-green-600',
-};
+/** YYYY-MM-DD for a date as seen in Nairobi (matches the API's TruncDate). */
+const eatDayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE }).format(d);
+
+/** Daily series for the last `days` days with zero-filled gaps (the API only returns days with payments). */
+function fillDays(rows: { date: string; total: number }[] | undefined, days: number) {
+    const byDay = new Map((rows || []).map((r) => [r.date, Number(r.total) || 0]));
+    const out: { date: string; total: number }[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+        const key = eatDayKey(new Date(Date.now() - i * 86_400_000));
+        out.push({ date: key, total: byDay.get(key) ?? 0 });
+    }
+    return out;
+}
 
 export default function Dashboard() {
     const navigate = useNavigate();
     const user = useAuthStore((state) => state.user);
     const showIncome = user?.is_superuser || user?.role !== 'technician';
-    const [routerFilter, setRouterFilter] = useState<number | 'all'>('all');
-    const [isRouterDropdownOpen, setIsRouterDropdownOpen] = useState(false);
+    const [range, setRange] = useState<Range>('30D');
     const [expiringPage, setExpiringPage] = useState(1);
 
-    const { data: stats, isLoading: statsLoading, isError: statsError, error: statsErrorObj, refetch: refetchStats, isFetching: statsFetching } = useQuery({
-        queryKey: ['admin-stats'],
-        queryFn: async () => {
-            const res = await analyticsAPI.getDashboardStats();
-            return res.data;
-        }
-    });
+    const {
+        sites, stats, isLoading: statsLoading, isError: statsError, error: statsErrorObj, refetchHealth, healthFetching,
+    } = useSites();
 
-    const { data: incomeData } = useQuery({
-        queryKey: ['admin-income'],
+    // Collections chart: daily totals for 7/30/90 days (12M uses the
+    // year's monthly sales from the extra endpoint instead).
+    const days = range === '12M' ? 30 : RANGE_DAYS[range];
+    const { data: incomeRows, isLoading: incomeLoading } = useQuery({
+        queryKey: ['admin-income', days],
         queryFn: async () => {
-            const res = await analyticsAPI.getIncomeReport();
-            return res.data;
+            const start = eatDayKey(new Date(Date.now() - (days - 1) * 86_400_000));
+            return (await analyticsAPI.getIncomeReport({ start_date: start })).data as { date: string; total: number }[];
+        },
+        enabled: showIncome,
+    });
+    // The revenue KPI's sparkline is always the last 30 days.
+    const { data: income30 } = useQuery({
+        queryKey: ['admin-income', 30],
+        queryFn: async () => {
+            const start = eatDayKey(new Date(Date.now() - 29 * 86_400_000));
+            return (await analyticsAPI.getIncomeReport({ start_date: start })).data as { date: string; total: number }[];
         },
         enabled: showIncome,
     });
 
     const { data: usageChart, isLoading: usageChartLoading } = useQuery({
         queryKey: ['admin-usage-chart'],
-        queryFn: async () => {
-            const res = await analyticsAPI.getUsageChart();
-            return res.data;
-        }
+        queryFn: async () => (await analyticsAPI.getUsageChart()).data,
     });
 
     const { data: usageData, isLoading: usageLoading } = useQuery({
         queryKey: ['admin-usage'],
-        queryFn: async () => {
-            const res = await analyticsAPI.getUsageReport();
-            return res.data;
-        }
+        queryFn: async () => (await analyticsAPI.getUsageReport()).data,
     });
 
     const { data: extra, isLoading: extraLoading } = useQuery({
         queryKey: ['admin-stats-extra'],
-        queryFn: async () => {
-            const res = await analyticsAPI.getDashboardExtra();
-            return res.data;
-        }
+        queryFn: async () => (await analyticsAPI.getDashboardExtra()).data,
+        // While the M-Pesa check is still running server-side, ask again shortly.
+        refetchInterval: (query) => {
+            const gateway = query.state.data?.payment_gateway;
+            return gateway && gateway.connected == null ? 5000 : false;
+        },
+    });
+
+    // Live payments feed: the cheap "section=payments" variant, every 15s.
+    const { data: feed, isLoading: feedLoading } = useQuery({
+        queryKey: ['admin-payments-feed'],
+        queryFn: async () => (await analyticsAPI.getDashboardFeed()).data.last_transactions as FeedPayment[],
+        enabled: showIncome,
+        refetchInterval: 15_000,
     });
 
     const { data: expiring, isLoading: expiringLoading } = useQuery({
         queryKey: ['admin-expiring-today', expiringPage],
-        queryFn: async () => {
-            const res = await analyticsAPI.getExpiringToday(expiringPage, 10);
-            return res.data;
-        }
+        queryFn: async () => (await analyticsAPI.getExpiringToday(expiringPage, 8)).data,
     });
 
     const { data: activity, isLoading: activityLoading } = useQuery({
         queryKey: ['admin-recent-activity'],
-        queryFn: async () => {
-            const res = await analyticsAPI.getRecentActivity();
-            return res.data;
-        },
-        refetchInterval: 30000,
+        queryFn: async () => (await analyticsAPI.getRecentActivity()).data,
+        refetchInterval: 30_000,
     });
 
-    // Live per-router CPU/RAM/disk + WAN traffic, polled every 10s. WAN
-    // byte counters are cumulative (that's all RouterOS gives us), so
-    // throughput is derived by diffing consecutive polls per router.
-    const { data: routerHealth } = useQuery({
-        queryKey: ['admin-router-health'],
-        queryFn: async () => {
-            const res = await adminAPI.getRouterHealth();
-            return res.data as Record<string, any>;
-        },
-        refetchInterval: 10000,
-    });
+    const routers: any[] = stats?.routers || [];
 
-    const [routerThroughput, setRouterThroughput] = useState<Record<string, { rxKbps: number; txKbps: number }>>({});
-    const prevWanBytesRef = useRef<Record<string, { rx: number; tx: number; ts: number }>>({});
-
-    useEffect(() => {
-        if (!routerHealth) return;
-        const now = Date.now();
-        const nextThroughput: Record<string, { rxKbps: number; txKbps: number }> = {};
-        for (const [routerId, health] of Object.entries(routerHealth)) {
-            if (!health?.success) continue;
-            const prev = prevWanBytesRef.current[routerId];
-            if (prev) {
-                const elapsedSec = (now - prev.ts) / 1000;
-                if (elapsedSec > 0) {
-                    const rxDelta = Math.max(0, health.wan_rx_bytes - prev.rx);
-                    const txDelta = Math.max(0, health.wan_tx_bytes - prev.tx);
-                    nextThroughput[routerId] = {
-                        rxKbps: (rxDelta * 8) / elapsedSec / 1024,
-                        txKbps: (txDelta * 8) / elapsedSec / 1024,
-                    };
-                }
+    // Alerts are derived from live data, not stored: offline/hot routers,
+    // a down payment gateway, and today's expiries.
+    const alerts = useMemo(() => {
+        const list: { key: string; icon: any; tone: 'bad' | 'warn' | 'ok' | 'neutral'; title: string; detail?: string; href?: string }[] = [];
+        sites.forEach((site) => {
+            if (site.status === 'offline') {
+                list.push({
+                    key: `off-${site.id}`, icon: WifiOff, tone: 'bad', title: `${site.name} unreachable`,
+                    detail: `${site.lastSeenAt ? `Last seen ${timeAgo(site.lastSeenAt)}` : 'Never reached'} · ${site.clients} sessions last known`,
+                    href: '/admin/mikrotik',
+                });
+            } else if (site.status === 'degraded') {
+                list.push({
+                    key: `cpu-${site.id}`, icon: Gauge, tone: 'warn', title: `${site.name} CPU at ${site.cpu}%`,
+                    detail: 'Check queues and connected load', href: '/admin/network-ops',
+                });
             }
-            prevWanBytesRef.current[routerId] = { rx: health.wan_rx_bytes, tx: health.wan_tx_bytes, ts: now };
+        });
+        if (extra?.payment_gateway?.connected === false) {
+            list.push({
+                key: 'gateway', icon: AlertTriangle, tone: 'bad', title: 'M-Pesa gateway unreachable',
+                detail: `Daraja ${extra.payment_gateway.environment} · shortcode ${extra.payment_gateway.shortcode}`,
+                href: '/admin/settings',
+            });
         }
-        setRouterThroughput(prev => ({ ...prev, ...nextThroughput }));
-    }, [routerHealth]);
+        if ((expiring?.count ?? 0) > 0) {
+            list.push({
+                key: 'expiring', icon: Clock, tone: 'warn', title: `${expiring.count} subscription${expiring.count === 1 ? '' : 's'} expire today`,
+                detail: 'Expiry reminders go out daily at 08:00',
+            });
+        }
+        return list;
+    }, [sites, extra, expiring]);
 
     if (statsError) {
         return (
-            <div className="p-6 text-red-600">
-                Error loading dashboard stats: {statsErrorObj instanceof Error ? statsErrorObj.message : 'Unknown error'}
-                <br />
+            <Panel className="mt-[110px] text-bad">
+                Error loading dashboard stats: {statsErrorObj instanceof Error ? statsErrorObj.message : 'Unknown error'}.
                 Please ensure you are logged in as an Administrator.
-            </div>
+            </Panel>
         );
     }
 
-    const routers = stats?.routers || [];
-    const visibleRouters = routerFilter === 'all' ? routers : routers.filter((r: any) => r.id === routerFilter);
-    const selectedRouterName = routerFilter === 'all'
-        ? 'All Routers - System Wide'
-        : routers.find((r: any) => r.id === routerFilter)?.name || 'All Routers - System Wide';
+    const firstName = user?.first_name || user?.username || 'there';
+    const subtitle = [
+        formatDateEAT(new Date(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+        stats ? `${routers.length} site${routers.length === 1 ? '' : 's'}` : null,
+        stats ? `${formatCount(stats.total_customers)} subscribers` : null,
+    ].filter(Boolean).join(' · ');
 
-    const statCards = [
-        ...(showIncome ? [
-            {
-                label: 'Income Today', value: `Ksh. ${Number(stats?.income_today ?? 0).toLocaleString()}`,
-                icon: ShoppingBag, color: 'teal', href: '/admin/reports', linkLabel: 'View Reports',
-            },
-            {
-                label: 'Income This Month', value: `Ksh. ${Number(stats?.monthly_revenue ?? 0).toLocaleString()}`,
-                icon: BarChart3, color: 'sky', href: '/admin/reports', linkLabel: 'View Reports',
-            },
-        ] : []),
-        {
-            label: 'Active/Expired', value: `${stats?.active_subscribers ?? 0}/${stats?.expired_subscribers ?? 0}`,
-            icon: Users, color: 'slate', href: '/admin/subscribers', linkLabel: 'View All',
-        },
-        {
-            label: 'Total Users', value: stats?.total_customers ?? 0,
-            icon: UsersRound, color: 'indigo', href: '/admin/subscribers', linkLabel: 'View All',
-        },
-        {
-            label: 'Hotspot Online Users', value: stats?.hotspot_online ?? 0,
-            icon: Wifi, color: 'emerald', href: '/admin/online-users?type=hotspot', linkLabel: 'View All',
-        },
-        {
-            label: 'PPPoE Online Users', value: stats?.pppoe_online ?? 0,
-            icon: Share2, color: 'cyan', href: '/admin/online-users?type=pppoe', linkLabel: 'View All',
-        },
-        {
-            label: 'Total Online Users', value: stats?.total_online ?? 0,
-            icon: Radio, color: 'violet', href: '/admin/online-users', linkLabel: 'View All',
-        },
-        {
-            label: 'New This Month', value: stats?.new_customers ?? 0,
-            icon: CreditCard, color: 'green', href: '/admin/subscribers', linkLabel: 'View All',
-        },
-    ];
+    const exportIncome = async () => {
+        try {
+            const start = eatDayKey(new Date(Date.now() - 29 * 86_400_000));
+            const res = await analyticsAPI.downloadIncomeReport({ start_date: start });
+            const url = URL.createObjectURL(res.data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `collections_${start}_${eatDayKey(new Date())}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            toast.error('Could not export collections');
+        }
+    };
+
+    // KPI figures
+    const revenueChange = stats?.revenue_30d != null ? percentChange(stats.revenue_30d, stats.revenue_prev_30d) : null;
+    const revenueSpark = fillDays(income30, 30).map((d) => d.total);
+    const regSpark = (extra?.monthly_registrations || [])
+        .slice(0, new Date().getMonth() + 1)
+        .reduce((acc: number[], m: any) => [...acc, (acc[acc.length - 1] ?? 0) + m.count], []);
+
+    const chartData = range === '12M'
+        ? (extra?.monthly_sales || []).slice(0, new Date().getMonth() + 1).map((m: any) => ({ date: m.month, total: Number(m.total) || 0 }))
+        : fillDays(incomeRows, days);
+
+    // Plan mix: share of this month's revenue by plan (sales roles), or
+    // subscribers by service type for technicians (no income figures).
+    const mixSource: { name: string; value: number }[] = showIncome
+        ? (extra?.best_selling_packages || []).map((p: any) => ({ name: p.name, value: p.revenue }))
+        : (extra?.users_by_service_type || []).map((s: any) => ({ name: String(s.service_type).toUpperCase(), value: s.count }));
+    const mix = mixSource.length > 6
+        ? [...mixSource.slice(0, 5), { name: 'Other', value: mixSource.slice(5).reduce((a, b) => a + b.value, 0) }]
+        : mixSource;
+    const mixTotal = mix.reduce((a, b) => a + b.value, 0);
 
     return (
-        <div>
-            <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-
-            {/* Router View */}
-            <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden mb-6">
-                <div className="bg-primary px-4 sm:px-6 py-4 flex flex-wrap gap-3 items-center justify-between">
-                    <div className="flex items-center text-white font-bold">
-                        <RouterIcon className="h-5 w-5 mr-2" />
-                        Router View
-                    </div>
-                    <div className="relative">
-                        <button
-                            onClick={() => setIsRouterDropdownOpen(!isRouterDropdownOpen)}
-                            className="flex items-center gap-2 bg-white/95 hover:bg-white px-3 py-1.5 rounded-lg text-sm font-medium text-foreground/80"
-                        >
-                            {selectedRouterName}
-                            <ChevronDown className="h-4 w-4" />
-                        </button>
-                        {isRouterDropdownOpen && (
-                            <div className="absolute right-0 mt-1 w-56 bg-card rounded-lg shadow-xl border border-border py-1 z-20">
-                                <button
-                                    onClick={() => { setRouterFilter('all'); setIsRouterDropdownOpen(false); }}
-                                    className="w-full text-left px-4 py-2 text-sm text-foreground/80 hover:bg-secondary"
-                                >
-                                    All Routers - System Wide
-                                </button>
-                                {routers.map((r: any) => (
-                                    <button
-                                        key={r.id}
-                                        onClick={() => { setRouterFilter(r.id); setIsRouterDropdownOpen(false); }}
-                                        className="w-full text-left px-4 py-2 text-sm text-foreground/80 hover:bg-secondary"
-                                    >
-                                        {r.name}
-                                    </button>
-                                ))}
-                            </div>
+        <div className="space-y-[18px]">
+            <ShellHeader
+                title={`Habari, ${firstName}`}
+                subtitle={subtitle}
+                actions={
+                    <>
+                        {showIncome && (
+                            <button onClick={exportIncome} className={bandButtonClass}>
+                                <Download className="h-[18px] w-[18px]" strokeWidth={1.8} /> Export
+                            </button>
                         )}
-                    </div>
-                </div>
-
-                <div className="p-4 flex flex-wrap gap-4">
-                    {statsLoading ? (
-                        <div className="text-muted-foreground text-sm py-4 px-2">Loading routers...</div>
-                    ) : visibleRouters.length === 0 ? (
-                        <div className="text-muted-foreground text-sm py-4 px-2">No routers configured yet.</div>
-                    ) : visibleRouters.map((r: any) => {
-                        const health = routerHealth?.[r.id];
-                        const throughput = routerThroughput[r.id];
-                        const pctColor = (pct: number | null | undefined) =>
-                            pct == null ? 'text-muted-foreground' : pct >= 85 ? 'text-red-600' : pct >= 60 ? 'text-amber-600' : 'text-foreground/80';
-                        return (
-                            <button
-                                key={r.id}
-                                onClick={() => navigate('/admin/mikrotik')}
-                                className="border rounded-lg px-4 py-3 min-w-[200px] text-left hover:bg-secondary transition"
-                            >
-                                <p className="font-medium text-primary mb-1">{r.name}</p>
-                                <div className="flex items-center gap-3 text-sm mb-2">
-                                    <span className="flex items-center text-emerald-600">
-                                        <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1" /> {r.online}
-                                    </span>
-                                    <span className="text-primary">✓ {r.valid}</span>
-                                    <span className="text-red-500">✕ {r.invalid}</span>
-                                </div>
-                                {health?.success ? (
-                                    <>
-                                        <div className="flex items-center gap-3 text-xs border-t pt-2">
-                                            <span className={pctColor(health.cpu_load)}>CPU {health.cpu_load}%</span>
-                                            <span className={pctColor(health.memory_used_pct)}>RAM {health.memory_used_pct ?? '-'}%</span>
-                                            <span className={pctColor(health.disk_used_pct)}>Disk {health.disk_used_pct ?? '-'}%</span>
-                                        </div>
-                                        {throughput && (
-                                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                                                <span>&darr; {throughput.rxKbps.toFixed(0)} Kbps</span>
-                                                <span>&uarr; {throughput.txKbps.toFixed(0)} Kbps</span>
-                                            </div>
-                                        )}
-                                    </>
-                                ) : health && !health.success ? (
-                                    <p className="text-xs text-muted-foreground border-t pt-2">Unreachable</p>
-                                ) : (
-                                    <p className="text-xs text-muted-foreground/70 border-t pt-2">Loading health...</p>
-                                )}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                {statCards.map((card) => (
-                    <div key={card.label} className={`${CARD_STYLES[card.color]} rounded-xl p-6 text-white shadow-sm`}>
-                        <div className="flex items-start justify-between mb-2">
-                            <p className="text-2xl font-bold">{card.value}</p>
-                            <card.icon className="h-6 w-6 opacity-70" />
-                        </div>
-                        <p className="text-xs uppercase tracking-wide opacity-80 mb-3">{card.label}</p>
-                        <button
-                            onClick={() => navigate(card.href)}
-                            className="flex items-center text-xs font-medium opacity-90 hover:opacity-100 border-t border-white/20 pt-2 w-full"
-                        >
-                            {card.linkLabel} <ArrowRight className="h-3 w-3 ml-1" />
+                        <button onClick={() => navigate('/admin/settings?tab=manual')} className={bandCtaClass}>
+                            <Plus className="h-[18px] w-[18px]" strokeWidth={2} /> New subscriber
                         </button>
-                    </div>
-                ))}
+                    </>
+                }
+            />
+
+            {/* KPIs */}
+            <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2 xl:grid-cols-4">
+                {showIncome ? (
+                    <KpiCard
+                        highlight
+                        label="Revenue · 30 days"
+                        icon={CreditCard}
+                        value={formatCompact(stats?.revenue_30d)}
+                        unit="KES"
+                        loading={statsLoading}
+                        delta={revenueChange != null ? { value: `${Math.abs(revenueChange).toFixed(1)}%`, direction: revenueChange >= 0 ? 'up' : 'down' } : null}
+                        footnote={revenueChange != null ? 'vs prev. 30d' : 'no earlier 30 days to compare'}
+                        sparkline={revenueSpark}
+                        onClick={() => navigate('/admin/reports')}
+                    />
+                ) : (
+                    <KpiCard
+                        highlight
+                        label="Expired subscribers"
+                        icon={CalendarClock}
+                        value={formatCount(stats?.expired_subscribers)}
+                        loading={statsLoading}
+                        footnote="need a renewal"
+                        onClick={() => navigate('/admin/subscribers')}
+                    />
+                )}
+                <KpiCard
+                    label="Active subscribers"
+                    icon={Users}
+                    value={formatCount(stats?.active_subscribers)}
+                    loading={statsLoading}
+                    delta={stats ? { value: formatCount(stats.new_this_week), direction: 'up' } : null}
+                    footnote="new this week"
+                    sparkline={regSpark}
+                    onClick={() => navigate('/admin/subscribers')}
+                />
+                <KpiCard
+                    label="Online now"
+                    icon={Wifi}
+                    value={formatCount(stats?.total_online)}
+                    unit="sessions"
+                    loading={statsLoading}
+                    footnote={stats ? [
+                        `PPPoE ${stats.pppoe_online}`,
+                        `Hotspot ${stats.hotspot_online}`,
+                        stats.static_online ? `Static ${stats.static_online}` : null,
+                    ].filter(Boolean).join(' · ') : null}
+                    onClick={() => navigate('/admin/online-users')}
+                />
+                <KpiCard
+                    label="Expiring today"
+                    icon={Clock}
+                    value={formatCount(expiring?.count)}
+                    loading={expiringLoading}
+                    footnote={`${formatCount(stats?.expired_subscribers)} already expired`}
+                />
             </div>
 
-            <div className="flex justify-end mb-6">
-                <button
-                    onClick={() => refetchStats()}
-                    disabled={statsFetching}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition text-sm font-medium disabled:opacity-50"
-                >
-                    <RefreshCw className={`h-4 w-4 ${statsFetching ? 'animate-spin' : ''}`} />
-                    Refresh Online Users
-                </button>
-            </div>
-
-            {/* Registration / Sales trends + Gateway / Insights / Packages */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-card p-6 rounded-xl shadow-sm border border-border">
-                        <h3 className="text-lg font-bold mb-4">Monthly Registered Customers</h3>
-                        <div className="h-64">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={extra?.monthly_registrations || []}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                                    <YAxis tick={{ fontSize: 12 }} />
-                                    <Tooltip />
-                                    <Bar dataKey="count" fill="#818cf8" name="Registered" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {showIncome && (
-                        <div className="bg-card p-6 rounded-xl shadow-sm border border-border">
-                            <h3 className="text-lg font-bold mb-4">Total Monthly Sales</h3>
-                            <div className="h-64">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={extra?.monthly_sales || []}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                                        <YAxis tick={{ fontSize: 12 }} />
-                                        <Tooltip formatter={(v: number) => `KES ${v}`} />
-                                        <Bar dataKey="total" fill="#7c3aed" name="Sales" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="space-y-6">
-                    <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-                        <div className="bg-primary px-4 py-3 text-white font-bold text-sm">
-                            Payment Gateway: {extra?.payment_gateway?.name || '-'}
-                        </div>
-                        <div className="p-4 text-sm space-y-2">
-                            {extraLoading ? (
-                                <p className="text-muted-foreground">Checking...</p>
-                            ) : (
-                                <>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Status</span>
-                                        {extra?.payment_gateway?.connected ? (
-                                            <span className="flex items-center text-green-600 font-medium">
-                                                <CheckCircle2 className="h-4 w-4 mr-1" /> Connected
-                                            </span>
-                                        ) : (
-                                            <span className="flex items-center text-red-600 font-medium">
-                                                <XCircle className="h-4 w-4 mr-1" /> Disconnected
-                                            </span>
+            {/* Collections + plan mix */}
+            <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-3">
+                <Panel className="xl:col-span-2">
+                    {showIncome ? (
+                        <>
+                            <PanelHeader
+                                title="Collections"
+                                subtitle={range === '12M' ? 'M-Pesa STK, Paybill & cash · monthly this year, KES' : 'M-Pesa STK, Paybill & cash · daily, KES'}
+                                action={
+                                    <SegmentedControl
+                                        aria-label="Collections period"
+                                        options={[
+                                            { value: '7D', label: '7D' }, { value: '30D', label: '30D' },
+                                            { value: '90D', label: '90D' }, { value: '12M', label: 'YTD' },
+                                        ] as { value: Range; label: string }[]}
+                                        value={range}
+                                        onChange={setRange}
+                                    />
+                                }
+                            />
+                            <div className="mb-4 flex flex-wrap gap-x-10 gap-y-3">
+                                {[
+                                    { label: 'Today', value: formatKES(stats?.income_today) },
+                                    { label: 'STK success rate', value: stats?.stk_success_rate != null ? `${stats.stk_success_rate}%` : '—' },
+                                    { label: 'Avg. ticket (30d)', value: formatKES(stats?.avg_ticket_30d) },
+                                ].map((s) => (
+                                    <div key={s.label}>
+                                        <p className="text-[13px] text-muted-foreground">{s.label}</p>
+                                        {statsLoading ? <Skeleton className="mt-1 h-7 w-28" /> : (
+                                            <p className="num text-[22px] font-extrabold text-foreground">{s.value}</p>
                                         )}
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Environment</span>
-                                        <span className="capitalize">{extra?.payment_gateway?.environment}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Shortcode</span>
-                                        <span>{extra?.payment_gateway?.shortcode}</span>
-                                    </div>
-                                </>
+                                ))}
+                            </div>
+                            {(range === '12M' ? extraLoading : incomeLoading) ? (
+                                <Skeleton className="h-[300px] w-full" />
+                            ) : (
+                                <AreaTrend
+                                    data={chartData}
+                                    xKey="date"
+                                    yKey="total"
+                                    name="Collected"
+                                    formatX={(v: string) => (range === '12M' ? v : formatDateEAT(`${v}T12:00:00+03:00`, { day: '2-digit', month: 'short' }))}
+                                    formatY={(v) => formatCompact(v)}
+                                    formatTooltip={(v) => formatKES(v)}
+                                />
                             )}
-                        </div>
-                    </div>
-
-                    <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-                        <div className="bg-primary px-4 py-3 text-white font-bold text-sm">All Users Insights</div>
-                        <div className="p-4">
-                            <div className="h-48">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={[
-                                                { name: 'Active Users', value: extra?.user_insights?.active || 0 },
-                                                { name: 'Expired Users', value: extra?.user_insights?.expired || 0 },
-                                                { name: 'Inactive Users', value: extra?.user_insights?.inactive || 0 },
-                                            ]}
-                                            dataKey="value"
-                                            outerRadius={70}
-                                        >
-                                            {INSIGHT_COLORS.map((c, i) => <Cell key={i} fill={c} />)}
-                                        </Pie>
-                                        <Legend wrapperStyle={{ fontSize: 11 }} />
-                                        <Tooltip />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-
-                    {showIncome && (
-                        <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-                            <div className="bg-primary px-4 py-3 text-white font-bold text-sm">Best Selling Packages This Month</div>
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full text-sm">
-                                    <thead>
-                                        <tr className="text-left text-xs text-muted-foreground uppercase border-b">
-                                            <th className="px-4 py-2">Package</th>
-                                            <th className="px-4 py-2 text-right">Sales</th>
-                                            <th className="px-4 py-2 text-right">Revenue</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border">
-                                        {extra?.best_selling_packages?.length === 0 ? (
-                                            <tr><td colSpan={3} className="px-4 py-4 text-center text-muted-foreground">No sales this month.</td></tr>
-                                        ) : extra?.best_selling_packages?.map((p: any) => (
-                                            <tr key={p.name}>
-                                                <td className="px-4 py-2 font-medium">{p.name}</td>
-                                                <td className="px-4 py-2 text-right">{p.sales}</td>
-                                                <td className="px-4 py-2 text-right">Ksh. {p.revenue.toLocaleString()}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                        </>
+                    ) : (
+                        <>
+                            <PanelHeader title="Data usage" subtitle="Whole network" />
+                            <UsageChartPanels chart={usageChart} loading={usageChartLoading} />
+                        </>
                     )}
-                </div>
-            </div>
+                </Panel>
 
-            {/* Network-wide Data Usage */}
-            <div className="bg-card p-6 rounded-xl shadow-sm border border-border mb-6">
-                <h3 className="text-lg font-bold mb-4">General Data Usage (Whole Network)</h3>
-                <UsageChartPanels chart={usageChart} loading={usageChartLoading} />
-            </div>
-
-            {/* Revenue Chart */}
-            {showIncome && (
-                <div className="bg-card p-6 rounded-xl shadow-sm border border-border mb-6">
-                    <h3 className="text-lg font-bold mb-4">Revenue Trend (Last 30 Days)</h3>
-                    <div className="h-72">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={incomeData || []}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="date" tickFormatter={(val) => val.split('-').slice(1).join('/')} />
-                                <YAxis />
-                                <Tooltip formatter={(value) => `KES ${value}`} />
-                                <Bar dataKey="total" fill="#7c3aed" radius={[4, 4, 0, 0]} name="Revenue" />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            )}
-
-            {/* Transactions per Router / Last 5 Transactions / Users by Service Type */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                {showIncome && (
-                    <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-                        <div className="bg-primary px-4 py-3 text-white font-bold text-sm">Transactions per Router</div>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                                <thead>
-                                    <tr className="text-left text-xs text-muted-foreground uppercase border-b">
-                                        <th className="px-4 py-2">Router</th>
-                                        <th className="px-4 py-2 text-right">Txns</th>
-                                        <th className="px-4 py-2 text-right">%</th>
-                                        <th className="px-4 py-2 text-right">Amount</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border">
-                                    {extra?.transactions_per_router?.length === 0 ? (
-                                        <tr><td colSpan={4} className="px-4 py-4 text-center text-muted-foreground">No transactions yet.</td></tr>
-                                    ) : extra?.transactions_per_router?.map((r: any) => (
-                                        <tr key={r.router}>
-                                            <td className="px-4 py-2 font-medium">{r.router}</td>
-                                            <td className="px-4 py-2 text-right">{r.transactions}</td>
-                                            <td className="px-4 py-2 text-right">{r.percentage}%</td>
-                                            <td className="px-4 py-2 text-right">Ksh. {r.amount.toLocaleString()}</td>
-                                        </tr>
+                <Panel>
+                    <PanelHeader
+                        title={showIncome ? 'Plan mix' : 'Service mix'}
+                        subtitle={showIncome ? "Share of this month's revenue" : 'Subscribers by service type'}
+                    />
+                    {extraLoading ? (
+                        <Skeleton className="mx-auto h-[236px] w-[236px] rounded-full" />
+                    ) : (
+                        <>
+                            <Donut
+                                data={mix}
+                                centerValue={formatCount(stats?.active_subscribers)}
+                                centerLabel="active subscribers"
+                            />
+                            {mix.length === 0 ? (
+                                <EmptyState message={showIncome ? 'No plan sales yet this month.' : 'No subscribers yet.'} />
+                            ) : (
+                                <ul className="mt-6 space-y-3">
+                                    {mix.map((m, i) => (
+                                        <li key={m.name} className="flex items-center justify-between gap-3 text-[14px]">
+                                            <span className="flex min-w-0 items-center gap-2.5">
+                                                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+                                                <span className="truncate text-foreground">{m.name}</span>
+                                            </span>
+                                            <span className="num font-semibold text-foreground">
+                                                {mixTotal ? Math.round((m.value / mixTotal) * 100) : 0}%
+                                            </span>
+                                        </li>
                                     ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                                </ul>
+                            )}
+                        </>
+                    )}
+                </Panel>
+            </div>
+
+            {/* Payments / sites / alerts */}
+            <div className={`grid grid-cols-1 gap-[18px] lg:grid-cols-2 ${showIncome ? 'xl:grid-cols-3' : ''}`}>
+                {showIncome && (
+                    <Panel>
+                        <PanelHeader
+                            leading={<MpesaBadge />}
+                            title="Payments feed"
+                            action={
+                                extra?.payment_gateway?.connected === false
+                                    ? <StatusBadge status="offline" label="Gateway down" />
+                                    : <StatusBadge status="online" label="Live" />
+                            }
+                        />
+                        {feedLoading ? (
+                            <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+                        ) : !feed?.length ? (
+                            <EmptyState message="No payments yet. They appear here within 15 seconds." />
+                        ) : (
+                            <div>{feed.map((p, i) => <PaymentsFeedRow key={`${p.date}-${i}`} payment={p} />)}</div>
+                        )}
+                    </Panel>
                 )}
 
-                {showIncome && (
-                    <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-                        <div className="bg-primary px-4 py-3 text-white font-bold text-sm">Last 5 Transactions</div>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                                <thead>
-                                    <tr className="text-left text-xs text-muted-foreground uppercase border-b">
-                                        <th className="px-4 py-2">Username</th>
-                                        <th className="px-4 py-2 text-right">Amount</th>
-                                        <th className="px-4 py-2 text-right">Date</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border">
-                                    {extra?.last_transactions?.length === 0 ? (
-                                        <tr><td colSpan={3} className="px-4 py-4 text-center text-muted-foreground">No transactions yet.</td></tr>
-                                    ) : extra?.last_transactions?.map((t: any, i: number) => (
-                                        <tr key={i}>
-                                            <td className="px-4 py-2 font-medium truncate max-w-[120px]">{t.username}</td>
-                                            <td className="px-4 py-2 text-right">Ksh. {t.amount}</td>
-                                            <td className="px-4 py-2 text-right text-muted-foreground">{format(new Date(t.date), 'yyyy-MM-dd')}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
+                <Panel>
+                    <PanelHeader
+                        title="Sites & core"
+                        subtitle="MikroTik health"
+                        action={
+                            <button
+                                onClick={() => refetchHealth()}
+                                aria-label="Refresh router health"
+                                className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+                            >
+                                <RefreshCw className={`h-[18px] w-[18px] ${healthFetching ? 'animate-spin' : ''}`} strokeWidth={1.8} />
+                            </button>
+                        }
+                    />
+                    {statsLoading ? (
+                        <div className="space-y-3">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
+                    ) : sites.length === 0 ? (
+                        <EmptyState
+                            message="No routers yet."
+                            action={<button onClick={() => navigate('/admin/mikrotik')} className="text-[13px] font-semibold text-primary">Add a router</button>}
+                        />
+                    ) : (
+                        <div>{sites.map((s) => <SiteHealthRow key={s.name} site={s} />)}</div>
+                    )}
+                </Panel>
 
-                <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-                    <div className="bg-primary px-4 py-3 text-white font-bold text-sm flex items-center">
-                        <Smartphone className="h-4 w-4 mr-2" /> Users by Service Type
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm">
-                            <thead>
-                                <tr className="text-left text-xs text-muted-foreground uppercase border-b">
-                                    <th className="px-4 py-2">Service Type</th>
-                                    <th className="px-4 py-2 text-right">Users</th>
-                                    <th className="px-4 py-2 text-right">%</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                                {extra?.users_by_service_type?.map((s: any) => (
-                                    <tr key={s.service_type}>
-                                        <td className="px-4 py-2 font-medium capitalize">{s.service_type}</td>
-                                        <td className="px-4 py-2 text-right">{s.count}</td>
-                                        <td className="px-4 py-2 text-right">{s.percentage}%</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            {/* Voucher Stock */}
-            {showIncome && (
-                <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden mb-6">
-                    <div className="bg-primary px-6 py-4 text-white font-bold">Vouchers Stock</div>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-border text-sm">
-                            <thead className="bg-secondary">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plan Name</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Unused</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Used</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                                {extra?.voucher_stock?.length === 0 ? (
-                                    <tr><td colSpan={3} className="px-6 py-4 text-center text-muted-foreground">No vouchers generated yet.</td></tr>
-                                ) : extra?.voucher_stock?.map((v: any) => (
-                                    <tr key={v.plan_name}>
-                                        <td className="px-6 py-3 font-medium">{v.plan_name}</td>
-                                        <td className="px-6 py-3 text-right">{v.unused}</td>
-                                        <td className="px-6 py-3 text-right">{v.used}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-
-            {/* Usage by User */}
-            <div className="bg-card rounded-2xl shadow-sm border border-border">
-                <div className="p-6 border-b border-border">
-                    <h3 className="text-lg font-bold">Top Data Usage by User (Last 30 Days)</h3>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-border">
-                        <thead className="bg-secondary">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">User</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Upload (GB)</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Download (GB)</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Total (GB)</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-card divide-y divide-border">
-                            {usageLoading ? (
-                                <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
-                            ) : usageData?.length === 0 ? (
-                                <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">No usage recorded yet.</td></tr>
-                            ) : usageData?.map((u: any) => (
-                                <tr key={u.username} className="hover:bg-secondary">
-                                    <td className="px-6 py-4 text-sm font-medium text-foreground">{u.name}</td>
-                                    <td className="px-6 py-4 text-sm text-muted-foreground text-right">{u.upload_gb}</td>
-                                    <td className="px-6 py-4 text-sm text-muted-foreground text-right">{u.download_gb}</td>
-                                    <td className="px-6 py-4 text-sm font-medium text-foreground text-right">{u.total_gb}</td>
-                                </tr>
+                <Panel>
+                    <PanelHeader
+                        title="Alerts"
+                        subtitle="Live from routers, payments and expiries"
+                        action={alerts.length > 0 ? <Chip>{alerts.length} active</Chip> : null}
+                    />
+                    {alerts.length === 0 ? (
+                        <AlertRow icon={CheckCircle2} tone="ok" title="All systems normal" detail="Routers reachable, payments flowing, nothing expiring today" />
+                    ) : (
+                        <div>
+                            {alerts.map((a) => (
+                                <AlertRow
+                                    key={a.key}
+                                    icon={a.icon}
+                                    tone={a.tone}
+                                    title={a.title}
+                                    detail={a.detail}
+                                    onClick={a.href ? () => navigate(a.href!) : undefined}
+                                />
                             ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* Users Expiring Today / Recent Activity */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-                <div className="lg:col-span-2 bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-                    <div className="bg-primary px-6 py-4 text-white font-bold">Users Expiring Today</div>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-border text-sm">
-                            <thead className="bg-secondary">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Username</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Created On</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Expires On</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                                {expiringLoading ? (
-                                    <tr><td colSpan={3} className="px-6 py-6 text-center text-muted-foreground">Loading...</td></tr>
-                                ) : expiring?.results?.length === 0 ? (
-                                    <tr><td colSpan={3} className="px-6 py-6 text-center text-muted-foreground">No subscriptions expiring today.</td></tr>
-                                ) : expiring?.results?.map((u: any, i: number) => (
-                                    <tr key={i}>
-                                        <td className="px-6 py-3 font-medium text-primary">{u.username}</td>
-                                        <td className="px-6 py-3 text-muted-foreground">{format(new Date(u.created_on), 'd MMM yyyy HH:mm')}</td>
-                                        <td className="px-6 py-3 text-muted-foreground">{format(new Date(u.expires_on), 'd MMM yyyy HH:mm')}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    {expiring && expiring.total_pages > 1 && (
-                        <div className="flex items-center justify-between px-6 py-3 border-t text-sm">
-                            <button
-                                onClick={() => setExpiringPage(p => Math.max(1, p - 1))}
-                                disabled={expiringPage <= 1}
-                                className="px-3 py-1 rounded border disabled:opacity-40"
-                            >
-                                Prev
-                            </button>
-                            <span className="text-muted-foreground">Page {expiring.page} of {expiring.total_pages}</span>
-                            <button
-                                onClick={() => setExpiringPage(p => Math.min(expiring.total_pages, p + 1))}
-                                disabled={expiringPage >= expiring.total_pages}
-                                className="px-3 py-1 rounded border disabled:opacity-40"
-                            >
-                                Next
-                            </button>
                         </div>
                     )}
-                </div>
-
-                <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-                    <div className="bg-primary px-6 py-4 text-white font-bold">Recent Activity</div>
-                    <div className="p-4 space-y-2 max-h-96 overflow-y-auto">
-                        {activityLoading ? (
-                            <p className="text-muted-foreground text-sm">Loading...</p>
-                        ) : activity?.length === 0 ? (
-                            <p className="text-muted-foreground text-sm">No login activity recorded yet.</p>
-                        ) : activity?.map((a: any, i: number) => (
-                            <div key={i} className="text-sm border-b last:border-0 pb-2">
-                                <p className="text-foreground">{a.message}</p>
-                                <p className="text-xs text-muted-foreground">{format(new Date(a.created_at), 'd MMM yyyy HH:mm')}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
+                </Panel>
             </div>
+
+            {/* Operational detail (kept from the previous dashboard) */}
+            {showIncome && (
+                <Panel>
+                    <PanelHeader title="Data usage" subtitle="Whole network" />
+                    <UsageChartPanels chart={usageChart} loading={usageChartLoading} />
+                </Panel>
+            )}
+
+            <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-3">
+                <Panel className="xl:col-span-2">
+                    <PanelHeader title="Expiring today" subtitle={`${formatCount(expiring?.count)} subscription${expiring?.count === 1 ? '' : 's'}`} />
+                    <SimpleTable
+                        loading={expiringLoading}
+                        empty="No subscriptions expire today."
+                        columns={['Subscriber', 'Created', 'Expires']}
+                        rows={(expiring?.results || []).map((u: any) => [
+                            <span className="font-semibold text-foreground">{u.username}</span>,
+                            formatDateEAT(u.created_on, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+                            formatDateEAT(u.expires_on, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+                        ])}
+                    />
+                    {expiring && expiring.total_pages > 1 && (
+                        <div className="mt-3 flex items-center justify-between text-[13px] text-muted-foreground">
+                            <span>Page {expiring.page} of {expiring.total_pages}</span>
+                            <div className="flex gap-2">
+                                <button className="h-8 rounded-full border border-input px-3 disabled:opacity-40" disabled={expiringPage <= 1} onClick={() => setExpiringPage((p) => p - 1)}>Prev</button>
+                                <button className="h-8 rounded-full border border-input px-3 disabled:opacity-40" disabled={expiringPage >= expiring.total_pages} onClick={() => setExpiringPage((p) => p + 1)}>Next</button>
+                            </div>
+                        </div>
+                    )}
+                </Panel>
+
+                <Panel>
+                    <PanelHeader title="Recent activity" subtitle="Logins and account events" />
+                    {activityLoading ? (
+                        <div className="space-y-3">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                    ) : !activity?.length ? (
+                        <EmptyState message="No activity recorded yet." />
+                    ) : (
+                        <div className="max-h-96 overflow-y-auto">
+                            {activity.map((a: any, i: number) => (
+                                <div key={i} className="border-t border-border-soft py-2.5 first:border-t-0">
+                                    <p className="text-[13.5px] text-foreground">{a.message}</p>
+                                    <p className="text-[12px] text-faint">{timeAgo(a.created_at)}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </Panel>
+            </div>
+
+            <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-3">
+                <Panel className="xl:col-span-2">
+                    <PanelHeader title="Top data usage" subtitle="By subscriber, last 30 days (GB)" />
+                    <SimpleTable
+                        loading={usageLoading}
+                        empty="No usage recorded yet."
+                        columns={['Subscriber', 'Upload', 'Download', 'Total']}
+                        align={['left', 'right', 'right', 'right']}
+                        rows={(usageData || []).map((u: any) => [
+                            <span className="font-semibold text-foreground">{u.name}</span>,
+                            u.upload_gb, u.download_gb,
+                            <span className="font-semibold text-foreground">{u.total_gb}</span>,
+                        ])}
+                    />
+                </Panel>
+                <Panel>
+                    <PanelHeader title="New subscribers" subtitle="Registrations per month, this year" />
+                    {extraLoading ? <Skeleton className="h-[220px] w-full" /> : (
+                        <BarTrend
+                            data={(extra?.monthly_registrations || []).slice(0, new Date().getMonth() + 1)}
+                            xKey="month"
+                            yKey="count"
+                            name="Registered"
+                            height={220}
+                        />
+                    )}
+                </Panel>
+            </div>
+
+            {showIncome && (
+                <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-2">
+                    <Panel>
+                        <PanelHeader title="Collections per router" subtitle="All time" />
+                        <SimpleTable
+                            loading={extraLoading}
+                            empty="No transactions yet."
+                            columns={['Router', 'Payments', 'Share', 'Amount']}
+                            align={['left', 'right', 'right', 'right']}
+                            rows={(extra?.transactions_per_router || []).map((r: any) => [
+                                <span className="font-semibold text-foreground">{r.router}</span>,
+                                formatCount(r.transactions), `${r.percentage}%`, formatKES(r.amount),
+                            ])}
+                        />
+                    </Panel>
+                    <Panel>
+                        <PanelHeader title="Voucher stock" subtitle="Unused vs used, per plan" />
+                        <SimpleTable
+                            loading={extraLoading}
+                            empty="No vouchers generated yet."
+                            columns={['Plan', 'Unused', 'Used']}
+                            align={['left', 'right', 'right']}
+                            rows={(extra?.voucher_stock || []).map((v: any) => [
+                                <span className="font-semibold text-foreground">{v.plan_name}</span>,
+                                formatCount(v.unused), formatCount(v.used),
+                            ])}
+                        />
+                    </Panel>
+                </div>
+            )}
+
+            {showIncome && extra?.best_selling_packages?.length > 0 && (
+                <Panel>
+                    <PanelHeader title="Best-selling plans" subtitle="This month" />
+                    <SimpleTable
+                        columns={['Plan', 'Price', 'Sales', 'Revenue']}
+                        align={['left', 'right', 'right', 'right']}
+                        rows={extra.best_selling_packages.map((p: any) => [
+                            <span className="font-semibold text-foreground">{p.name}</span>,
+                            formatKES(p.price), formatAmount(p.sales), formatKES(p.revenue),
+                        ])}
+                    />
+                </Panel>
+            )}
+        </div>
+    );
+}
+
+/** Compact table in the Savanna table style (uppercase faint headers, soft row rules). */
+function SimpleTable({ columns, rows, align, loading, empty }: {
+    columns: string[];
+    rows: React.ReactNode[][];
+    align?: ('left' | 'right')[];
+    loading?: boolean;
+    empty?: string;
+}) {
+    if (loading) return <div className="space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>;
+    if (!rows.length) return <EmptyState message={empty || 'Nothing to show.'} />;
+    return (
+        <div className="-mx-1 overflow-x-auto">
+            <table className="w-full border-collapse text-[13.5px]">
+                <thead>
+                    <tr>
+                        {columns.map((c, i) => (
+                            <th
+                                key={c}
+                                className={`border-b border-border px-3 pb-2.5 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-faint ${align?.[i] === 'right' ? 'text-right' : 'text-left'}`}
+                            >
+                                {c}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((row, r) => (
+                        <tr key={r} className="border-b border-border-soft last:border-0">
+                            {row.map((cell, i) => (
+                                <td key={i} className={`num whitespace-nowrap px-3 py-3 text-muted-foreground ${align?.[i] === 'right' ? 'text-right' : 'text-left'}`}>
+                                    {cell}
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         </div>
     );
 }

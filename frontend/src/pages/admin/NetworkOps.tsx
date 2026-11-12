@@ -132,7 +132,11 @@ export default function NetworkOps() {
                     </div>
                     {isLive && routerId ? (
                         <span className="text-sm text-muted-foreground">
-                            Now: <strong className="text-foreground">{latestLive ? `${latestLive.down_mbps} down / ${latestLive.up_mbps} up Mbps` : 'measuring...'}</strong>
+                            Now: <strong className={liveHealth && !liveHealth.success ? 'text-red-600' : 'text-foreground'}>
+                                {liveHealth && !liveHealth.success
+                                    ? 'router offline -- waiting for it to come back'
+                                    : latestLive ? `${latestLive.down_mbps} down / ${latestLive.up_mbps} up Mbps` : 'measuring...'}
+                            </strong>
                             {' '}(WAN, every {LIVE_POLL_MS / 1000}s)
                         </span>
                     ) : trend?.router && (

@@ -4,6 +4,7 @@ import { billingAPI, adminAPI } from '../../services/api';
 import { Plus, Pencil, Trash2, X, Package, Download, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { downloadBlob } from '../../utils/downloadBlob';
+import { formatPlanDuration } from '../../components/savanna/format';
 
 const emptyForm = {
     name: '', description: '', service_type: 'pppoe',
@@ -349,7 +350,7 @@ export default function BillingPlans() {
                                     </td>
                                     <td className="px-6 py-4 text-sm text-muted-foreground">{plan.download_speed}/{plan.upload_speed} Mbps</td>
                                     <td className="px-6 py-4 text-sm font-medium text-foreground">KES {Number(plan.price).toLocaleString()}</td>
-                                    <td className="px-6 py-4 text-sm text-muted-foreground">{plan.duration_value} {plan.duration_unit}</td>
+                                    <td className="px-6 py-4 text-sm text-muted-foreground">{formatPlanDuration(plan)}</td>
                                     <td className="px-6 py-4">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${plan.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-muted-foreground'
                                             }`}>

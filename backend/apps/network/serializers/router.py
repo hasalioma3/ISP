@@ -8,7 +8,8 @@ class RouterSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = [
             'id', 'created_at', 'updated_at', 'last_sync', 'provisioned', 'provisioned_at',
-            'pre_provision_snapshot', 'pre_provision_snapshot_at',
+            'pre_provision_snapshot', 'pre_provision_snapshot_at', 'last_user_sync',
+            'is_online', 'status_checked_at', 'last_seen_at', 'last_error', 'last_health',
         ]
         extra_kwargs = {
             'password': {'write_only': True}

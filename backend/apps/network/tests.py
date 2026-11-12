@@ -461,6 +461,15 @@ class ManagementVlanPlanTests(TestCase):
 		self.assertEqual(plan['blocked'], ['10.5.50.0/24', '10.5.60.0/24', '10.5.70.0/24'])
 		self.assertFalse(plan['reused'])
 
+	def test_teleport_subnet_is_allowed_alongside_lan(self):
+		from apps.network.services.network_automation import plan_management_vlan
+		plan = plan_management_vlan(self._layout(), 'ether1', 'hotspot_bridge', self.PREFIX, 90,
+									extra_allowed=['192.168.2.0/24'])
+		self.assertEqual(plan['allowed'], ['192.168.56.0/24', '192.168.2.0/24'])
+		self.assertEqual(plan['subnet'], '10.5.90.0/24')
+		with self.assertRaisesRegex(ValueError, 'MIKROTIK_MGMT_VLAN_ALLOWED_SUBNETS'):
+			plan_management_vlan(self._layout(), 'ether1', 'hotspot_bridge', self.PREFIX, 90, extra_allowed=['nonsense'])
+
 	def test_skips_vlan_id_and_subnet_already_in_use(self):
 		plan = self._plan(self._layout(
 			pools=[{'name': 'guests', 'ranges': '10.5.90.10-10.5.90.50'}],
@@ -495,7 +504,7 @@ class ManagementVlanApplyTests(TestCase):
 			'vlan_id': 90, 'vlan_name': 'mgmt-vlan90', 'bridge': 'hotspot_bridge', 'wan_interface': 'ether1',
 			'wan_ip': '192.168.56.20', 'subnet': '10.5.90.0/24', 'gateway': '10.5.90.1/24',
 			'pool_range': '10.5.90.100-10.5.90.200', 'lan_subnet': '192.168.56.0/24',
-			'blocked': ['10.5.50.0/24'], 'reused': False,
+			'allowed': ['192.168.56.0/24', '192.168.2.0/24'], 'blocked': ['10.5.50.0/24'], 'reused': False,
 		}
 		resources = {}
 		filter_rules = []
@@ -526,9 +535,158 @@ class ManagementVlanApplyTests(TestCase):
 
 		self.assertTrue(result['success'], result)
 		order = [r['comment'] for r in filter_rules]
-		self.assertLess(order.index('ISP Billing - Radio Mgmt [10.5.50.0/24] (Block)'),
-						order.index('ISP Billing - Radio Mgmt (LAN access)'))
+		for allowed in ('192.168.56.0/24', '192.168.2.0/24'):
+			self.assertLess(order.index('ISP Billing - Radio Mgmt [10.5.50.0/24] (Block)'),
+							order.index(f'ISP Billing - Radio Mgmt [{allowed}] (Access)'))
+		teleport = next(r for r in filter_rules if r['comment'] == 'ISP Billing - Radio Mgmt [192.168.2.0/24] (Access)')
+		self.assertEqual((teleport['in-interface'], teleport['dst-address']), ('ether1', '10.5.90.0/24'))
 		resources['/interface/vlan'].add.assert_called_once_with(
 			comment='ISP Billing - Radio Mgmt (VLAN)', name='mgmt-vlan90', **{'vlan-id': '90'},
 			interface='hotspot_bridge', disabled='no',
 		)
+
+
+class BackgroundUserSyncTests(TestCase):
+	def setUp(self):
+		from apps.network.models import Router
+		from rest_framework.test import APIClient
+		self.router = Router.objects.create(name='r1', ip_address='10.0.0.1', username='u', password='p')
+		self.client = APIClient()
+		self.client.force_authenticate(Customer.objects.create(username='boss', is_staff=True, is_superuser=True))
+
+	def test_task_records_results(self):
+		from apps.network.tasks import sync_router_users
+		with patch('apps.network.tasks.network_automation.sync_all_users',
+				   return_value={'success': ['PPPoE: cyrus'], 'failed': ['koech: no such profile']}):
+			sync_router_users(self.router.pk)
+		self.router.refresh_from_db()
+		state = self.router.last_user_sync
+		self.assertEqual(state['status'], 'done')
+		self.assertEqual(state['failed'], ['koech: no such profile'])
+		self.assertIsNotNone(self.router.last_sync)
+
+	def test_task_records_a_crash_instead_of_losing_it(self):
+		from apps.network.tasks import sync_router_users
+		with patch('apps.network.tasks.network_automation.sync_all_users', side_effect=ConnectionError('router went away')):
+			sync_router_users(self.router.pk)
+		self.router.refresh_from_db()
+		self.assertEqual(self.router.last_user_sync['status'], 'error')
+		self.assertIn('router went away', self.router.last_user_sync['error'])
+
+	def test_view_starts_background_run_and_refuses_a_second(self):
+		url = f'/api/network/routers/{self.router.pk}/sync_users/'
+		with patch('apps.network.tasks.sync_router_users.delay') as delay:
+			first = self.client.post(url)
+			second = self.client.post(url)
+		self.assertEqual(first.status_code, 202)
+		self.assertTrue(second.data['running'])
+		delay.assert_called_once_with(self.router.pk)
+		status = self.client.get(f'/api/network/routers/{self.router.pk}/sync_users_status/')
+		self.assertEqual(status.data['status'], 'running')
+
+
+class RouterReachabilityTests(TestCase):
+	"""An offline router must not stall page requests (it used to freeze the portal)."""
+
+	def setUp(self):
+		from apps.network.models import Router
+		from rest_framework.test import APIClient
+		self.router = Router.objects.create(name='r1', ip_address='10.0.0.1', username='u', password='p')
+		self.client = APIClient()
+		self.client.force_authenticate(Customer.objects.create(username='boss', is_staff=True, is_superuser=True))
+
+	def health(self):
+		return self.client.get('/api/network/routers/health/').data[self.router.pk]
+
+	def test_known_offline_router_is_answered_from_db_without_contacting_it(self):
+		from apps.network.models import Router
+		seen = timezone.now() - timedelta(hours=2)
+		Router.objects.filter(pk=self.router.pk).update(
+			is_online=False, status_checked_at=timezone.now(), last_seen_at=seen,
+			last_error='timed out', last_health={'cpu_load': 7},
+		)
+		with patch.object(MikroTikService, 'get_system_health') as live:
+			data = self.health()
+		live.assert_not_called()
+		self.assertFalse(data['online'])
+		self.assertEqual(data['last_health'], {'cpu_load': 7})
+		self.assertEqual(data['last_seen_at'], seen.isoformat())
+
+	def test_offline_router_is_retried_live_after_the_recheck_window(self):
+		from apps.network.models import Router
+		Router.objects.filter(pk=self.router.pk).update(
+			is_online=False, status_checked_at=timezone.now() - timedelta(minutes=5),
+		)
+		with patch.object(MikroTikService, 'get_system_health', return_value={'success': True, 'cpu_load': 3}) as live:
+			data = self.health()
+		live.assert_called_once()
+		self.assertTrue(data['online'])
+		self.router.refresh_from_db()
+		self.assertTrue(self.router.is_online)
+		self.assertEqual(self.router.last_health['cpu_load'], 3)
+
+	def test_failed_live_read_marks_router_offline_and_keeps_last_health(self):
+		from apps.network.models import Router
+		Router.objects.filter(pk=self.router.pk).update(is_online=True, last_health={'cpu_load': 9})
+		with patch.object(MikroTikService, 'get_system_health', return_value={'success': False, 'error': 'timed out'}):
+			data = self.health()
+		self.assertFalse(data['success'])
+		self.router.refresh_from_db()
+		self.assertFalse(self.router.is_online)
+		self.assertEqual(self.router.last_error, 'timed out')
+		self.assertEqual(self.router.last_health, {'cpu_load': 9})
+
+	def test_usage_poll_is_the_heartbeat(self):
+		with patch.object(MikroTikService, 'get_active_sessions', return_value={'success': False, 'error': 'no route'}):
+			collect_usage_statistics()
+		self.router.refresh_from_db()
+		self.assertFalse(self.router.is_online)
+		with patch.object(MikroTikService, 'get_active_sessions', return_value={'success': True, 'sessions': []}):
+			collect_usage_statistics()
+		self.router.refresh_from_db()
+		self.assertTrue(self.router.is_online)
+		self.assertIsNotNone(self.router.last_seen_at)
+
+	def test_connect_uses_short_timeout_then_read_timeout(self):
+		from django.test import override_settings
+		from apps.network.services.mikrotik_service import _TimedApiPool
+		pool = _TimedApiPool('10.0.0.1', username='u', password='p', plaintext_login=True)
+		sock = MagicMock()
+		used = {}
+
+		def fake_get_socket(host, port, timeout, **kw):
+			used['timeout'] = timeout
+			return sock
+
+		with override_settings(MIKROTIK_CONNECT_TIMEOUT=2.0, MIKROTIK_READ_TIMEOUT=15.0), \
+			 patch('routeros_api.api.api_socket.get_socket', side_effect=fake_get_socket), \
+			 patch('routeros_api.api.RouterOsApi.login'):
+			pool.get_api()
+		self.assertEqual(used['timeout'], 2.0)
+		sock.settimeout.assert_called_with(15.0)
+
+
+class OnlineUsersUsageTests(TestCase):
+	def test_rows_include_plan_period_and_all_time_usage(self):
+		from apps.billing.models import UsageRecord
+		from apps.network.models import Router, ActiveSession
+		from rest_framework.test import APIClient
+		with patch('apps.billing.signals.sync_plan_to_routers.delay'), \
+			 patch('apps.billing.signals.network_automation.activate_customer'), \
+			 patch('apps.billing.signals.network_automation.suspend_customer', return_value={'success': True}):
+			plan = BillingPlan.objects.create(name='P', service_type='pppoe', download_speed=5, upload_speed=5,
+											  price='10.00', mikrotik_profile='p')
+			customer = Customer.objects.create(username='kim', service_type='pppoe')
+			old = Subscription.objects.create(customer=customer, plan=plan, expiry_date=timezone.now() - timedelta(days=1), status='expired')
+			current = Subscription.objects.create(customer=customer, plan=plan, expiry_date=timezone.now() + timedelta(days=3))
+		GB = 1024 ** 3
+		UsageRecord.objects.create(customer=customer, subscription=old, download_bytes=4 * GB, start_time=timezone.now())
+		UsageRecord.objects.create(customer=customer, subscription=current, download_bytes=GB, start_time=timezone.now())
+		router = Router.objects.create(name='r', ip_address='10.0.0.9', username='u', password='p')
+		ActiveSession.objects.create(router=router, customer=customer, session_id='s1', session_type='pppoe',
+									 username='kim', ip_address='10.5.60.2', start_time=timezone.now())
+		client = APIClient()
+		client.force_authenticate(Customer.objects.create(username='boss', is_staff=True, is_superuser=True))
+		row = client.get('/api/network/online-users/').data[0]
+		self.assertEqual(row['period_usage_gb'], 1.0)
+		self.assertEqual(row['total_usage_gb'], 5.0)

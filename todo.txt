@@ -1,5 +1,11 @@
 1. remove ability of a technician to extend a subscription or add cash to an account
-2. send a notification to a set mobile number when a subscription is extended or cash is added to an account
-3. show how much data has been used by a customer on the online customers page, for the subscription period only.
-4. when setting up a mikrotik that has been reset, give me a script to manually run so that I have WAN access without connecting to it.
-5. the portal hangs if a mikrotik is offline, when opening, load the page with the last sync, then update when the mikrotik comes online, if you cannot reach the mikrotik, report it offline.
+2. add an option to extend a subscription to a certain date on the frontend, and if the subscription had expired, re activate it, reserve this for the super admin
+2. send a notification to the customer and to a set mobile number when a subscription is extended or cash is added to an account
+3. show how much data has been used by a customer on the online customers page, for the subscription period and all time usage.
+4. on the usage Tab,show the total usage for the current active plan, alongside the All-time total.
+5. on the recent payments page, show unique payments made, the payments are repeated.
+6. on the reports graph, when I click on the graph, show a breakdown drilldown, both on the data usage and revenue over view.
+
+
+1. Add gmail smtp to send email notifications, configuration be done on the frontend.
+2. resolve SMS and whatsapp intergration issues.

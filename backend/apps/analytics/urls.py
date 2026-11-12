@@ -3,7 +3,7 @@ from .views import (
     DashboardStatsView, IncomeReportView, UsageReportView, UsageChartView,
     DashboardExtraView, ExpiringTodayView, RecentActivityView, DataUsageView,
     RecentPaymentsView, RouterBandwidthTrendView, ChurnForecastView,
-    VoucherUsageReportView,
+    VoucherUsageReportView, DailyUsageView, DayBreakdownView,
 )
 
 urlpatterns = [
@@ -19,4 +19,6 @@ urlpatterns = [
     path('recent-payments/', RecentPaymentsView.as_view(), name='recent-payments'),
     path('router-bandwidth/', RouterBandwidthTrendView.as_view(), name='router-bandwidth-trend'),
     path('churn-forecast/', ChurnForecastView.as_view(), name='churn-forecast'),
+    path('usage-daily/', DailyUsageView.as_view(), name='usage-daily'),
+    path('day-breakdown/', DayBreakdownView.as_view(), name='day-breakdown'),
 ]

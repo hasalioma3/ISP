@@ -62,6 +62,26 @@ class Router(models.Model):
     pre_provision_snapshot = models.JSONField(blank=True, null=True)
     pre_provision_snapshot_at = models.DateTimeField(blank=True, null=True)
 
+    # Outcome of the last "Sync Users" run, which goes through Celery: a
+    # router with dozens of customers takes longer than the web request
+    # timeout, which used to kill the request mid-sync with no visible
+    # error. {'status': 'running'|'done'|'error', 'started_at',
+    # 'finished_at', 'success': [...], 'failed': [...], 'error'}.
+    last_user_sync = models.JSONField(blank=True, null=True)
+
+    # Reachability, refreshed by the usage poll (every USAGE_POLL_SECONDS)
+    # and by every live health read. Pages render from these instead of
+    # contacting the router: an offline router used to tie up a web worker
+    # on every dashboard poll until the connect timed out, and with few
+    # workers that froze the whole portal. is_online is None until the
+    # first check. last_health is the last good /system/resource read, so
+    # an offline router still shows what it looked like when last seen.
+    is_online = models.BooleanField(null=True, blank=True)
+    status_checked_at = models.DateTimeField(blank=True, null=True)
+    last_seen_at = models.DateTimeField(blank=True, null=True)
+    last_error = models.CharField(max_length=255, blank=True, default='')
+    last_health = models.JSONField(blank=True, null=True)
+
     # Metadata
     location = models.CharField(max_length=200, blank=True)
     notes = models.TextField(blank=True)

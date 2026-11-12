@@ -39,6 +39,14 @@ class NotificationSettings(models.Model):
     telegram_webhook_secret = EncryptedCharField(max_length=200, blank=True)
     telegram_bot_username = models.CharField(max_length=100, blank=True)
 
+    # --- Staff alerts ---
+    # A manager's number that gets a message whenever staff extend a
+    # subscription or record cash on an account, so money-affecting manual
+    # actions never happen unnoticed. Blank = off.
+    STAFF_ALERT_CHANNEL_CHOICES = [('sms', 'SMS'), ('whatsapp', 'WhatsApp')]
+    staff_alert_phone = models.CharField(max_length=20, blank=True)
+    staff_alert_channel = models.CharField(max_length=10, choices=STAFF_ALERT_CHANNEL_CHOICES, default='sms')
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -84,6 +92,8 @@ class NotificationLog(models.Model):
         ('suspension', 'Post-Expiry Suspension'),
         ('promo_broadcast', 'Promo Broadcast'),
         ('voucher_send', 'Voucher Code Sent'),
+        ('staff_alert', 'Staff Alert (manual extension / cash)'),
+        ('subscription_extended', 'Subscription Extended by Staff'),
     ]
 
     STATUS_CHOICES = [

@@ -5,6 +5,7 @@ import { ArrowLeft, Wifi, Zap } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { filterSelfServicePlans } from '../../utils/plans';
 import { Card } from '../../components/ui/card';
+import { formatPlanDuration } from '../../components/savanna/format';
 
 export default function Plans() {
     const userServiceType = useAuthStore((state) => state.user?.service_type);
@@ -76,7 +77,7 @@ export default function Plans() {
                                 <div className="mb-6">
                                     <div className="flex items-baseline gap-2 mb-2">
                                         <span className="text-4xl font-bold text-foreground">KES {plan.price}</span>
-                                        <span className="text-muted-foreground">/ {plan.duration_value} {plan.duration_unit}</span>
+                                        <span className="text-muted-foreground">/ {formatPlanDuration(plan)}</span>
                                     </div>
                                 </div>
 

@@ -1,18 +1,11 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { analyticsAPI } from '../../services/api';
-import {
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-    Legend
-} from 'recharts';
+import { BarTrend } from '../../components/savanna/charts';
+import { Panel, PanelHeader, Skeleton, formatCompact, formatDateEAT, formatKES } from '../../components/savanna';
+import DayBreakdown from '../../components/DayBreakdown';
 import { Download, Calendar, Search } from 'lucide-react';
-import { format, subDays } from 'date-fns';
+import { addDays, format, subDays } from 'date-fns';
 import { downloadBlob } from '../../utils/downloadBlob';
 
 export default function Reports() {
@@ -29,6 +22,30 @@ export default function Reports() {
             return res.data;
         }
     });
+
+    const [revenueDay, setRevenueDay] = useState<string | null>(null);
+    const [usageDay, setUsageDay] = useState<string | null>(null);
+
+    // The income report only has days with payments; fill the gaps with 0
+    // so the bars line up day by day.
+    const revenueDays = (() => {
+        const byDay = new Map<string, number>((incomeData || []).map((r: any) => [String(r.date), Number(r.total) || 0]));
+        const out: { date: string; total: number }[] = [];
+        for (let d = new Date(`${startDate}T12:00:00`); format(d, 'yyyy-MM-dd') <= endDate; d = addDays(d, 1)) {
+            const key = format(d, 'yyyy-MM-dd');
+            out.push({ date: key, total: byDay.get(key) ?? 0 });
+            if (out.length > 400) break;
+        }
+        return out;
+    })();
+    const revenueTotal = revenueDays.reduce((sum, d) => sum + d.total, 0);
+
+    const { data: usageDays, isLoading: usageLoading } = useQuery({
+        queryKey: ['admin-daily-usage', startDate, endDate],
+        queryFn: async () => (await analyticsAPI.getDailyUsage({ start_date: startDate, end_date: endDate })).data as { date: string; total_gb: number }[],
+    });
+    const usageTotal = (usageDays || []).reduce((sum, d) => sum + d.total_gb, 0);
+    const shortDay = (v: string) => formatDateEAT(`${v}T12:00:00+03:00`, { day: '2-digit', month: 'short' });
 
     const { data: voucherReport, isLoading: vouchersLoading, isError: vouchersError } = useQuery({
         queryKey: ['admin-voucher-usage', startDate, endDate, voucherSearch, voucherPage],
@@ -95,21 +112,21 @@ export default function Reports() {
     return (
         <div>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                <h1 className="text-2xl font-bold">Financial Reports</h1>
+                <h1 className="text-2xl font-bold">Reports</h1>
                 <div className="flex flex-wrap gap-2">
                     <div className="flex items-center gap-2 bg-card px-3 py-2 rounded-lg border shadow-sm flex-wrap">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                         <input
                             type="date"
                             value={startDate}
-                            onChange={(e) => { setStartDate(e.target.value); setVoucherPage(1); }}
+                            onChange={(e) => { setStartDate(e.target.value); setVoucherPage(1); setRevenueDay(null); setUsageDay(null); }}
                             className="text-sm border-none focus:ring-0 p-0 text-muted-foreground"
                         />
                         <span className="text-muted-foreground">-</span>
                         <input
                             type="date"
                             value={endDate}
-                            onChange={(e) => { setEndDate(e.target.value); setVoucherPage(1); }}
+                            onChange={(e) => { setEndDate(e.target.value); setVoucherPage(1); setRevenueDay(null); setUsageDay(null); }}
                             className="text-sm border-none focus:ring-0 p-0 text-muted-foreground"
                         />
                     </div>
@@ -123,32 +140,55 @@ export default function Reports() {
                 </div>
             </div>
 
-            <div className="bg-card p-6 rounded-xl shadow-sm border border-border mb-6">
-                <h3 className="text-lg font-bold mb-4">Revenue Overview</h3>
-                <div className="h-96">
-                    {isLoading ? (
-                        <div className="h-full flex items-center justify-center text-muted-foreground">Loading chart...</div>
-                    ) : isError ? (
-                        <div className="h-full flex items-center justify-center text-red-500">Error loading report: {(error as Error).message}</div>
+            {/* Click a day's bar to see what made it up. */}
+            <div className="mb-6 grid grid-cols-1 gap-[18px] 2xl:grid-cols-2">
+                <Panel>
+                    <PanelHeader
+                        title="Revenue overview"
+                        subtitle={`Completed payments per day · ${formatKES(revenueTotal)} in range · click a bar for the breakdown`}
+                    />
+                    {isLoading ? <Skeleton className="h-[300px] w-full" /> : isError ? (
+                        <p className="py-16 text-center text-bad">Error loading report: {(error as Error).message}</p>
                     ) : (
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={incomeData || []}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis
-                                    dataKey="date"
-                                    tickFormatter={(val) => format(new Date(val), 'MMM d')}
-                                />
-                                <YAxis />
-                                <Tooltip
-                                    formatter={(value) => [`KES ${Number(value).toLocaleString()}`, 'Revenue']}
-                                    labelFormatter={(label) => format(new Date(label), 'PPP')}
-                                />
-                                <Legend />
-                                <Bar dataKey="total" fill="#7c3aed" name="Revenue" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                        <BarTrend
+                            data={revenueDays}
+                            xKey="date"
+                            yKey="total"
+                            name="Revenue"
+                            height={300}
+                            showYAxis
+                            formatX={shortDay}
+                            formatY={(v) => formatCompact(v)}
+                            formatTooltip={(v) => formatKES(v)}
+                            selected={revenueDay}
+                            onBarClick={(row) => setRevenueDay(row.date === revenueDay ? null : row.date)}
+                        />
                     )}
-                </div>
+                    {revenueDay && <DayBreakdown kind="revenue" date={revenueDay} onClose={() => setRevenueDay(null)} />}
+                </Panel>
+
+                <Panel>
+                    <PanelHeader
+                        title="Data usage overview"
+                        subtitle={`Whole network per day · ${usageTotal.toFixed(1)} GB in range · click a bar for the breakdown`}
+                    />
+                    {usageLoading ? <Skeleton className="h-[300px] w-full" /> : (
+                        <BarTrend
+                            data={usageDays || []}
+                            xKey="date"
+                            yKey="total_gb"
+                            name="Usage"
+                            height={300}
+                            showYAxis
+                            formatX={shortDay}
+                            formatY={(v) => `${v}`}
+                            formatTooltip={(v) => `${v} GB`}
+                            selected={usageDay}
+                            onBarClick={(row) => setUsageDay(row.date === usageDay ? null : row.date)}
+                        />
+                    )}
+                    {usageDay && <DayBreakdown kind="usage" date={usageDay} onClose={() => setUsageDay(null)} />}
+                </Panel>
             </div>
 
             <section className="bg-card rounded-xl shadow-sm border border-border">

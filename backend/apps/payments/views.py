@@ -21,6 +21,44 @@ from apps.customers.permissions import RoleAllowed
 logger = logging.getLogger('mpesa')
 
 
+def start_stk_push(customer, plan, phone_number):
+    """
+    Record a PaymentRequest and send the STK prompt for `plan` to
+    `phone_number`. On payment, the M-Pesa callback (PaymentProcessor)
+    finds this request and activates the plan for `customer`. Shared by the
+    self-service checkout and the admin's bulk "Send STK reminder".
+    Returns (payment_request, result) where result is mpesa_service's dict.
+    """
+    payment_request = PaymentRequest.objects.create(
+        customer=customer,
+        plan=plan,
+        phone_number=phone_number,
+        amount=plan.price,
+        account_reference=customer.username,
+        transaction_desc=f"{plan.name} subscription",
+        status='initiated'
+    )
+    result = mpesa_service.initiate_stk_push(
+        phone_number=phone_number,
+        amount=plan.price,
+        account_reference=customer.username,
+        transaction_desc=f"{plan.name} subscription"
+    )
+    if result['success']:
+        data = result['data']
+        payment_request.merchant_request_id = data.get('MerchantRequestID')
+        payment_request.checkout_request_id = data.get('CheckoutRequestID')
+        payment_request.response_code = data.get('ResponseCode')
+        payment_request.response_description = data.get('ResponseDescription')
+        payment_request.customer_message = data.get('CustomerMessage')
+        payment_request.status = 'pending'
+    else:
+        payment_request.status = 'failed'
+        payment_request.response_description = result.get('error')
+    payment_request.save()
+    return payment_request, result
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def initiate_payment(request):
@@ -118,37 +156,9 @@ def initiate_payment(request):
         customer.hotspot_mac_address = mac_address
         customer.save()
     
-    # Create payment request record
-    payment_request = PaymentRequest.objects.create(
-        customer=customer,
-        plan=plan,
-        phone_number=phone_number,
-        amount=plan.price,
-        account_reference=customer.username,
-        transaction_desc=f"{plan.name} subscription",
-        status='initiated'
-    )
-    
-    # Initiate STK Push
-    result = mpesa_service.initiate_stk_push(
-        phone_number=phone_number,
-        amount=plan.price,
-        account_reference=customer.username,
-        transaction_desc=f"{plan.name} subscription"
-    )
-    
+    payment_request, result = start_stk_push(customer, plan, phone_number)
+
     if result['success']:
-        data = result['data']
-        
-        # Update payment request with M-Pesa response
-        payment_request.merchant_request_id = data.get('MerchantRequestID')
-        payment_request.checkout_request_id = data.get('CheckoutRequestID')
-        payment_request.response_code = data.get('ResponseCode')
-        payment_request.response_description = data.get('ResponseDescription')
-        payment_request.customer_message = data.get('CustomerMessage')
-        payment_request.status = 'pending'
-        payment_request.save()
-        
         return Response({
             'success': True,
             'message': 'STK Push sent to your phone',
@@ -156,10 +166,6 @@ def initiate_payment(request):
             'checkout_request_id': payment_request.checkout_request_id
         }, status=status.HTTP_200_OK)
     else:
-        payment_request.status = 'failed'
-        payment_request.response_description = result.get('error')
-        payment_request.save()
-        
         error_msg = result.get('error', 'Failed to initiate payment')
         logger.error(f"M-Pesa Initiation Failed: {error_msg}")
         return Response({

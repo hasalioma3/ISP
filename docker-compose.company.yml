@@ -11,7 +11,9 @@
 services:
   backend:
     build: ./backend
-    command: gunicorn isp_billing.wsgi:application --bind 0.0.0.0:8000
+    # Threaded so one request stuck on an offline router can't block the
+    # portal (see docker-compose.yml).
+    command: gunicorn isp_billing.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-1} --threads ${GUNICORN_THREADS:-8}
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/mediafiles

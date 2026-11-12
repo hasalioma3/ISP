@@ -56,3 +56,41 @@ def build_usage_chart(queryset):
         })
 
     return {'today': today_data, 'weekly': weekly, 'monthly': monthly}
+
+
+def usage_summary(customer):
+    """
+    All-time usage and usage for the current plan period (records tied to
+    the latest active, unexpired subscription -- what data caps and FUP
+    count against). Shared by the admin subscriber Usage tab and the
+    customer's own Usage page.
+    """
+    from django.db.models import Sum
+    from django.utils import timezone
+    from apps.billing.models import Subscription, UsageRecord
+
+    gb = 1024 ** 3
+
+    def split(qs):
+        agg = qs.aggregate(up=Sum('upload_bytes'), down=Sum('download_bytes'))
+        up, down = agg['up'] or 0, agg['down'] or 0
+        return {
+            'upload_gb': round(up / gb, 2),
+            'download_gb': round(down / gb, 2),
+            'total_gb': round((up + down) / gb, 2),
+        }
+
+    records = UsageRecord.objects.filter(customer=customer)
+    current = Subscription.objects.filter(
+        customer=customer, status='active', expiry_date__gt=timezone.now()
+    ).select_related('plan').order_by('-created_at').first()
+    plan_totals = None
+    if current:
+        plan_totals = {
+            'plan_name': current.plan.name,
+            'start_date': current.start_date,
+            'expiry_date': current.expiry_date,
+            'data_limit_gb': current.plan.data_limit_gb,
+            **split(records.filter(subscription=current)),
+        }
+    return {'totals': split(records), 'plan_totals': plan_totals}

@@ -3,7 +3,11 @@ name: ${ISP_COMPOSE_NAME:-isp-billing}
 services:
   backend:
     build: ./backend
-    command: gunicorn isp_billing.wsgi:application --bind 0.0.0.0:8000
+    # gunicorn's default is one sync worker: a single request waiting on a
+    # slow/offline router blocked the whole portal. One process with threads
+    # serves other requests meanwhile at almost no extra RAM (most of the
+    # time is spent waiting on routers / M-Pesa / Postgres, not in Python).
+    command: gunicorn isp_billing.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-1} --threads ${GUNICORN_THREADS:-8}
     volumes:
       - ./backend:/app
       - static_volume:/app/staticfiles
@@ -107,11 +111,22 @@ services:
     # http://whatsapp_service:3000. Never publish this; Django proxies
     # status/QR to the browser through an authenticated endpoint.
 
+# Fixed, small subnets instead of Docker's automatic /16s: an automatic
+# pick landed on 172.18.0.0/16, which swallowed the 172.18.251.0/24 range
+# UISP (on the same Pi) hard-codes for its own networks, so UISP couldn't
+# start. Keep these clear of 172.17 (docker0), 172.18 (UISP) and the LAN/VPN
+# ranges (192.168.56.0/24, Teleport 192.168.2.0/24).
 networks:
   isp_network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: ${ISP_NETWORK_SUBNET:-172.28.0.0/24}
   isp_shared_network:
     name: ${ISP_SHARED_NETWORK:-isp_shared_network}
+    ipam:
+      config:
+        - subnet: ${ISP_SHARED_SUBNET:-172.29.0.0/24}
 
 volumes:
   postgres_data:

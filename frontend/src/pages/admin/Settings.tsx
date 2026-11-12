@@ -121,17 +121,22 @@ function BrandingTab() {
     const queryClient = useQueryClient();
     const { data: siteSettings } = useSiteSettings();
     const [companyName, setCompanyName] = useState('');
+    const [supportPhone, setSupportPhone] = useState('');
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        if (siteSettings) setCompanyName(siteSettings.company_name);
+        if (siteSettings) {
+            setCompanyName(siteSettings.company_name);
+            setSupportPhone(siteSettings.support_phone || '');
+        }
     }, [siteSettings]);
 
     const updateMutation = useMutation({
         mutationFn: () => siteSettingsAPI.update({
             company_name: companyName,
+            support_phone: supportPhone.trim(),
             ...(logoFile ? { logo: logoFile } : {}),
         }),
         onSuccess: () => {
@@ -173,6 +178,17 @@ function BrandingTab() {
                         onChange={e => setCompanyName(e.target.value)}
                     />
                     <p className="text-xs text-muted-foreground mt-1">Shown next to the logo in the sidebar header.</p>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Support phone</label>
+                    <input
+                        type="tel"
+                        className="w-full border rounded-lg px-3 py-2"
+                        placeholder="e.g. 0700 123 456"
+                        value={supportPhone}
+                        onChange={e => setSupportPhone(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Shown to customers on their dashboard and the hotspot login page. Leave blank to hide.</p>
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-foreground/80 mb-1">Logo</label>

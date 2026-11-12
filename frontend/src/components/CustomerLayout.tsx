@@ -1,129 +1,154 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Receipt, History, Activity, Wifi, LogOut, Home, ChevronRight, CircleUserRound, Menu } from 'lucide-react';
+import { ChevronDown, KeyRound, LayoutDashboard, LogOut, UserCog, Wifi } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useSiteSettings } from '../hooks/useSiteSettings';
 import AccountModal from './AccountModal';
-import { SidebarNavItem } from './ui/sidebar-nav-item';
 import { ThemeToggle } from './ui/theme-toggle';
+import {
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from './ui/dropdown-menu';
+import { ShellContext, initials } from './savanna';
+import { cn } from '@/lib/utils';
 
 const NAVIGATION = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Buy Package', href: '/plans', icon: Wifi },
-    { name: 'Order History', href: '/orders', icon: Receipt },
-    { name: 'Activation History', href: '/activations', icon: History },
-    { name: 'Data Usage', href: '/usage', icon: Activity },
+    { name: 'Overview', href: '/dashboard' },
+    { name: 'Usage', href: '/usage' },
+    { name: 'Payments', href: '/orders' },
+    { name: 'Activations', href: '/activations' },
+    { name: 'Plans', href: '/plans' },
 ];
 
+/**
+ * Savanna customer shell (design/HANDOFF.md §3): top nav only, inside the
+ * deep-green band. Mobile-first: the nav scrolls sideways on small screens
+ * rather than hiding behind a menu, since it's only five links. Pages may
+ * render <ShellHeader> (or their own band content) the same way as admin.
+ */
 export default function CustomerLayout() {
     const location = useLocation();
     const navigate = useNavigate();
     const { user, logout } = useAuthStore();
     const { data: siteSettings } = useSiteSettings();
     const [accountModalTab, setAccountModalTab] = useState<'profile' | 'password' | null>(null);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
+    const [hasHeader, setHasHeaderState] = useState(false);
+    const setHasHeader = useCallback((v: boolean) => setHasHeaderState(v), []);
 
     const handleLogout = () => {
         logout();
         navigate('/login');
     };
 
-    const currentPage = NAVIGATION.find(item => location.pathname.startsWith(item.href))?.name || 'Dashboard';
+    const displayName = user?.full_name || user?.username || '';
 
     return (
-        <div className="min-h-screen bg-background flex">
-            {/* Mobile Sidebar Overlay */}
-            {isSidebarOpen && (
-                <div
-                    className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-                    onClick={() => setIsSidebarOpen(false)}
-                />
-            )}
+        <ShellContext.Provider value={{ slot: headerSlot, setHasHeader }}>
+            <div className="min-h-screen bg-background">
+                <header className={cn('relative overflow-hidden bg-band text-white', hasHeader ? 'pb-[150px]' : 'pb-6')}>
+                    <svg className="pointer-events-none absolute -right-10 top-16 h-[360px] w-[520px] text-white/[0.05]" viewBox="0 0 520 360" fill="none" aria-hidden="true">
+                        <circle cx="400" cy="70" r="64" fill="#F2772E" fillOpacity="0.35" />
+                        <path d="M0 360 C120 200 240 180 330 250 C400 300 460 180 520 90 V360 Z" fill="currentColor" />
+                    </svg>
+                    <div className="relative mx-auto max-w-[1440px] px-4 pt-5 sm:px-8 lg:px-[72px]">
+                        <div className="flex items-center gap-4">
+                            <Link to="/dashboard" className="flex shrink-0 items-center gap-3">
+                                {siteSettings?.logo ? (
+                                    <img src={siteSettings.logo} alt="" className="h-10 w-10 rounded-full bg-white object-contain p-1" />
+                                ) : (
+                                    <span className="grid h-10 w-10 place-items-center rounded-full bg-sunset">
+                                        <Wifi className="h-5 w-5" strokeWidth={2.4} />
+                                    </span>
+                                )}
+                                <span className="hidden text-[19px] font-extrabold tracking-tight sm:inline">{siteSettings?.company_name || 'ISP Portal'}</span>
+                            </Link>
 
-            {/* Sidebar */}
-            <div className={`
-        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-card border-r border-border flex flex-col shrink-0 transform transition-transform duration-200 ease-in-out
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-                <div className="px-5 py-5 border-b border-border flex items-center justify-between">
-                    <Link to="/dashboard" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-2.5 min-w-0">
-                        {siteSettings?.logo ? (
-                            <img src={siteSettings.logo} alt={siteSettings.company_name} className="h-8 w-8 rounded-lg object-contain bg-accent shrink-0" />
-                        ) : (
-                            <div className="h-8 w-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm shrink-0">
-                                {(siteSettings?.company_name || 'I')[0].toUpperCase()}
+                            <nav className="mx-auto hidden items-center gap-1 md:flex" aria-label="Account">
+                                {NAVIGATION.map((item) => {
+                                    const active = location.pathname.startsWith(item.href);
+                                    return (
+                                        <Link
+                                            key={item.href}
+                                            to={item.href}
+                                            aria-current={active ? 'page' : undefined}
+                                            className={cn(
+                                                'flex h-11 items-center rounded-full px-5 text-[15px] font-semibold transition-colors',
+                                                active ? 'bg-white text-primary' : 'text-white/80 hover:bg-white/10 hover:text-white',
+                                            )}
+                                        >
+                                            {item.name}
+                                        </Link>
+                                    );
+                                })}
+                            </nav>
+
+                            <div className="ml-auto flex items-center gap-2 md:ml-0">
+                                <ThemeToggle className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20" />
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <button className="flex items-center gap-3 rounded-full py-1 pl-1 pr-2 hover:bg-white/10" aria-label="Account menu">
+                                            <span className="grid h-10 w-10 place-items-center rounded-full bg-[#F4C542] text-[13.5px] font-extrabold text-[#5A3A00]">
+                                                {initials(displayName)}
+                                            </span>
+                                            <span className="hidden text-left leading-tight sm:block">
+                                                <span className="block text-[14.5px] font-semibold">{displayName}</span>
+                                                <span className="block text-[12.5px] text-white/70">{user?.username}</span>
+                                            </span>
+                                            <ChevronDown className="hidden h-4 w-4 text-white/70 sm:block" />
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-56">
+                                        <DropdownMenuLabel className="font-normal">
+                                            <p className="truncate text-sm font-medium text-foreground">{displayName}</p>
+                                            <p className="truncate text-xs text-muted-foreground">{user?.phone_number || user?.email || user?.username}</p>
+                                        </DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={() => setAccountModalTab('profile')}><UserCog className="h-4 w-4" /> My account</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setAccountModalTab('password')}><KeyRound className="h-4 w-4" /> Change password</DropdownMenuItem>
+                                        {(user?.is_staff || user?.is_superuser) && (
+                                            <DropdownMenuItem onClick={() => navigate('/admin')}><LayoutDashboard className="h-4 w-4" /> Admin dashboard</DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600 [&_svg]:text-red-500">
+                                            <LogOut className="h-4 w-4" /> Sign out
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
-                        )}
-                        <span className="text-lg font-bold text-foreground truncate">{siteSettings?.company_name || 'ISP Portal'}</span>
-                    </Link>
-                    <button
-                        onClick={() => setAccountModalTab('profile')}
-                        title="My Account"
-                        className="p-1.5 text-muted-foreground hover:text-primary hover:bg-accent rounded-full shrink-0"
-                    >
-                        <CircleUserRound className="h-5 w-5" />
-                    </button>
-                </div>
+                        </div>
 
-                <p className="px-5 pt-4 pb-2 text-xs font-semibold text-muted-foreground tracking-wide">MENU</p>
-                <nav className="flex-1 px-3 space-y-1">
-                    {NAVIGATION.map((item) => (
-                        <SidebarNavItem
-                            key={item.name}
-                            href={item.href}
-                            icon={item.icon}
-                            label={item.name}
-                            active={location.pathname.startsWith(item.href)}
-                            onClick={() => setIsSidebarOpen(false)}
-                        />
-                    ))}
-                </nav>
+                        {/* Mobile nav: a sideways-scrolling pill row. */}
+                        <nav className="-mx-4 mt-4 flex gap-1 overflow-x-auto px-4 pb-1 md:hidden" aria-label="Account">
+                            {NAVIGATION.map((item) => {
+                                const active = location.pathname.startsWith(item.href);
+                                return (
+                                    <Link
+                                        key={item.href}
+                                        to={item.href}
+                                        aria-current={active ? 'page' : undefined}
+                                        className={cn(
+                                            'flex h-10 shrink-0 items-center rounded-full px-4 text-[14px] font-semibold',
+                                            active ? 'bg-white text-primary' : 'bg-white/10 text-white/85',
+                                        )}
+                                    >
+                                        {item.name}
+                                    </Link>
+                                );
+                            })}
+                        </nav>
 
-                <div className="p-4">
-                    <div className="bg-primary rounded-2xl p-4 text-primary-foreground">
-                        <p className="font-bold text-sm mb-1">Need more speed?</p>
-                        <p className="text-primary-foreground/80 text-xs mb-3">Browse our other packages</p>
-                        <Link to="/plans" onClick={() => setIsSidebarOpen(false)} className="text-xs font-semibold hover:underline">
-                            View Plans &rarr;
-                        </Link>
+                        <div ref={setHeaderSlot} className={hasHeader ? 'mt-10 sm:mt-14' : 'hidden'} />
                     </div>
-                    <button
-                        onClick={handleLogout}
-                        className="mt-3 w-full flex items-center justify-center gap-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-full py-2.5 transition-colors"
-                    >
-                        <LogOut className="h-4 w-4" /> Sign Out
-                    </button>
-                </div>
-            </div>
+                </header>
 
-            {/* Main */}
-            <div className="flex-1 min-w-0 flex flex-col">
-                <div className="px-4 sm:px-8 py-3 border-b border-border bg-card flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <button
-                        onClick={() => setIsSidebarOpen(true)}
-                        className="p-1 -ml-1 mr-1 text-muted-foreground hover:text-foreground lg:hidden shrink-0"
-                    >
-                        <Menu className="h-5 w-5" />
-                    </button>
-                    <Home className="h-3.5 w-3.5 shrink-0 hidden sm:block" />
-                    <span className="hidden sm:inline">Home</span>
-                    <ChevronRight className="h-3 w-3 shrink-0 hidden sm:block" />
-                    <span className="truncate hidden sm:inline">{user?.full_name || user?.username}</span>
-                    <ChevronRight className="h-3 w-3 shrink-0 hidden sm:block" />
-                    <span className="text-foreground font-medium truncate">{currentPage}</span>
-                    <div className="ml-auto">
-                        <ThemeToggle />
-                    </div>
-                </div>
-
-                <main className="flex-1 p-4 sm:p-8 bg-background">
+                <main className={cn('relative mx-auto max-w-[1440px] px-4 pb-12 sm:px-8 lg:px-[72px]', hasHeader ? '-mt-[110px]' : 'pt-7')}>
                     <Outlet />
                 </main>
-            </div>
 
-            {accountModalTab && (
-                <AccountModal initialTab={accountModalTab} onClose={() => setAccountModalTab(null)} />
-            )}
-        </div>
+                {accountModalTab && (
+                    <AccountModal initialTab={accountModalTab} onClose={() => setAccountModalTab(null)} />
+                )}
+            </div>
+        </ShellContext.Provider>
     );
 }

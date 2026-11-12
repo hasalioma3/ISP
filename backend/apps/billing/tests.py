@@ -153,3 +153,62 @@ class BillingPlanCreateReliabilityTests(TestCase):
 
 		self.assertEqual(response.status_code, 201)
 		self.assertTrue(BillingPlan.objects.filter(name='Reliable plan').exists())
+
+
+class FourLetterVoucherTests(TestCase):
+	"""Voucher codes are 4 letters, case-insensitive, and wrong guesses are limited."""
+
+	def setUp(self):
+		from django.core.cache import cache
+		cache.clear()
+		self.addCleanup(cache.clear)
+		for target in ('apps.billing.signals.sync_plan_to_routers.delay',
+					   'apps.billing.signals.network_automation.activate_customer',
+					   'apps.customers.signals.network_automation.activate_customer'):
+			patcher = patch(target)
+			self.addCleanup(patcher.stop)
+			patcher.start()
+		self.plan = BillingPlan.objects.create(
+			name='Daily', service_type='hotspot', download_speed=5, upload_speed=5,
+			price='50.00', mikrotik_profile='daily',
+		)
+		self.client = APIClient()
+
+	def generate(self, n=20):
+		self.client.force_authenticate(Customer.objects.create(username='boss', is_staff=True, is_superuser=True))
+		res = self.client.post('/api/billing/vouchers/generate/', {'quantity': n, 'plan_id': self.plan.pk}, format='json')
+		self.client.force_authenticate(None)
+		self.assertEqual(res.status_code, 201, res.data)
+		return [v['code'] for v in res.data['vouchers']]
+
+	def test_codes_are_four_unambiguous_letters(self):
+		codes = self.generate(50)
+		self.assertEqual(len(set(codes)), 50)
+		for code in codes:
+			self.assertRegex(code, r'^[A-HJ-NP-Z]{4}$')
+
+	def test_redeem_is_case_insensitive_and_login_too(self):
+		code = self.generate(1)[0]
+		res = self.client.post('/api/billing/vouchers/redeem/', {'code': f'  {code.lower()} '}, format='json')
+		self.assertEqual(res.status_code, 200, res.data)
+		login = self.client.post('/api/customers/login/', {'username': code.lower(), 'password': code.lower()}, format='json')
+		self.assertEqual(login.status_code, 200, login.data)
+
+	def test_old_six_character_codes_still_redeem(self):
+		from apps.billing.models import Voucher, VoucherBatch
+		batch = VoucherBatch.objects.create(quantity=1, value=50, plan=self.plan)
+		Voucher.objects.create(batch=batch, code='AB12CD', amount=50, plan=self.plan, status='active')
+		res = self.client.post('/api/billing/vouchers/redeem/', {'code': 'ab12cd'}, format='json')
+		self.assertEqual(res.status_code, 200, res.data)
+
+	def test_wrong_guesses_are_limited_per_device(self):
+		code = self.generate(1)[0]
+		wrong = 'ZZZZ' if code != 'ZZZZ' else 'YYYY'
+		for _ in range(5):
+			res = self.client.post('/api/billing/vouchers/redeem/', {'code': wrong, 'mac_address': 'AA:BB:CC:DD:EE:FF'}, format='json')
+			self.assertEqual(res.status_code, 400)
+		res = self.client.post('/api/billing/vouchers/redeem/', {'code': code, 'mac_address': 'aa-bb-cc-dd-ee-ff'}, format='json')
+		self.assertEqual(res.status_code, 429)
+		# Another device on the same site isn't blocked.
+		res = self.client.post('/api/billing/vouchers/redeem/', {'code': code, 'mac_address': '11:22:33:44:55:66'}, format='json')
+		self.assertEqual(res.status_code, 200, res.data)

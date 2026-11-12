@@ -10,6 +10,7 @@ const SECTION_CARD = 'bg-card border rounded-lg p-4 sm:p-5';
 export default function NotificationsTab() {
     return (
         <div className="space-y-6 max-w-2xl">
+            <StaffAlertSection />
             <SmsSection />
             <WhatsAppSection />
             <TelegramSection />
@@ -213,6 +214,77 @@ function WhatsAppSection() {
 
             <TestSendRow channel="whatsapp" disabled={!status?.connected} />
             </>)}
+        </div>
+    );
+}
+
+/**
+ * A manager's number that's told whenever staff extend a subscription or
+ * add cash to an account (the customer is notified separately).
+ */
+function StaffAlertSection() {
+    const queryClient = useQueryClient();
+    const { data: settings } = useQuery({
+        queryKey: ['notification-settings'],
+        queryFn: async () => (await notificationAPI.getSettings()).data,
+    });
+    const [form, setForm] = useState({ staff_alert_phone: '', staff_alert_channel: 'sms' });
+
+    useEffect(() => {
+        if (settings) {
+            setForm({
+                staff_alert_phone: settings.staff_alert_phone || '',
+                staff_alert_channel: settings.staff_alert_channel || 'sms',
+            });
+        }
+    }, [settings]);
+
+    const saveMutation = useMutation({
+        mutationFn: () => notificationAPI.updateSettings(form),
+        onSuccess: () => {
+            toast.success('Staff alert settings saved');
+            queryClient.invalidateQueries({ queryKey: ['notification-settings'] });
+        },
+        onError: (err: any) => toast.error(getErrorMessage(err, 'Failed to save staff alert settings')),
+    });
+
+    return (
+        <div className={SECTION_CARD}>
+            <h3 className="text-lg font-bold mb-1">Staff alerts</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+                Gets a message whenever staff recharge or extend a subscription, or add cash to an account.
+                The customer is also told. Leave blank to turn alerts off.
+            </p>
+            <form onSubmit={e => { e.preventDefault(); saveMutation.mutate(); }} className="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-3 items-end">
+                <div>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Alert phone number</label>
+                    <input
+                        type="tel"
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                        placeholder="e.g. 0722 123 456"
+                        value={form.staff_alert_phone}
+                        onChange={e => setForm({ ...form, staff_alert_phone: e.target.value })}
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Send by</label>
+                    <select
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                        value={form.staff_alert_channel}
+                        onChange={e => setForm({ ...form, staff_alert_channel: e.target.value })}
+                    >
+                        <option value="sms">SMS</option>
+                        <option value="whatsapp">WhatsApp</option>
+                    </select>
+                </div>
+                <button
+                    type="submit"
+                    disabled={saveMutation.isPending}
+                    className="h-10 px-5 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50"
+                >
+                    {saveMutation.isPending ? 'Saving...' : 'Save'}
+                </button>
+            </form>
         </div>
     );
 }

@@ -4,6 +4,7 @@ import { adminAPI } from '../../services/api';
 import { toast } from 'react-hot-toast';
 import { Loader2, Router as RouterIcon, ShieldCheck, ShieldAlert, Plus, Pencil, Trash2, X, Wifi } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import RouterStatusBadge from '../../components/RouterStatusBadge';
 
 type ActionKey = 'backup' | 'sync_profiles' | 'sync_users' | 'enable_wan_access' | 'disable_wan_access' | 'enable_mgmt_vlan' | 'disable_mgmt_vlan' | 'restart' | 'sync_hotspot_login_page';
 
@@ -47,7 +48,7 @@ const ACTIONS: { key: ActionKey; label: string; description: string; className: 
     {
         key: 'enable_mgmt_vlan',
         label: 'Enable Radio Management VLAN',
-        description: 'Creates a separate management network for radios/APs: a VLAN on the customer bridge with its own subnet and DHCP, outside the Hotspot (no login or bypass needed). VLAN ID and subnet are picked automatically from what’s free on this router. Reachable from your LAN, blocked from customers. Then set each radio’s Management VLAN to the ID shown.',
+        description: 'Creates a separate management network for radios/APs: a VLAN on the customer bridge with its own subnet and DHCP, outside the Hotspot (no login or bypass needed). VLAN ID and subnet are picked automatically from what’s free on this router. Reachable from your LAN and VPN (UniFi Teleport, 192.168.2.0/24 by default), blocked from customers. Then set each radio’s Management VLAN to the ID shown.',
         className: 'bg-indigo-600 hover:bg-indigo-700',
     },
     {
@@ -168,6 +169,10 @@ export default function MikroTikSync() {
             const res = await adminAPI.getRouters();
             return res.data.results || res.data;
         },
+        // The list is read from the DB (never from the routers), so it loads
+        // instantly even with a router down; re-reading it picks up the
+        // online/offline state the background usage poll records.
+        refetchInterval: 15000,
     });
 
     const applyResult = (routerId: number, data: any, label: string) => {
@@ -195,6 +200,25 @@ export default function MikroTikSync() {
         }
     };
 
+    // Sync Users runs in the background on the server (it can outlast the
+    // web request timeout), so poll its stored result until it's done.
+    const waitForUserSync = async (routerId: number) => {
+        setLogsByRouter((prev) => ({ ...prev, [routerId]: ['Syncing users in the background... this can take a few minutes.'] }));
+        const deadline = Date.now() + 20 * 60 * 1000;
+        while (Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            const { data } = await adminAPI.getSyncUsersStatus(routerId);
+            if (data.status === 'running') continue;
+            if (data.status === 'error') {
+                applyResult(routerId, { error: data.error || 'Sync users failed', failed: data.failed }, 'sync_users');
+            } else {
+                applyResult(routerId, data, 'sync_users');
+            }
+            return;
+        }
+        toast.error('Sync users is still running -- check back in a few minutes.');
+    };
+
     const handleAction = async (routerId: number, action: ActionKey) => {
         if (action === 'restart' && !window.confirm('Restart this router? Connected customers will lose service for a minute or two.')) return;
         if (action === 'enable_mgmt_vlan' && !window.confirm('Add a radio management VLAN (with DHCP, NAT and firewall rules) to this router? Customer traffic is not affected. A config snapshot is taken first.')) return;
@@ -203,7 +227,11 @@ export default function MikroTikSync() {
         setLoadingKey(loadingId);
         try {
             const response = await runAction(routerId, action);
-            applyResult(routerId, response.data, action);
+            if (action === 'sync_users' && response.data.running) {
+                await waitForUserSync(routerId);
+            } else {
+                applyResult(routerId, response.data, action);
+            }
             refetch();
         } catch (err: any) {
             const message = err.response?.data?.error || `Failed to run ${action}`;
@@ -376,6 +404,7 @@ export default function MikroTikSync() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
+                                    <RouterStatusBadge router={router} />
                                     {router.provisioned ? (
                                         <span className="flex items-center gap-1 text-green-600 bg-green-50 px-3 py-1 rounded-full">
                                             <ShieldCheck className="h-4 w-4" /> Provisioned

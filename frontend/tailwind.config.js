@@ -9,22 +9,50 @@ export default {
     extend: {
       colors: {
         // `DEFAULT`/`foreground` make bg-primary/text-primary/text-primary-foreground
-        // resolve (shadcn convention, theme-able via the CSS variables below);
-        // the numeric 50-900 keys stay too for any literal bg-primary-600 use.
+        // resolve (shadcn convention, theme-able via the CSS variables in
+        // index.css); the numeric 50-900 keys are the Savanna forest-green
+        // scale (800 = #0B4D33) for any literal bg-primary-600 use.
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
-          50: '#f5f3ff',
-          100: '#ede9fe',
-          200: '#ddd6fe',
-          300: '#c4b5fd',
-          400: '#a78bfa',
-          500: '#8b5cf6',
-          600: '#7c3aed',
-          700: '#6d28d9',
-          800: '#5b21b6',
-          900: '#4c1d95',
+          50: '#EDF7F1',
+          100: '#D3EEDD',
+          200: '#A8DCBD',
+          300: '#73C497',
+          400: '#43A872',
+          500: '#238A57',
+          600: '#136F45',
+          700: '#0E5C3B',
+          800: '#0B4D33',
+          900: '#083A27',
         },
+        // Savanna tokens from design/HANDOFF.md (light/dark values live in
+        // index.css). Renamed where the handoff's name already means
+        // something here: its `accent` (orange) is `sunset`, its `muted`
+        // text colour is `muted-foreground`, its `primary`/`border`/`text`/
+        // `bg` are primary / border / foreground / background.
+        surface: "hsl(var(--card))",
+        surface2: "rgb(var(--sv-surface2-rgb) / <alpha-value>)",
+        "border-soft": "rgb(var(--sv-border-soft-rgb) / <alpha-value>)",
+        "border-strong": "rgb(var(--sv-border-strong-rgb) / <alpha-value>)",
+        faint: "rgb(var(--sv-faint-rgb) / <alpha-value>)",
+        sunset: "rgb(var(--sv-accent-rgb) / <alpha-value>)",
+        ok: {
+          DEFAULT: "rgb(var(--sv-ok-rgb) / <alpha-value>)",
+          bg: "rgb(var(--sv-ok-bg-rgb) / <alpha-value>)",
+        },
+        warn: {
+          DEFAULT: "rgb(var(--sv-warn-rgb) / <alpha-value>)",
+          bg: "rgb(var(--sv-warn-bg-rgb) / <alpha-value>)",
+        },
+        bad: {
+          DEFAULT: "rgb(var(--sv-bad-rgb) / <alpha-value>)",
+          bg: "rgb(var(--sv-bad-bg-rgb) / <alpha-value>)",
+        },
+        chip: "rgb(var(--sv-chip-rgb) / <alpha-value>)",
+        mpesa: "rgb(var(--sv-mpesa-rgb) / <alpha-value>)",
+        // Header band: stays deep green in dark mode too (slightly darker).
+        band: "rgb(var(--sv-band-rgb) / <alpha-value>)",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -59,6 +87,14 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 4px)",
         sm: "calc(var(--radius) - 8px)",
+        card: "20px",
+        control: "999px",
+      },
+      boxShadow: {
+        card: "var(--sv-shadow)",
+      },
+      fontFamily: {
+        sans: ["'Plus Jakarta Sans'", "system-ui", "-apple-system", "'Segoe UI'", "Roboto", "sans-serif"],
       },
       keyframes: {
         "accordion-down": {
