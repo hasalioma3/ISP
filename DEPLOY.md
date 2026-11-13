@@ -58,6 +58,42 @@ env files (they aren't excluded), and a rebuild re-bakes both the Vite build
 args and the container runtime env, so there's no separate step for env
 changes.
 
+## Updating from GitHub (alternative to deploy_update.sh)
+
+Instead of pushing from the Mac, the Pi can pull from GitHub itself:
+
+```bash
+cd ~/ISP && ./update_from_github.sh          # deploys origin/main
+cd ~/ISP && ./update_from_github.sh Phase-2  # or another branch
+```
+
+It fetches the branch, makes `~/ISP` match it exactly, then runs
+`update_on_pi.sh`: DB backup, cached rebuild, `up -d`, then migrate. Only
+pushed commits are deployed, and env files stay on the Pi, so edit `.env.prod`
+there directly. The script refuses to run while the server stores its data in
+SQLite, because `backend/db.sqlite3` is tracked in git and would be overwritten.
+
+One-time setup on the Pi:
+
+1. **Deploy key** (read-only access to the private repo):
+   ```bash
+   ssh-keygen -t ed25519 -f ~/.ssh/isp_deploy -N "" -C "pi-deploy"
+   printf 'Host github.com\n  IdentityFile ~/.ssh/isp_deploy\n  IdentitiesOnly yes\n' >> ~/.ssh/config
+   cat ~/.ssh/isp_deploy.pub
+   ```
+   In GitHub, open the repo's **Settings → Deploy keys → Add deploy key**,
+   paste the key, and leave **Allow write access** off. Then check it with
+   `ssh -T git@github.com`; it should greet you with the repo name.
+2. **Turn `~/ISP` into a clone** (keeps `.env.prod` and other ignored files):
+   ```bash
+   cd ~/ISP
+   git init -b main
+   git remote add origin git@github.com:hasalioma3/ISP.git
+   git fetch origin
+   ```
+   The first `./update_from_github.sh` then replaces the rsynced files with
+   the GitHub version.
+
 ## Occasional Pi maintenance
 
 Neither deploy script prunes images. Old image layers can accumulate on the

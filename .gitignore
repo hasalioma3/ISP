@@ -10,3 +10,5 @@ teststk.py
 .env.test
 backend/.env
 frontend/.env
+backend/db.sqlite3
+backend/logs/isp_billing.log
