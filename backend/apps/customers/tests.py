@@ -198,8 +198,9 @@ class StaffMoneyActionsTests(TestCase):
 			 self.captureOnCommitCallbacks(execute=True):
 			res = self.client.post(f'/api/customers/subscribers/{self.customer.pk}/add_balance/', {'amount': 300})
 		self.assertEqual(res.status_code, 200)
-		self.assertIn('KES 300', cust.call_args.args[1])
-		self.assertEqual(cust.call_args.args[2], 'balance_credit')
+		self.assertEqual(cust.call_args.args[1], 'cash_added')
+		self.assertEqual(cust.call_args.args[2]['amount'], '300')
+		self.assertEqual(cust.call_args.args[3], 'balance_credit')
 		self.assertIn('grace', staff.call_args.args[0])
 
 	def test_extend_is_superuser_only(self):
@@ -225,7 +226,8 @@ class StaffMoneyActionsTests(TestCase):
 		self.assertEqual(sub.status, 'active')
 		self.assertEqual(timezone.localtime(sub.expiry_date).date().isoformat(), target)
 		self.assertEqual(self.customer.status, 'active')
-		self.assertIn('reactivated', cust.call_args.args[1])
+		self.assertEqual(cust.call_args.args[1], 'subscription_extended')
+		self.assertEqual(cust.call_args.args[2]['action'], 'reactivated')
 		self.assertIn('reactivated', staff.call_args.args[0])
 
 	def test_extend_rejects_past_dates(self):
@@ -265,3 +267,109 @@ class StaffMoneyActionsTests(TestCase):
 		mine = self.client.get('/api/billing/usage/summary/').data
 		self.assertEqual(mine['plan_totals']['total_gb'], 3.0)
 		self.assertEqual(mine['totals']['total_gb'], 5.0)
+
+
+class SubscriberExportAndReminderTests(TestCase):
+	def setUp(self):
+		for target in ('apps.billing.signals.sync_plan_to_routers.delay',
+					   'apps.billing.signals.network_automation.activate_customer'):
+			patcher = patch(target)
+			self.addCleanup(patcher.stop)
+			patcher.start()
+		self.plan = BillingPlan.objects.create(
+			name='Home 10', service_type='pppoe', download_speed=10,
+			upload_speed=10, price='2500.00', mikrotik_profile='home-10',
+		)
+		self.grace = Customer.objects.create(username='grace', first_name='Grace', phone_number='254722618418', service_type='pppoe')
+		self.nophone = Customer.objects.create(username='nophone', service_type='pppoe')
+		self.noplan = Customer.objects.create(username='noplan', phone_number='0711000000', service_type='pppoe')
+		for c in (self.grace, self.nophone):
+			Subscription.objects.create(customer=c, plan=self.plan, expiry_date=timezone.now() + timedelta(days=3))
+		self.client = APIClient()
+		self.client.force_authenticate(Customer.objects.create(username='boss', is_staff=True, is_superuser=True))
+
+	def test_export_selected_and_filtered(self):
+		res = self.client.get('/api/customers/subscribers/export/', {'ids': str(self.grace.pk), 'export': 'csv'})
+		body = res.content.decode()
+		self.assertIn('grace', body)
+		self.assertNotIn('nophone', body)
+		self.assertIn('254722618418', body)  # full number in the admin download
+		pdf = self.client.get('/api/customers/subscribers/export/', {'export': 'pdf'})
+		self.assertTrue(pdf.content.startswith(b'%PDF'))
+
+	@patch('django.conf.settings.MPESA_SHORTCODE_TYPE', 'till')
+	@patch('django.conf.settings.MPESA_TILL_NUMBER', '4993011')
+	def test_reminder_preview_uses_buy_goods_and_registered_number(self):
+		res = self.client.post('/api/customers/subscribers/bulk-reminder/',
+							   {'ids': [self.grace.pk], 'channel': 'sms', 'preview': True}, format='json')
+		message = res.data['preview']
+		self.assertIn('Hi Grace', message)
+		self.assertIn('Buy Goods, Till 4993011', message)
+		self.assertIn('from 0722618418', message)
+		self.assertIn('KES 2,500', message)
+
+	def test_reminder_queues_and_skips(self):
+		with patch('apps.notifications.tasks.send_payment_reminder.delay') as task:
+			res = self.client.post('/api/customers/subscribers/bulk-reminder/',
+								   {'ids': [self.grace.pk, self.nophone.pk, self.noplan.pk], 'channel': 'whatsapp'}, format='json')
+		self.assertEqual(res.data['queued'], 1)
+		task.assert_called_once_with(self.grace.pk, 'whatsapp')
+		self.assertEqual(len(res.data['skipped']), 2)
+
+	def test_reminder_task_sends_and_logs(self):
+		from apps.notifications.models import NotificationLog
+		from apps.notifications.tasks import send_payment_reminder
+		with patch('apps.notifications.dispatch.AfricasTalkingService.send_sms', return_value={'success': True, 'data': {}}) as sms:
+			send_payment_reminder(self.grace.pk, 'sms')
+		self.assertEqual(sms.call_args.args[0], '254722618418')
+		self.assertEqual(NotificationLog.objects.get().event_type, 'payment_reminder')
+
+	def test_technician_cannot_send_reminders(self):
+		self.client.force_authenticate(Customer.objects.create(username='tech', is_staff=True, role='technician'))
+		res = self.client.post('/api/customers/subscribers/bulk-reminder/', {'ids': [self.grace.pk]}, format='json')
+		self.assertEqual(res.status_code, 403)
+
+
+class RenewedCustomerStatusTests(TestCase):
+	"""An old subscription expiring after a renewal must not mark the customer expired or cut them off."""
+
+	def setUp(self):
+		patcher = patch('apps.billing.signals.sync_plan_to_routers.delay')
+		self.addCleanup(patcher.stop)
+		patcher.start()
+		self.activate = patch('apps.billing.signals.network_automation.activate_customer').start()
+		self.suspend = patch('apps.billing.signals.network_automation.suspend_customer', return_value={'success': True}).start()
+		self.addCleanup(patch.stopall)
+		self.plan = BillingPlan.objects.create(
+			name='Home 10', service_type='pppoe', download_speed=10,
+			upload_speed=10, price='1500.00', mikrotik_profile='home-10',
+		)
+		self.customer = Customer.objects.create(username='esther', service_type='pppoe')
+
+	def test_old_subscription_expiring_after_renewal(self):
+		renewed = Subscription.objects.create(customer=self.customer, plan=self.plan, expiry_date=timezone.now() + timedelta(days=60))
+		old = Subscription.objects.create(customer=self.customer, plan=self.plan, expiry_date=timezone.now() + timedelta(hours=1))
+		# The old row is the newest by created_at -- the case that used to flip the status.
+		Subscription.objects.filter(pk=renewed.pk).update(created_at=timezone.now() - timedelta(days=1))
+		self.suspend.reset_mock()
+		old.status = 'expired'
+		old.save()
+		self.customer.refresh_from_db()
+		self.assertEqual(self.customer.status, 'active')
+		self.suspend.assert_not_called()
+
+	def test_reconcile_fixes_stale_status(self):
+		from apps.billing.services import reconcile_customer_statuses
+		Subscription.objects.create(customer=self.customer, plan=self.plan, expiry_date=timezone.now() + timedelta(days=5))
+		Customer.objects.filter(pk=self.customer.pk).update(status='expired')
+		self.assertEqual(reconcile_customer_statuses(), 1)
+		self.customer.refresh_from_db()
+		self.assertEqual(self.customer.status, 'active')
+
+	def test_lone_expiry_still_suspends(self):
+		sub = Subscription.objects.create(customer=self.customer, plan=self.plan, expiry_date=timezone.now() + timedelta(hours=1))
+		sub.status = 'expired'
+		sub.save()
+		self.suspend.assert_called()
+		self.customer.refresh_from_db()
+		self.assertEqual(self.customer.status, 'expired')

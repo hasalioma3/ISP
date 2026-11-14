@@ -39,12 +39,54 @@ class NotificationSettings(models.Model):
     telegram_webhook_secret = EncryptedCharField(max_length=200, blank=True)
     telegram_bot_username = models.CharField(max_length=100, blank=True)
 
+    # --- Email (SMTP) ---
+    # Gmail by default: smtp.gmail.com:587 with STARTTLS, logging in with a
+    # Gmail address and a Google *App Password* (Google rejects the normal
+    # account password over SMTP). 'custom' uses the host/port/encryption
+    # below for any other mail server.
+    SMTP_PROVIDER_CHOICES = [('gmail', 'Gmail'), ('custom', 'Custom SMTP')]
+    SMTP_SECURITY_CHOICES = [('starttls', 'STARTTLS'), ('ssl', 'SSL/TLS'), ('none', 'None')]
+    GMAIL_HOST = 'smtp.gmail.com'
+    GMAIL_PORT = 587
+
+    email_enabled = models.BooleanField(default=False)
+    smtp_provider = models.CharField(max_length=10, choices=SMTP_PROVIDER_CHOICES, default='gmail')
+    smtp_host = models.CharField(max_length=255, blank=True)
+    smtp_port = models.PositiveIntegerField(default=587)
+    smtp_security = models.CharField(max_length=10, choices=SMTP_SECURITY_CHOICES, default='starttls')
+    smtp_username = models.CharField(max_length=255, blank=True)
+    smtp_password = EncryptedCharField(max_length=500, blank=True)
+    email_from_address = models.EmailField(blank=True)
+    email_from_name = models.CharField(max_length=100, blank=True)
+
+    def smtp_connection_settings(self):
+        """(host, port, security) actually used -- Gmail's are fixed."""
+        if self.smtp_provider == 'gmail':
+            return self.GMAIL_HOST, self.GMAIL_PORT, 'starttls'
+        return self.smtp_host, self.smtp_port, self.smtp_security
+
+    # --- Confirmations ---
+    # Which customers get payment/activation confirmation messages (incl.
+    # staff recharge/extend/cash notices), as a comma list of service types.
+    # Default PPPoE only: hotspot buyers already see the result on the
+    # captive portal, and texting every KES 10 voucher-sized purchase costs
+    # more in SMS than it's worth. 'both' counts as PPPoE.
+    confirmation_service_types = models.CharField(max_length=50, default='pppoe', blank=True)
+
+    def confirmations_enabled_for(self, service_type):
+        allowed = {t.strip() for t in (self.confirmation_service_types or '').split(',') if t.strip()}
+        if service_type == 'both':
+            return bool(allowed & {'pppoe', 'hotspot'})
+        return service_type in allowed
+
     # --- Staff alerts ---
     # A manager's number that gets a message whenever staff extend a
     # subscription or record cash on an account, so money-affecting manual
     # actions never happen unnoticed. Blank = off.
-    STAFF_ALERT_CHANNEL_CHOICES = [('sms', 'SMS'), ('whatsapp', 'WhatsApp')]
+    STAFF_ALERT_CHANNEL_CHOICES = [('sms', 'SMS'), ('whatsapp', 'WhatsApp'), ('email', 'Email')]
     staff_alert_phone = models.CharField(max_length=20, blank=True)
+    # Used instead of the phone when staff_alert_channel is 'email'.
+    staff_alert_email = models.EmailField(blank=True)
     staff_alert_channel = models.CharField(max_length=10, choices=STAFF_ALERT_CHANNEL_CHOICES, default='sms')
 
     updated_at = models.DateTimeField(auto_now=True)
@@ -80,6 +122,7 @@ class NotificationLog(models.Model):
         ('sms', 'SMS'),
         ('whatsapp', 'WhatsApp'),
         ('telegram', 'Telegram'),
+        ('email', 'Email'),
     ]
 
     EVENT_TYPE_CHOICES = [
@@ -94,6 +137,7 @@ class NotificationLog(models.Model):
         ('voucher_send', 'Voucher Code Sent'),
         ('staff_alert', 'Staff Alert (manual extension / cash)'),
         ('subscription_extended', 'Subscription Extended by Staff'),
+        ('payment_reminder', 'Payment Reminder (sent by staff)'),
     ]
 
     STATUS_CHOICES = [
@@ -137,3 +181,31 @@ class NotificationLog(models.Model):
 
     def __str__(self):
         return f"{self.event_type} to {self.recipient} ({self.status})"
+
+
+
+class MessageTemplate(models.Model):
+    """
+    Admin-editable wording. kind='system' rows override a built-in message
+    (key = one of apps.notifications.templates.DEFAULTS; deleting the row
+    restores the default). kind='promo' rows are saved promotional texts the
+    broadcast form can start from. Bodies use {placeholders}; see
+    apps.notifications.templates for the ones each message offers.
+    """
+    KIND_CHOICES = [('system', 'System message'), ('promo', 'Promotional')]
+
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    key = models.CharField(max_length=40, blank=True)
+    name = models.CharField(max_length=100)
+    body = models.TextField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'message_templates'
+        ordering = ['kind', 'name']
+        constraints = [
+            models.UniqueConstraint(fields=['key'], condition=models.Q(kind='system'), name='unique_system_template_key'),
+        ]
+
+    def __str__(self):
+        return self.name

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { MessageSquare, Send, QrCode, CheckCircle2, Radio } from 'lucide-react';
 import { notificationAPI } from '../../services/api';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import MessageTemplatesSection, { useMessageTemplates } from './MessageTemplatesSection';
 
 const SECTION_CARD = 'bg-card border rounded-lg p-4 sm:p-5';
 
@@ -11,15 +12,58 @@ export default function NotificationsTab() {
     return (
         <div className="space-y-6 max-w-2xl">
             <StaffAlertSection />
+            <ConfirmationsSection />
+            <MessageTemplatesSection />
             <SmsSection />
             <WhatsAppSection />
             <TelegramSection />
+            <EmailSection />
             <BroadcastSection />
         </div>
     );
 }
 
-function TestSendRow({ channel, disabled }: { channel: 'sms' | 'whatsapp' | 'telegram'; disabled?: boolean }) {
+/** Which customers get payment/activation confirmations (default: PPPoE only). */
+function ConfirmationsSection() {
+    const queryClient = useQueryClient();
+    const { data: settings } = useQuery({
+        queryKey: ['notification-settings'],
+        queryFn: async () => (await notificationAPI.getSettings()).data,
+    });
+    const selected = new Set<string>((settings?.confirmation_service_types ?? 'pppoe').split(',').filter(Boolean));
+
+    const save = useMutation({
+        mutationFn: (types: string[]) => notificationAPI.updateSettings({ confirmation_service_types: types.join(',') }),
+        onSuccess: () => { toast.success('Saved'); queryClient.invalidateQueries({ queryKey: ['notification-settings'] }); },
+        onError: (err: any) => toast.error(getErrorMessage(err, 'Could not save')),
+    });
+
+    const toggle = (type: string) => {
+        const next = new Set(selected);
+        if (next.has(type)) next.delete(type); else next.add(type);
+        save.mutate([...next]);
+    };
+
+    return (
+        <div className={SECTION_CARD}>
+            <h3 className="text-lg font-bold mb-1">Payment confirmations</h3>
+            <p className="text-sm text-muted-foreground mb-3">
+                Who gets a message when a payment activates their plan (and when staff recharge, extend or add cash).
+                Hotspot buyers already see the result on the login page.
+            </p>
+            <div className="flex flex-wrap gap-4">
+                {[['pppoe', 'PPPoE'], ['static', 'Static IP'], ['hotspot', 'Hotspot']].map(([value, label]) => (
+                    <label key={value} className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={selected.has(value)} disabled={save.isPending} onChange={() => toggle(value)} />
+                        {label}
+                    </label>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function TestSendRow({ channel, disabled }: { channel: 'sms' | 'whatsapp' | 'telegram' | 'email'; disabled?: boolean }) {
     const [recipient, setRecipient] = useState('');
 
     const testMutation = useMutation({
@@ -32,7 +76,7 @@ function TestSendRow({ channel, disabled }: { channel: 'sms' | 'whatsapp' | 'tel
         <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <input
                 type="text"
-                placeholder={channel === 'telegram' ? 'Telegram chat ID' : 'Phone number (07...)'}
+                placeholder={channel === 'telegram' ? 'Telegram chat ID' : channel === 'email' ? 'Email address' : 'Phone number (07...)'}
                 className="flex-1 border rounded-lg px-3 py-2 text-sm disabled:bg-gray-100"
                 value={recipient}
                 disabled={disabled}
@@ -100,6 +144,11 @@ function SmsSection() {
                             <option value="sandbox">Sandbox</option>
                             <option value="production">Production</option>
                         </select>
+                        {form.at_environment === 'sandbox' && (
+                            <p className="mt-1 text-xs text-warn">
+                                Sandbox only delivers to Africa's Talking's simulator, never to real phones. Use Production with your live app's username.
+                            </p>
+                        )}
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-foreground/80 mb-1">API Key</label>
@@ -228,12 +277,13 @@ function StaffAlertSection() {
         queryKey: ['notification-settings'],
         queryFn: async () => (await notificationAPI.getSettings()).data,
     });
-    const [form, setForm] = useState({ staff_alert_phone: '', staff_alert_channel: 'sms' });
+    const [form, setForm] = useState({ staff_alert_phone: '', staff_alert_email: '', staff_alert_channel: 'sms' });
 
     useEffect(() => {
         if (settings) {
             setForm({
                 staff_alert_phone: settings.staff_alert_phone || '',
+                staff_alert_email: settings.staff_alert_email || '',
                 staff_alert_channel: settings.staff_alert_channel || 'sms',
             });
         }
@@ -256,16 +306,29 @@ function StaffAlertSection() {
                 The customer is also told. Leave blank to turn alerts off.
             </p>
             <form onSubmit={e => { e.preventDefault(); saveMutation.mutate(); }} className="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-3 items-end">
-                <div>
-                    <label className="block text-sm font-medium text-foreground/80 mb-1">Alert phone number</label>
-                    <input
-                        type="tel"
-                        className="w-full border rounded-lg px-3 py-2 text-sm"
-                        placeholder="e.g. 0722 123 456"
-                        value={form.staff_alert_phone}
-                        onChange={e => setForm({ ...form, staff_alert_phone: e.target.value })}
-                    />
-                </div>
+                {form.staff_alert_channel === 'email' ? (
+                    <div>
+                        <label className="block text-sm font-medium text-foreground/80 mb-1">Alert email address</label>
+                        <input
+                            type="email"
+                            className="w-full border rounded-lg px-3 py-2 text-sm"
+                            placeholder="manager@example.com"
+                            value={form.staff_alert_email}
+                            onChange={e => setForm({ ...form, staff_alert_email: e.target.value })}
+                        />
+                    </div>
+                ) : (
+                    <div>
+                        <label className="block text-sm font-medium text-foreground/80 mb-1">Alert phone number</label>
+                        <input
+                            type="tel"
+                            className="w-full border rounded-lg px-3 py-2 text-sm"
+                            placeholder="e.g. 0722 123 456"
+                            value={form.staff_alert_phone}
+                            onChange={e => setForm({ ...form, staff_alert_phone: e.target.value })}
+                        />
+                    </div>
+                )}
                 <div>
                     <label className="block text-sm font-medium text-foreground/80 mb-1">Send by</label>
                     <select
@@ -275,6 +338,7 @@ function StaffAlertSection() {
                     >
                         <option value="sms">SMS</option>
                         <option value="whatsapp">WhatsApp</option>
+                        <option value="email">Email</option>
                     </select>
                 </div>
                 <button
@@ -285,6 +349,151 @@ function StaffAlertSection() {
                     {saveMutation.isPending ? 'Saving...' : 'Save'}
                 </button>
             </form>
+        </div>
+    );
+}
+
+/**
+ * Email over SMTP. Gmail is the default (host/port/encryption fixed; sign in
+ * with the Gmail address and a Google App Password); "Custom SMTP" exposes
+ * host, port and encryption for any other mail server.
+ */
+function EmailSection() {
+    const queryClient = useQueryClient();
+    const { data: settings } = useQuery({
+        queryKey: ['notification-settings'],
+        queryFn: async () => (await notificationAPI.getSettings()).data,
+    });
+    const [form, setForm] = useState({
+        email_enabled: false, smtp_provider: 'gmail', smtp_host: '', smtp_port: 587, smtp_security: 'starttls',
+        smtp_username: '', smtp_password: '', email_from_address: '', email_from_name: '',
+    });
+
+    useEffect(() => {
+        if (settings) {
+            setForm({
+                email_enabled: !!settings.email_enabled,
+                smtp_provider: settings.smtp_provider || 'gmail',
+                smtp_host: settings.smtp_host || '',
+                smtp_port: settings.smtp_port || 587,
+                smtp_security: settings.smtp_security || 'starttls',
+                smtp_username: settings.smtp_username || '',
+                smtp_password: '',
+                email_from_address: settings.email_from_address || '',
+                email_from_name: settings.email_from_name || '',
+            });
+        }
+    }, [settings]);
+
+    const saveMutation = useMutation({
+        mutationFn: () => notificationAPI.updateSettings(form),
+        onSuccess: () => {
+            toast.success('Email settings saved');
+            queryClient.invalidateQueries({ queryKey: ['notification-settings'] });
+            setForm(f => ({ ...f, smtp_password: '' }));
+        },
+        onError: (err: any) => toast.error(getErrorMessage(err, 'Failed to save email settings')),
+    });
+
+    const gmail = form.smtp_provider === 'gmail';
+    const field = 'w-full border rounded-lg px-3 py-2 text-sm';
+    const label = 'block text-sm font-medium text-foreground/80 mb-1';
+
+    // Typical port for each encryption mode, applied when switching.
+    const setSecurity = (security: string) =>
+        setForm(f => ({ ...f, smtp_security: security, smtp_port: security === 'ssl' ? 465 : security === 'starttls' ? 587 : 25 }));
+
+    return (
+        <div className={SECTION_CARD}>
+            <div className="flex items-center justify-between gap-3 mb-1">
+                <h3 className="text-lg font-bold">Email</h3>
+                <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={form.email_enabled} onChange={e => setForm({ ...form, email_enabled: e.target.checked })} />
+                    Enabled
+                </label>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+                Sends staff alerts, payment reminders and broadcasts by email, and emails customers who have an
+                address when their plan is extended or cash is added.
+            </p>
+            <form onSubmit={e => { e.preventDefault(); saveMutation.mutate(); }} className="space-y-3">
+                <div className="inline-flex rounded-full bg-chip p-1" role="radiogroup" aria-label="Mail server">
+                    {[['gmail', 'Gmail'], ['custom', 'Custom SMTP']].map(([value, text]) => (
+                        <button
+                            key={value}
+                            type="button"
+                            role="radio"
+                            aria-checked={form.smtp_provider === value}
+                            onClick={() => setForm({ ...form, smtp_provider: value })}
+                            className={`h-8 rounded-full px-4 text-[13px] font-semibold ${form.smtp_provider === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+                        >
+                            {text}
+                        </button>
+                    ))}
+                </div>
+
+                {gmail ? (
+                    <p className="text-xs text-muted-foreground">
+                        Uses smtp.gmail.com, port 587 with STARTTLS. Google doesn't accept your normal password here: turn on
+                        2-Step Verification, then create an <span className="font-semibold">App Password</span> under Google Account
+                        → Security → App passwords, and paste it below.
+                    </p>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_110px_150px] gap-3">
+                        <div>
+                            <label className={label}>SMTP host</label>
+                            <input className={field} placeholder="mail.example.com" value={form.smtp_host}
+                                onChange={e => setForm({ ...form, smtp_host: e.target.value })} />
+                        </div>
+                        <div>
+                            <label className={label}>Port</label>
+                            <input type="number" min={1} max={65535} className={field} value={form.smtp_port}
+                                onChange={e => setForm({ ...form, smtp_port: Number(e.target.value) })} />
+                        </div>
+                        <div>
+                            <label className={label}>Encryption</label>
+                            <select className={field} value={form.smtp_security} onChange={e => setSecurity(e.target.value)}>
+                                <option value="starttls">STARTTLS</option>
+                                <option value="ssl">SSL/TLS</option>
+                                <option value="none">None</option>
+                            </select>
+                        </div>
+                    </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label className={label}>{gmail ? 'Gmail address' : 'Username'}</label>
+                        <input className={field} autoComplete="off" placeholder={gmail ? 'you@gmail.com' : 'SMTP username'}
+                            value={form.smtp_username} onChange={e => setForm({ ...form, smtp_username: e.target.value })} />
+                    </div>
+                    <div>
+                        <label className={label}>{gmail ? 'App Password' : 'Password'}</label>
+                        <input type="password" className={field} autoComplete="new-password"
+                            placeholder={settings?.smtp_password_is_set ? '•••••••• (saved, type to replace)' : gmail ? '16-character app password' : 'SMTP password'}
+                            value={form.smtp_password} onChange={e => setForm({ ...form, smtp_password: e.target.value })} />
+                    </div>
+                    <div>
+                        <label className={label}>From name</label>
+                        <input className={field} placeholder="e.g. Hasanet Support" value={form.email_from_name}
+                            onChange={e => setForm({ ...form, email_from_name: e.target.value })} />
+                    </div>
+                    <div>
+                        <label className={label}>From address</label>
+                        <input type="email" className={field} placeholder={gmail ? 'Defaults to the Gmail address' : 'Defaults to the username'}
+                            value={form.email_from_address} onChange={e => setForm({ ...form, email_from_address: e.target.value })} />
+                    </div>
+                </div>
+
+                <button
+                    type="submit"
+                    disabled={saveMutation.isPending}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50"
+                >
+                    {saveMutation.isPending ? 'Saving...' : 'Save email settings'}
+                </button>
+            </form>
+            <TestSendRow channel="email" disabled={!settings?.email_enabled || !settings?.smtp_password_is_set} />
         </div>
     );
 }
@@ -369,6 +578,7 @@ function BroadcastSection() {
     const [channels, setChannels] = useState<string[]>(['sms']);
     const [serviceType, setServiceType] = useState('pppoe');
     const [previewCount, setPreviewCount] = useState<number | null>(null);
+    const { data: templates } = useMessageTemplates();
 
     const previewMutation = useMutation({
         mutationFn: () => notificationAPI.broadcast({ message, channels, service_type: serviceType, dry_run: true }),
@@ -414,7 +624,7 @@ function BroadcastSection() {
                 <div>
                     <label className="block text-xs font-medium text-foreground/80 mb-1">Channels</label>
                     <div className="flex gap-4">
-                        {['sms', 'whatsapp', 'telegram'].map(c => (
+                        {['sms', 'whatsapp', 'telegram', 'email'].map(c => (
                             <label key={c} className="flex items-center text-sm capitalize">
                                 <input type="checkbox" className="mr-1.5" checked={channels.includes(c)} onChange={() => toggleChannel(c)} />
                                 {c}
@@ -422,6 +632,22 @@ function BroadcastSection() {
                         ))}
                     </div>
                 </div>
+                {!!templates?.promo.length && (
+                    <div>
+                        <label className="block text-xs font-medium text-foreground/80 mb-1">Start from a template</label>
+                        <select
+                            className="w-full border rounded-lg px-3 py-2 text-sm"
+                            value=""
+                            onChange={e => {
+                                const t = templates.promo.find(p => String(p.id) === e.target.value);
+                                if (t) { setMessage(t.body); setPreviewCount(null); }
+                            }}
+                        >
+                            <option value="">Choose a promotional template…</option>
+                            {templates.promo.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                    </div>
+                )}
                 <div>
                     <label className="block text-xs font-medium text-foreground/80 mb-1">Message</label>
                     <textarea
@@ -430,6 +656,9 @@ function BroadcastSection() {
                         value={message}
                         onChange={e => { setMessage(e.target.value); setPreviewCount(null); }}
                     />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Personalise with {'{first_name}'}, {'{name}'}, {'{username}'}, {'{company}'} or {'{support_phone}'}.
+                    </p>
                 </div>
 
                 {previewCount !== null && (

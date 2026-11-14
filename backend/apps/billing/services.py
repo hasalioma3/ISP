@@ -179,3 +179,19 @@ def purchase_plan_from_balance(customer, plan):
     customer.account_balance -= plan.price
     customer.save(update_fields=['account_balance'])
     return subscription, credited
+
+
+
+def reconcile_customer_statuses():
+    """
+    Self-heal Customer.status against subscriptions: anyone holding a live
+    (active, unexpired) subscription is 'active', whatever an older expiry,
+    an import or a past race left behind. A plain UPDATE -- no router calls
+    and no signals -- run after every expiry check. Returns rows fixed.
+    """
+    from django.utils import timezone
+    from apps.customers.models import Customer
+    from apps.billing.models import Subscription
+
+    live = Subscription.objects.filter(status='active', expiry_date__gt=timezone.now()).values('customer_id')
+    return Customer.objects.filter(id__in=live, is_staff=False).exclude(status='active').update(status='active')

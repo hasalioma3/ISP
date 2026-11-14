@@ -4,12 +4,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import {
     ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpDown, Eye, Filter, Loader2, MapPin,
-    MoreHorizontal, Package, Pencil, Plus, RefreshCw, Search, Upload, X, Zap, Layers,
+    MoreHorizontal, Package, Pencil, Plus, RefreshCw, Search, Upload, X, Zap, Layers, MessageSquare,
 } from 'lucide-react';
 import { adminAPI, billingAPI } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { useSites } from '../../hooks/useSites';
 import SubscriberDetailModal from '../../components/SubscriberDetailModal';
+import ExportMenu from '../../components/ExportMenu';
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
@@ -43,14 +44,20 @@ const maskPhone = (phone?: string) => {
     return local.length === 10 ? `${local.slice(0, 4)} ••• ${local.slice(-3)}` : (phone || '');
 };
 
-/** Customer status, with "active but running out within 7 days" shown as expiring. */
+/**
+ * Status shown in the list. A current subscription (active and not yet
+ * expired) wins over Customer.status, which an older subscription's expiry
+ * could leave stale after a renewal; within 7 days of expiry it's "expiring".
+ */
 function rowStatus(user: any): Status {
-    if (user.status === 'active' && user.calculated_expiry) {
-        const msLeft = new Date(user.calculated_expiry).getTime() - Date.now();
-        if (msLeft > 0 && msLeft <= 7 * 86_400_000) return 'expiring';
-    }
-    if (['active', 'expired', 'suspended', 'pending'].includes(user.status)) return user.status;
-    return 'unknown';
+    const expiry = user.calculated_expiry ? new Date(user.calculated_expiry).getTime() : null;
+    const live = user.current_plan_status === 'active' && expiry != null && expiry > Date.now();
+    if (live) return expiry! - Date.now() <= 7 * 86_400_000 ? 'expiring' : 'active';
+    const known = ['active', 'expired', 'suspended', 'pending'].includes(user.status);
+    if (!user.current_plan_name) return known ? user.status : 'unknown';  // never had a plan
+    // Had a plan, none live now: "expired" even if the stored status lags.
+    if (user.status === 'active') return 'expired';
+    return known ? user.status : 'unknown';
 }
 
 const selectClass =
@@ -78,6 +85,11 @@ export default function Subscribers() {
     const [initialTab, setInitialTab] = useState<'details' | 'usage' | 'plans'>('details');
     const [selected, setSelected] = useState<Record<number, any>>({});
     const [bulkBusy, setBulkBusy] = useState<'stk' | 'renew' | null>(null);
+    // SMS/WhatsApp reminder dialog for the selection.
+    const [reminderOpen, setReminderOpen] = useState(false);
+    const [reminderChannel, setReminderChannel] = useState<'sms' | 'whatsapp' | 'email'>('sms');
+    const [reminderPreview, setReminderPreview] = useState<string | null | undefined>(undefined);
+    const [reminderSending, setReminderSending] = useState(false);
 
     // Debounce typing so every keystroke isn't a query.
     useEffect(() => {
@@ -177,6 +189,45 @@ export default function Subscribers() {
         } finally {
             setBulkBusy(null);
         }
+    };
+
+    // Reminders go out to customers, so admins/sales/superadmin only (API enforces it too).
+    const canRemind = !!user?.is_superuser || ['admin', 'sales'].includes(user?.role || '');
+
+    const openReminder = async () => {
+        setReminderOpen(true);
+        setReminderPreview(undefined);
+        try {
+            const res = await adminAPI.bulkReminder(selectedRows.map((r) => r.id), reminderChannel, true);
+            setReminderPreview(res.data.preview);
+        } catch (err: any) {
+            setReminderPreview(null);
+            toast.error(err.response?.data?.error || 'Could not prepare the reminder');
+        }
+    };
+
+    const sendReminder = async () => {
+        setReminderSending(true);
+        try {
+            const res = await adminAPI.bulkReminder(selectedRows.map((r) => r.id), reminderChannel);
+            const { queued = 0, skipped = [] } = res.data;
+            if (queued) toast.success(`${queued} reminder${queued === 1 ? '' : 's'} sending by ${reminderChannel === 'sms' ? 'SMS' : reminderChannel === 'whatsapp' ? 'WhatsApp' : 'email'}`);
+            skipped.forEach((msg: string) => toast.error(msg, { duration: 6000 }));
+            setReminderOpen(false);
+            setSelected({});
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Could not send reminders');
+        } finally {
+            setReminderSending(false);
+        }
+    };
+
+    // Same filters/tab as the table, for "Export" with nothing selected.
+    const exportParams = {
+        ...filters,
+        status: ['active', 'expired', 'suspended'].includes(activeTab) ? activeTab : undefined,
+        expiring: activeTab === 'expiring' ? 'true' : undefined,
+        is_new: activeTab === 'new' ? 'true' : undefined,
     };
 
     const renewSelected = async () => {
@@ -338,6 +389,12 @@ export default function Subscribers() {
                                 <option value="static">Static</option>
                             </select>
                         </label>
+                        <ExportMenu
+                            path="/customers/subscribers/export/"
+                            params={exportParams}
+                            filename={`subscribers_${activeTab}`}
+                            label={`Export ${summary ? formatCount(summary[activeTab]) : ''}`.trim()}
+                        />
                     </div>
                 </div>
 
@@ -493,6 +550,20 @@ export default function Subscribers() {
                                 {bulkBusy === 'renew' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                                 Renew
                             </button>}
+                            {canRemind && (
+                                <button
+                                    onClick={openReminder}
+                                    className="flex h-10 items-center gap-2 rounded-full border border-white/25 px-4 text-[14px] font-semibold hover:bg-white/10"
+                                >
+                                    <MessageSquare className="h-4 w-4" /> Send reminder
+                                </button>
+                            )}
+                            <ExportMenu
+                                path="/customers/subscribers/export/"
+                                params={{ ids: selectedRows.map((r) => r.id).join(',') }}
+                                filename={`subscribers_selected_${selectedRows.length}`}
+                                className="h-10 border-white/25 bg-transparent text-white hover:bg-white/10"
+                            />
                             <button
                                 onClick={() => setSelected({})}
                                 aria-label="Clear selection"
@@ -537,6 +608,67 @@ export default function Subscribers() {
                     </div>
                 </div>
             </Panel>
+
+            {reminderOpen && (
+                <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="reminder-title">
+                    <div className="w-full max-w-lg rounded-card border border-border bg-card p-6 shadow-card">
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                            <div>
+                                <h2 id="reminder-title" className="text-[18px] font-bold text-foreground">Send payment reminder</h2>
+                                <p className="text-[13px] text-muted-foreground">
+                                    To {selectedRows.length} subscriber{selectedRows.length === 1 ? '' : 's'}. Each gets their own plan, amount and expiry.
+                                </p>
+                            </div>
+                            <button onClick={() => setReminderOpen(false)} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-accent">
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <div className="mb-4 inline-flex rounded-full bg-chip p-1" role="radiogroup" aria-label="Send by">
+                            {(['sms', 'whatsapp', 'email'] as const).map((c) => (
+                                <button
+                                    key={c}
+                                    role="radio"
+                                    aria-checked={reminderChannel === c}
+                                    onClick={() => setReminderChannel(c)}
+                                    className={cn(
+                                        'h-8 rounded-full px-4 text-[13px] font-semibold',
+                                        reminderChannel === c ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
+                                    )}
+                                >
+                                    {c === 'sms' ? 'SMS' : c === 'whatsapp' ? 'WhatsApp' : 'Email'}
+                                </button>
+                            ))}
+                        </div>
+
+                        <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-faint">Preview (first subscriber)</p>
+                        <div className="min-h-[72px] rounded-2xl bg-surface2 p-4 text-[14px] leading-relaxed text-foreground">
+                            {reminderPreview === undefined ? (
+                                <span className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Preparing…</span>
+                            ) : reminderPreview ?? (
+                                <span className="text-muted-foreground">None of the selected subscribers has a plan to remind them about.</span>
+                            )}
+                        </div>
+                        <p className="mt-2 text-[12.5px] text-muted-foreground">
+                            Subscribers without a phone number (or email address, for Email) or a plan are skipped and listed after sending.
+                        </p>
+
+                        <div className="mt-5 flex justify-end gap-2">
+                            <button onClick={() => setReminderOpen(false)} className="h-10 rounded-full border border-input px-5 text-[14px] font-semibold text-foreground hover:bg-accent">
+                                Cancel
+                            </button>
+                            <button
+                                onClick={sendReminder}
+                                disabled={reminderSending || !reminderPreview}
+                                className="flex h-10 items-center gap-2 rounded-full bg-primary px-5 text-[14px] font-semibold text-primary-foreground disabled:opacity-60"
+                            >
+                                {reminderSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+                                Send to {selectedRows.length}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {selectedId !== null && (
                 <SubscriberDetailModal id={selectedId} initialTab={initialTab} onClose={() => { setSelectedId(null); refreshLists(); }} />

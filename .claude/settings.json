@@ -73,7 +73,31 @@
       "Bash(venv/bin/python manage.py check)",
       "Bash(sed -i '' \"s/        C2BPayment.objects.create\\(transaction_id='SKC9', amount=1000, msisdn='hash', matched_customer=self.customer,/        C2BPayment.objects.create\\(transaction_id='SKC9', amount=1000, msisdn='hash', matched_customer=self.customer, raw_data={},/\" apps/analytics/tests.py)",
       "Bash(node -e \"console.log\\('254722618418'.replace\\(/^254/,'0'\\).replace\\(/^\\(\\\\d{4}\\)\\(\\\\d{3}\\)\\(\\\\d{3}\\)$/,'\\\\$1 \\\\$2 \\\\$3'\\), '0722618418'.replace\\(/^254/,'0'\\).replace\\(/^\\(\\\\d{4}\\)\\(\\\\d{3}\\)\\(\\\\d{3}\\)$/,'\\\\$1 \\\\$2 \\\\$3'\\)\\)\")",
-      "Bash(venv/bin/python manage.py test apps.payments)"
+      "Bash(venv/bin/python manage.py test apps.payments)",
+      "Bash(gh repo *)",
+      "Bash(chmod +x update_from_github.sh)",
+      "Bash(bash -n update_from_github.sh)",
+      "Bash(git rm *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(pip download *)",
+      "Bash(venv/bin/python -c \"import reportlab\")",
+      "Bash(venv/bin/python -m pip install -q \"reportlab==4.2.5\")",
+      "Bash(grep -v \"NotOpenSSL\\\\|warnings.warn\\\\|^$\")",
+      "Bash(venv/bin/python -c \"import reportlab; print\\(reportlab.Version\\)\")",
+      "Bash(venv/bin/python -c ' *)",
+      "Bash(sed -i '' 's/topMargin=30 \\\\* mm, bottomMargin=18 \\\\* mm/topMargin=32 * mm, bottomMargin=18 * mm/' apps/analytics/exports.py)",
+      "Bash(venv/bin/python -m pip install -q \"openpyxl==3.1.5\")",
+      "Bash(venv/bin/python -c \"import openpyxl;print\\(openpyxl.__version__\\)\")",
+      "Bash(cd /Users/hassanomar/Documents/GitHub/ISP/frontend/src/pages/admin && sed -n 1,20p Payments.tsx; sed -n 66,160p Payments.tsx; grep -n \"getRecentPayments\" ../../services/api.ts)",
+      "Read(//Users/hassanomar/Documents/GitHub/services/**)",
+      "Bash(venv/bin/python manage.py test apps.network.tests.StaticPlanSyncTests apps.customers.tests.RenewedCustomerStatusTests)",
+      "Bash(venv/bin/python manage.py makemigrations notifications -n email_smtp)",
+      "Bash(venv/bin/python -c \"import django;print\\(django.VERSION\\)\")",
+      "Bash(sed -i '' 's/, robust=True//' apps/payments/services/payment_processor.py)",
+      "Bash(venv/bin/python manage.py test apps.payments.tests.FalseActivationErrorCommitTests)",
+      "Bash(venv/bin/python manage.py makemigrations payments -n c2b_awaiting_stk)"
     ]
   }
 }

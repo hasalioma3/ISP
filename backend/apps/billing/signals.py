@@ -1,6 +1,7 @@
 
 from django.db.models.signals import post_save, post_delete, m2m_changed
 from django.db import transaction
+from django.utils import timezone
 from django.dispatch import receiver
 from apps.billing.models import BillingPlan
 from apps.network.tasks import sync_plan_to_routers
@@ -59,6 +60,16 @@ def sync_subscription_on_save(sender, instance, created, **kwargs):
     if instance.status == 'active' and not instance.is_expired:
         network_automation.activate_customer(instance.customer, instance.plan)
         if is_latest and instance.customer.status != 'active':
+            instance.customer.status = 'active'
+            instance.customer.save(update_fields=['status'])
+    elif instance.status in ['expired', 'cancelled', 'suspended'] and Subscription.objects.filter(
+        customer=instance.customer, status='active', expiry_date__gt=timezone.now()
+    ).exclude(pk=instance.pk).exists():
+        # An older subscription ending while the customer already holds a
+        # renewed one: they must stay connected and stay 'active'. Before
+        # this check the old one's expiry suspended them on the router, and
+        # (depending on which row was newest) marked them expired.
+        if instance.customer.status != 'active':
             instance.customer.status = 'active'
             instance.customer.save(update_fields=['status'])
     elif instance.status in ['expired', 'cancelled', 'suspended']:

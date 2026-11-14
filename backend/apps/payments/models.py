@@ -71,6 +71,8 @@ class C2BPayment(models.Model):
         ('matched_no_plan', 'Matched, No Plan'),  # matched customer, amount didn't match any plan price
         ('unmatched', 'Unmatched'),        # no customer found for the account number entered
         ('error', 'Error'),                # matched but activation itself failed
+        ('awaiting_stk', 'Awaiting STK'),  # portal STK payment; its STK callback activates it
+        ('review', 'Needs assignment'),    # hotspot payer: an admin assigns it (nothing credited yet)
     ]
 
     # Raw Safaricom C2B payload fields (see Daraja C2B Confirmation API)

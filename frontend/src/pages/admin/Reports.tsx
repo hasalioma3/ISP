@@ -4,9 +4,9 @@ import { analyticsAPI } from '../../services/api';
 import { BarTrend } from '../../components/savanna/charts';
 import { Panel, PanelHeader, Skeleton, formatCompact, formatDateEAT, formatKES } from '../../components/savanna';
 import DayBreakdown from '../../components/DayBreakdown';
-import { Download, Calendar, Search } from 'lucide-react';
+import ExportMenu from '../../components/ExportMenu';
+import { Calendar, Search } from 'lucide-react';
 import { addDays, format, subDays } from 'date-fns';
-import { downloadBlob } from '../../utils/downloadBlob';
 
 export default function Reports() {
     const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
@@ -67,48 +67,6 @@ export default function Reports() {
         setVoucherSearch(voucherSearchInput.trim());
     };
 
-    const handleVoucherExport = async () => {
-        const res = await analyticsAPI.downloadVoucherUsageReport({
-            start_date: startDate,
-            end_date: endDate,
-            search: voucherSearch || undefined,
-        });
-        downloadBlob(res.data, `voucher_usage_${startDate}_${endDate}.csv`);
-    };
-
-    const handleDownloadCSV = () => {
-        // Direct download link
-        // We need auth token in params or headers? 
-        // Direct link won't have headers.
-        // We must fetch blob and download.
-        // Or cleaner: use window.open if cookies. typically JWT is in localStorage so fetch is better.
-
-        // Actually, let's use the API method but with responseType blob
-        // For now, simpler: user clicks, we fetch blob, create objectURL.
-
-        // Wait, analyticsAPI.getIncomeReport calls axios. 
-        // Let's manually reconstruct the URL for simplicity or use a dedicated download function in API.
-        // Let's do fetch manually here or improve API.
-
-        const token = localStorage.getItem('access_token');
-        const url = `${import.meta.env.VITE_API_URL || '/api'}/analytics/income/?start_date=${startDate}&end_date=${endDate}&export=csv`;
-
-        fetch(url, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        })
-            .then(resp => resp.blob())
-            .then(blob => {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = `income_report_${startDate}_${endDate}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-            });
-    };
-
     return (
         <div>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -130,13 +88,7 @@ export default function Reports() {
                             className="text-sm border-none focus:ring-0 p-0 text-muted-foreground"
                         />
                     </div>
-                    <button
-                        onClick={handleDownloadCSV}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium"
-                    >
-                        <Download className="h-4 w-4" />
-                        Export CSV
-                    </button>
+
                 </div>
             </div>
 
@@ -144,6 +96,7 @@ export default function Reports() {
             <div className="mb-6 grid grid-cols-1 gap-[18px] 2xl:grid-cols-2">
                 <Panel>
                     <PanelHeader
+                        action={<ExportMenu path="/analytics/income/" params={{ start_date: startDate, end_date: endDate }} filename={`revenue_${startDate}_${endDate}`} />}
                         title="Revenue overview"
                         subtitle={`Completed payments per day · ${formatKES(revenueTotal)} in range · click a bar for the breakdown`}
                     />
@@ -169,6 +122,7 @@ export default function Reports() {
 
                 <Panel>
                     <PanelHeader
+                        action={<ExportMenu path="/analytics/usage-daily/" params={{ start_date: startDate, end_date: endDate }} filename={`data_usage_${startDate}_${endDate}`} />}
                         title="Data usage overview"
                         subtitle={`Whole network per day · ${usageTotal.toFixed(1)} GB in range · click a bar for the breakdown`}
                     />
@@ -212,14 +166,12 @@ export default function Reports() {
                                 <Search className="h-4 w-4" />
                             </button>
                         </form>
-                        <button
-                            type="button"
-                            onClick={handleVoucherExport}
-                            className="flex items-center gap-2 px-3 py-2 border border-input rounded-md hover:bg-accent text-sm font-medium"
-                        >
-                            <Download className="h-4 w-4" />
-                            Export vouchers
-                        </button>
+                        <ExportMenu
+                            path="/analytics/voucher-usage/"
+                            params={{ start_date: startDate, end_date: endDate, search: voucherSearch || undefined }}
+                            filename={`voucher_usage_${startDate}_${endDate}`}
+                            label="Export vouchers"
+                        />
                     </div>
                 </div>
                 <div className="overflow-x-auto">

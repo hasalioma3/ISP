@@ -181,7 +181,7 @@ def _deny_technician(request):
     return None
 
 
-def _notify_change(*, staff_message, customer_message, event_type, customer, subscription=None):
+def _notify_change(*, staff_message, template_key, context, event_type, customer, subscription=None):
     """
     After a manual extension or cash credit commits, tell both the customer
     (SMS to their phone) and the manager alert number
@@ -192,7 +192,7 @@ def _notify_change(*, staff_message, customer_message, event_type, customer, sub
     sub_id = subscription.id if subscription else None
 
     def queue():
-        send_customer_account_notice.delay(customer.id, customer_message, event_type, subscription_id=sub_id)
+        send_customer_account_notice.delay(customer.id, template_key, context, event_type, subscription_id=sub_id)
         send_staff_alert.delay(staff_message, customer_id=customer.id, subscription_id=sub_id)
     transaction.on_commit(queue)
 
@@ -380,6 +380,92 @@ class SubscriberViewSet(
         return Response({'success': sent, 'failed': failed})
 
     BULK_STK_LIMIT = 25
+    BULK_REMINDER_LIMIT = 500
+
+    @action(detail=False, methods=['post'], url_path='bulk-reminder')
+    def bulk_reminder(self, request):
+        """
+        Text the selected subscribers a payment reminder (their plan, amount,
+        expiry and how to pay) by SMS or WhatsApp. `preview: true` returns
+        the message for the first one without sending. Admin/sales/superadmin.
+        Each send is its own Celery task, so a large selection returns at
+        once; every attempt shows up in the notification log.
+        """
+        from apps.customers.reminders import build_payment_reminder
+        from apps.notifications.tasks import send_payment_reminder
+
+        user = request.user
+        if not (user.is_superuser or user.role in ('admin', 'sales')):
+            return Response({'error': 'Only admins and sales can send payment reminders.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        channel = request.data.get('channel', 'sms')
+        if channel not in ('sms', 'whatsapp', 'email'):
+            return Response({'error': "channel must be 'sms', 'whatsapp' or 'email'."}, status=status.HTTP_400_BAD_REQUEST)
+        ids = request.data.get('ids') or []
+        if not isinstance(ids, list) or not ids:
+            return Response({'error': 'Select at least one subscriber.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(ids) > self.BULK_REMINDER_LIMIT:
+            return Response({'error': f'Send at most {self.BULK_REMINDER_LIMIT} reminders at a time.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        customers = list(Customer.objects.filter(is_staff=False, id__in=ids).order_by('id'))
+        if request.data.get('preview'):
+            for customer in customers:
+                message = build_payment_reminder(customer)
+                if message:
+                    return Response({'preview': message, 'customer': customer.username})
+            return Response({'preview': None})
+
+        queued, skipped = [], []
+        for customer in customers:
+            name = customer.get_full_name() or customer.username
+            if channel == 'email' and not customer.email:
+                skipped.append(f'{name}: no email address')
+            elif channel != 'email' and not customer.phone_number:
+                skipped.append(f'{name}: no phone number')
+            elif not build_payment_reminder(customer):
+                skipped.append(f'{name}: has never had a plan')
+            else:
+                send_payment_reminder.delay(customer.id, channel)
+                queued.append(name)
+        return Response({'queued': len(queued), 'skipped': skipped})
+
+    @action(detail=False, methods=['get'])
+    def export(self, request):
+        """
+        CSV or PDF (?export=csv|pdf) of the selected subscribers (?ids=1,2)
+        or, with no ids, everyone matching the page's current filters/tab.
+        Full phone numbers are included: it's an admin download for
+        contacting people, unlike the masked on-screen list.
+        """
+        from apps.analytics.exports import Section, export_format, export_response
+
+        fmt = export_format(request) or 'csv'
+        qs = self.filter_queryset(self.get_queryset())
+        ids = [i for i in (request.query_params.get('ids') or '').split(',') if i.strip().isdigit()]
+        if ids:
+            qs = qs.filter(id__in=ids)
+
+        def when(value):
+            return timezone.localtime(value).strftime('%Y-%m-%d %H:%M') if value else ''
+
+        rows = [
+            [c.username, c.get_full_name(), c.phone_number, c.email, c.service_type.upper(),
+             c.current_plan_name or '', float(c.current_plan_price) if c.current_plan_price is not None else '',
+             c.status, when(c.calculated_expiry), float(c.account_balance), c.router_name or '', when(c.created_at)]
+            for c in qs[:10000]
+        ]
+        return export_response(
+            fmt,
+            filename=f'subscribers_{timezone.localdate()}',
+            title='Subscribers',
+            subtitle=f"{len(rows)} subscriber{'s' if len(rows) != 1 else ''}" + (' (selected)' if ids else ''),
+            sections=Section(
+                ['Username', 'Name', 'Phone', 'Email', 'Service', 'Plan', 'Price (KES)', 'Status',
+                 'Expires', 'Balance (KES)', 'Router', 'Created'],
+                rows, numeric=(6, 9),
+            ),
+        )
 
     @action(detail=True, methods=['get'])
     def usage(self, request, pk=None):
@@ -479,7 +565,8 @@ class SubscriberViewSet(
                 f"{request.user.username} recharged {customer.get_full_name() or customer.username} "
                 f"({customer.username}) on {plan.name}, KES {plan.price} cash. Expires {expires}."
             ),
-            customer_message=f"Payment of KES {plan.price} received. Your {plan.name} plan is active until {expires}.",
+            template_key='payment_confirmation',
+            context={'amount': str(plan.price), 'plan': plan.name, 'expiry': expires},
             event_type='payment_confirmation', customer=customer, subscription=subscription,
         )
 
@@ -568,7 +655,8 @@ class SubscriberViewSet(
                 f"{customer.get_full_name() or customer.username} ({customer.username}). "
                 f"New balance KES {customer.account_balance}."
             ),
-            customer_message=f"KES {amount} has been added to your account. Your balance is now KES {customer.account_balance}.",
+            template_key='cash_added',
+            context={'amount': str(amount), 'balance': str(customer.account_balance)},
             event_type='balance_credit', customer=customer,
         )
 
@@ -634,11 +722,11 @@ class SubscriberViewSet(
                 + (f" (reactivated, was {was})" if was != 'active' else '')
                 + f". Previous expiry {timezone.localtime(old_expiry).strftime('%d %b %Y %H:%M')}."
             ),
-            customer_message=(
-                f"Your {subscription.plan.name} plan has been "
-                + ("reactivated" if was != 'active' else "extended")
-                + f" and is active until {new_local}."
-            ),
+            template_key='subscription_extended',
+            context={
+                'plan': subscription.plan.name, 'expiry': new_local,
+                'action': 'reactivated' if was != 'active' else 'extended',
+            },
             event_type='subscription_extended', customer=customer, subscription=subscription,
         )
         return Response({

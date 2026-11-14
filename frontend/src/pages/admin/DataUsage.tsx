@@ -6,10 +6,11 @@ import {
 } from 'recharts';
 import { analyticsAPI, adminAPI } from '../../services/api';
 import {
-    PieChart as PieIcon, Calendar, Search, Filter, RotateCcw, Download,
+    PieChart as PieIcon, Calendar, Search, Filter, RotateCcw,
     ArrowUp, ArrowDown, Users as UsersIcon, ArrowUpDown, TrendingUp,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import ExportMenu from '../../components/ExportMenu';
 
 const PERIODS = [
     { key: 'daily', label: 'Daily' },
@@ -62,28 +63,6 @@ export default function DataUsage() {
     const handleReset = () => {
         setSearchInput(''); setSearch(''); setRouterFilter(''); setTypeFilter('');
         setDate(format(new Date(), 'yyyy-MM-dd')); setSort('highest'); setLimit(50);
-    };
-
-    const handleExportCSV = () => {
-        const token = localStorage.getItem('access_token');
-        const params = new URLSearchParams({
-            period, date, sort, limit: String(limit), export: 'csv',
-            ...(search ? { search } : {}), ...(routerFilter ? { router: routerFilter } : {}),
-            ...(typeFilter ? { type: typeFilter } : {}),
-        });
-        const url = `${import.meta.env.VITE_API_URL || '/api'}/analytics/data-usage/?${params}`;
-        fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-            .then(resp => resp.blob())
-            .then(blob => {
-                const objUrl = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = objUrl;
-                a.download = `data_usage_${period}_${date}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(objUrl);
-            });
     };
 
     const totals = data?.totals;
@@ -170,9 +149,11 @@ export default function DataUsage() {
                     <button type="button" onClick={handleReset} className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-foreground/80 rounded-lg text-sm font-medium hover:bg-gray-200">
                         <RotateCcw className="h-4 w-4" /> Reset
                     </button>
-                    <button type="button" onClick={handleExportCSV} className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600">
-                        <Download className="h-4 w-4" /> CSV
-                    </button>
+                    <ExportMenu
+                        path="/analytics/data-usage/"
+                        params={{ period, date, sort, limit, search: search || undefined, router: routerFilter || undefined, type: typeFilter || undefined }}
+                        filename={`data_usage_${period}_${date}`}
+                    />
                 </form>
 
                 {/* Sort by */}

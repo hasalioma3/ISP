@@ -118,7 +118,15 @@ export const voucherAPI = {
 export const notificationAPI = {
     getSettings: () => api.get('/notifications/settings/'),
     updateSettings: (data: any) => api.patch('/notifications/settings/', data),
-    testSend: (data: { channel: 'sms' | 'whatsapp' | 'telegram'; recipient: string; message?: string }) =>
+    // Message templates: system wording overrides + saved promotional texts.
+    getTemplates: () => api.get('/notifications/templates/'),
+    saveSystemTemplate: (key: string, body: string) => api.put(`/notifications/templates/system/${key}/`, { body }),
+    resetSystemTemplate: (key: string) => api.delete(`/notifications/templates/system/${key}/`),
+    createPromoTemplate: (data: { name: string; body: string }) => api.post('/notifications/templates/promo/', data),
+    updatePromoTemplate: (id: number, data: { name?: string; body?: string }) => api.patch(`/notifications/templates/promo/${id}/`, data),
+    deletePromoTemplate: (id: number) => api.delete(`/notifications/templates/promo/${id}/`),
+    previewTemplate: (body: string) => api.post('/notifications/templates/preview/', { body }),
+    testSend: (data: { channel: 'sms' | 'whatsapp' | 'telegram' | 'email'; recipient: string; message?: string }) =>
         api.post('/notifications/test-send/', data),
     getWhatsAppStatus: () => api.get('/notifications/whatsapp/status/'),
     broadcast: (data: { message: string; channels: string[]; service_type?: string; dry_run?: boolean }) =>
@@ -145,8 +153,8 @@ export const analyticsAPI = {
     getExpiringToday: (page: number, pageSize?: number) =>
         api.get('/analytics/expiring-today/', { params: { page, page_size: pageSize } }),
     getRecentActivity: () => api.get('/analytics/recent-activity/'),
-    getRecentPayments: (page: number, pageSize?: number) =>
-        api.get('/analytics/recent-payments/', { params: { page, page_size: pageSize } }),
+    getRecentPayments: (page: number, pageSize?: number, range?: { start_date?: string; end_date?: string }) =>
+        api.get('/analytics/recent-payments/', { params: { page, page_size: pageSize, ...range } }),
     getRouterBandwidthTrend: (params: { router: number; period?: string; date?: string }) =>
         api.get('/analytics/router-bandwidth/', { params }),
     getChurnForecast: (days?: number) =>
@@ -166,6 +174,9 @@ export const adminAPI = {
     getSubscriberSummary: (params?: { search?: string; service_type?: string; plan?: string; router?: string }) =>
         api.get('/customers/subscribers/summary/', { params }),
     bulkStkReminder: (ids: number[]) => api.post('/customers/subscribers/bulk-stk-reminder/', { ids }),
+    // SMS/WhatsApp payment reminder; preview=true returns the message without sending.
+    bulkReminder: (ids: number[], channel: 'sms' | 'whatsapp' | 'email', preview = false) =>
+        api.post('/customers/subscribers/bulk-reminder/', { ids, channel, preview }),
     getSubscriber: (id: number) => api.get(`/customers/subscribers/${id}/`),
     updateSubscriber: (id: number, data: any) => api.patch(`/customers/subscribers/${id}/`, data),
     getSubscriberUsage: (id: number) => api.get(`/customers/subscribers/${id}/usage/`),
@@ -219,8 +230,9 @@ export const adminAPI = {
     manualSubscribe: (data: any) => api.post('/billing/manual-subscribe/', data),
 
     // Payments
-    assignC2BPayment: (paymentId: number, customerId: number) =>
-        api.post(`/payments/c2b/${paymentId}/assign/`, { customer_id: customerId }),
+    // Assign an open till payment; with planId the money activates that plan.
+    assignC2BPayment: (paymentId: number, customerId: number, planId?: number) =>
+        api.post(`/payments/c2b/${paymentId}/assign/`, { customer_id: customerId, plan_id: planId }),
 };
 
 // Site Settings (branding: company name + logo)

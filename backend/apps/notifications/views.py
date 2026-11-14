@@ -45,8 +45,8 @@ class TestSendView(APIView):
         recipient = request.data.get('recipient')
         message = request.data.get('message') or 'This is a test message from your ISP billing system.'
 
-        if channel not in ('sms', 'whatsapp', 'telegram'):
-            return Response({'error': 'channel must be sms, whatsapp, or telegram'}, status=400)
+        if channel not in ('sms', 'whatsapp', 'telegram', 'email'):
+            return Response({'error': 'channel must be sms, whatsapp, telegram or email'}, status=400)
         if not recipient:
             return Response({'error': 'recipient is required'}, status=400)
 
@@ -89,8 +89,8 @@ class PromoBroadcastView(APIView):
 
         if not message:
             return Response({'error': 'message is required'}, status=400)
-        if not channels or any(c not in ('sms', 'whatsapp', 'telegram') for c in channels):
-            return Response({'error': 'channels must be a non-empty list of sms/whatsapp/telegram'}, status=400)
+        if not channels or any(c not in ('sms', 'whatsapp', 'telegram', 'email') for c in channels):
+            return Response({'error': 'channels must be a non-empty list of sms/whatsapp/telegram/email'}, status=400)
 
         qs = Customer.objects.filter(status='active')
         if service_type_filter == 'pppoe':
@@ -143,3 +143,133 @@ class TelegramWebhookView(APIView):
         customer.save(update_fields=['telegram_chat_id'])
         TelegramService().send_message(chat_id, f"Linked! You'll now get notifications here, {customer.username}.")
         return Response({'ok': True})
+
+
+
+# --- Message templates (admin only, like the rest of notification settings) ---
+
+def _system_templates_payload():
+    from apps.notifications.models import MessageTemplate
+    from apps.notifications.templates import DEFAULTS, placeholders_for
+    saved = {t.key: t for t in MessageTemplate.objects.filter(kind='system')}
+    return [
+        {
+            'key': key,
+            'name': label,
+            'body': saved[key].body if key in saved else default,
+            'default_body': default,
+            'is_custom': key in saved,
+            'placeholders': placeholders_for(key),
+        }
+        for key, (label, default, _) in DEFAULTS.items()
+    ]
+
+
+class MessageTemplatesView(APIView):
+    """GET: the system messages (current wording + defaults) and saved promotional templates."""
+    permission_classes = [RoleAllowed('admin')]
+
+    def get(self, request):
+        from apps.notifications.models import MessageTemplate
+        from apps.notifications.templates import COMMON
+        return Response({
+            'system': _system_templates_payload(),
+            'promo': [
+                {'id': t.id, 'name': t.name, 'body': t.body, 'updated_at': t.updated_at}
+                for t in MessageTemplate.objects.filter(kind='promo')
+            ],
+            'promo_placeholders': COMMON,
+        })
+
+
+class SystemTemplateView(APIView):
+    """PUT {body}: customise a system message. DELETE: back to the default wording."""
+    permission_classes = [RoleAllowed('admin')]
+
+    def put(self, request, key):
+        from apps.notifications.models import MessageTemplate
+        from apps.notifications.templates import DEFAULTS, customer_context, fill
+        if key not in DEFAULTS:
+            return Response({'error': 'Unknown message.'}, status=404)
+        body = (request.data.get('body') or '').strip()
+        if not body:
+            return Response({'error': 'The message cannot be empty.'}, status=400)
+        try:
+            fill(body, customer_context(None))
+        except (ValueError, IndexError) as e:
+            return Response({'error': f'Check the curly braces: {e}'}, status=400)
+        MessageTemplate.objects.update_or_create(
+            kind='system', key=key, defaults={'name': DEFAULTS[key][0], 'body': body},
+        )
+        return Response({'system': _system_templates_payload()})
+
+    def delete(self, request, key):
+        from apps.notifications.models import MessageTemplate
+        MessageTemplate.objects.filter(kind='system', key=key).delete()
+        return Response({'system': _system_templates_payload()})
+
+
+class PromoTemplateView(APIView):
+    """POST {name, body}: save a promotional template. PATCH/DELETE /<id>/."""
+    permission_classes = [RoleAllowed('admin')]
+
+    def _validate(self, data, partial=False):
+        from apps.notifications.templates import customer_context, fill
+        name = (data.get('name') or '').strip()
+        body = (data.get('body') or '').strip()
+        if not partial and (not name or not body):
+            return None, Response({'error': 'Name and message are required.'}, status=400)
+        if body:
+            try:
+                fill(body, customer_context(None))
+            except (ValueError, IndexError) as e:
+                return None, Response({'error': f'Check the curly braces: {e}'}, status=400)
+        return {k: v for k, v in (('name', name), ('body', body)) if v}, None
+
+    def post(self, request):
+        from apps.notifications.models import MessageTemplate
+        fields, error = self._validate(request.data)
+        if error:
+            return error
+        t = MessageTemplate.objects.create(kind='promo', **fields)
+        return Response({'id': t.id, 'name': t.name, 'body': t.body}, status=201)
+
+    def patch(self, request, pk):
+        from apps.notifications.models import MessageTemplate
+        t = MessageTemplate.objects.filter(kind='promo', pk=pk).first()
+        if not t:
+            return Response({'error': 'Not found.'}, status=404)
+        fields, error = self._validate(request.data, partial=True)
+        if error:
+            return error
+        for k, v in fields.items():
+            setattr(t, k, v)
+        t.save()
+        return Response({'id': t.id, 'name': t.name, 'body': t.body})
+
+    def delete(self, request, pk):
+        from apps.notifications.models import MessageTemplate
+        MessageTemplate.objects.filter(kind='promo', pk=pk).delete()
+        return Response(status=204)
+
+
+class TemplatePreviewView(APIView):
+    """POST {body, key?}: the text as a customer would receive it, with sample values."""
+    permission_classes = [RoleAllowed('admin')]
+
+    SAMPLE = {
+        'first_name': 'Grace', 'name': 'Grace Wanjiru', 'username': 'HSN-10482',
+        'amount': '2500.00', 'plan': 'Home 10 Mbps', 'expiry': '14 Dec 2026 23:59', 'balance': '500.00',
+        'action': 'extended', 'price': 'KES 2,500', 'expiry_text': 'expires on 14 Dec 2026 at 23:59',
+        'how_to_pay': 'pay KES 2,500 via M-Pesa Buy Goods, Till 123456, from 0722618418', 'code': 'KTWM',
+    }
+
+    def post(self, request):
+        from apps.notifications.templates import customer_context, fill
+        body = request.data.get('body') or ''
+        context = {**self.SAMPLE, **{k: v for k, v in customer_context(None).items() if v}}
+        try:
+            text = fill(body, context)
+        except (ValueError, IndexError) as e:
+            return Response({'error': f'Check the curly braces: {e}'}, status=400)
+        return Response({'preview': text, 'length': len(text), 'sms_parts': max(1, -(-len(text) // 160))})

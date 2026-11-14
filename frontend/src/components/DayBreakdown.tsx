@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { analyticsAPI } from '../services/api';
+import ExportMenu from './ExportMenu';
 import { EmptyState, Skeleton, formatAmount, formatCount, formatDateEAT, formatKES } from './savanna';
 
 /**
@@ -29,9 +30,17 @@ export default function DayBreakdown({ kind, date, onClose }: { kind: 'revenue' 
                         </p>
                     )}
                 </div>
-                <button onClick={onClose} aria-label="Close breakdown" className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground">
-                    <X className="h-4 w-4" />
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                    <ExportMenu
+                        path="/analytics/day-breakdown/"
+                        params={{ kind, date }}
+                        filename={`${kind === 'revenue' ? 'revenue' : 'data_usage'}_${date}`}
+                        className="h-9"
+                    />
+                    <button onClick={onClose} aria-label="Close breakdown" className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
             </div>
 
             {isLoading ? (

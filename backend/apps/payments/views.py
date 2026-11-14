@@ -348,54 +348,113 @@ class PaymentRequestViewSet(viewsets.ReadOnlyModelViewSet):
 @permission_classes([RoleAllowed('admin')])
 def assign_c2b_payment(request, payment_id):
     """
-    Manually attribute an unmatched C2B payment to a customer -- the admin
-    fallback for when Safaricom's hashed MSISDN (or a missing/mistyped
-    BillRefNumber) couldn't be auto-matched to anyone at confirmation time.
-    The money already moved, so it's credited to the customer's
-    account_balance in full (same treatment as the "no plan matched"
-    wallet-credit path in process_c2b_confirmation) -- from there the admin
-    can use the existing top-up/switch-plan actions to apply it to a plan.
+    Assign an open till (C2B) payment to a subscriber -- POST
+    {customer_id, plan_id?}. Works for every payment that hasn't activated
+    a plan yet: unmatched payers, payments credited to a balance (including
+    to the wrong person), "Activation failed" ones, and ones held back
+    waiting for an STK callback.
+
+    The money is only ever counted once: if it already sits in someone's
+    balance it's moved (refused if they've spent it); otherwise it's
+    credited now. With plan_id, it then pays for that plan straight away
+    (purchase_plan: renew/switch/create); without, it stays as balance.
     """
+    from decimal import Decimal
+    from django.db import transaction as db_transaction
     from apps.customers.models import Customer
     from apps.billing.models import Transaction
+    from apps.billing.services import purchase_plan
+    from apps.notifications.tasks import send_payment_confirmation_sms
 
     payment = C2BPayment.objects.filter(id=payment_id).first()
     if not payment:
         return Response({'error': 'Payment not found'}, status=status.HTTP_404_NOT_FOUND)
-    if payment.matched_customer_id:
-        return Response(
-            {'error': f'This payment is already matched to {payment.matched_customer.username}'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    customer = Customer.objects.filter(id=request.data.get('customer_id')).first()
+    customer = Customer.objects.filter(id=request.data.get('customer_id'), is_staff=False).first()
     if not customer:
-        return Response({'error': 'Invalid customer ID'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Choose a subscriber to assign this payment to.'}, status=status.HTTP_400_BAD_REQUEST)
+    plan = None
+    if request.data.get('plan_id'):
+        plan = BillingPlan.objects.filter(id=request.data.get('plan_id'), is_active=True).first()
+        if not plan:
+            return Response({'error': 'That plan is not available.'}, status=status.HTTP_400_BAD_REQUEST)
+        if plan.service_type == 'static':
+            return Response({'error': 'Static IP plans are assigned with Recharge on the subscriber.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-    customer.account_balance += payment.amount
-    customer.save(update_fields=['account_balance'])
+    amount = Decimal(payment.amount)
+    try:
+        with db_transaction.atomic():
+            payment = C2BPayment.objects.select_for_update().get(pk=payment.pk)
+            # Same rules the Payments list uses to decide whether to offer Assign.
+            from apps.payments.services import c2b_state
+            state, txn, used_sub = c2b_state.resolve(payment)
+            if state == 'utilized':
+                plan_name = used_sub.plan.name if used_sub is not None and used_sub.plan_id else 'a plan'
+                return Response({'error': f'This payment has already paid for {plan_name}.'},
+                                status=status.HTTP_400_BAD_REQUEST)
 
-    transaction = Transaction.objects.create(
-        customer=customer,
-        transaction_id=payment.transaction_id,
-        amount=payment.amount,
-        currency='KES',
-        payment_method='mpesa',
-        mpesa_receipt_number=payment.transaction_id,
-        mpesa_phone_number=payment.msisdn,
-        mpesa_transaction_date=payment.transaction_time,
-        status='completed',
-        notes=f"C2B payment manually assigned to {customer.username} by {request.user.username}; credited to balance",
-    )
+            # Where the money is now: an existing Transaction without a plan
+            # means it was credited to that customer's balance.
+            to_credit = amount
+            if txn:
+                holder = Customer.objects.select_for_update().get(pk=txn.customer_id)
+                if holder.pk != customer.pk:
+                    if holder.account_balance < amount:
+                        return Response({
+                            'error': f"{holder.username} has already spent part of this payment from their balance "
+                                     f"(KES {holder.account_balance} left), so it can't be moved."
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    holder.account_balance -= amount
+                    holder.save(update_fields=['account_balance'])
+                    txn.customer = customer
+                else:
+                    to_credit = Decimal('0')  # already in this subscriber's balance
+            else:
+                txn = Transaction(
+                    customer=customer, transaction_id=payment.transaction_id, amount=amount, currency='KES',
+                    payment_method='mpesa', mpesa_receipt_number=payment.transaction_id,
+                    mpesa_phone_number=payment.msisdn, mpesa_transaction_date=payment.transaction_time,
+                    status='completed',
+                )
 
-    payment.matched_customer = customer
-    payment.linked_transaction = transaction
-    payment.status = 'matched_no_plan'
-    payment.notes = f"Manually assigned to {customer.username} by {request.user.username}; KES {payment.amount} credited to balance"
-    payment.save(update_fields=['matched_customer', 'linked_transaction', 'status', 'notes'])
+            customer = Customer.objects.select_for_update().get(pk=customer.pk)
+            subscription = None
+            if plan:
+                subscription, _, applied = purchase_plan(customer, plan, to_credit)
+                if not applied:
+                    db_transaction.set_rollback(True)
+                    return Response({
+                        'error': f"KES {customer.account_balance} isn't enough for {plan.name} (KES {plan.price}). "
+                                 f"Assign without a plan to keep it as balance."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                customer.account_balance += to_credit
+                customer.save(update_fields=['account_balance'])
 
+            what = f"activated {plan.name}" if plan else f"credited KES {amount} to balance"
+            txn.subscription = subscription
+            txn.notes = f"Till payment assigned to {customer.username} by {request.user.username}; {what}"
+            txn.save()
+            payment.matched_customer = customer
+            payment.linked_transaction = txn
+            payment.subscription = subscription
+            payment.status = 'activated' if subscription else 'matched_no_plan'
+            payment.notes = f"Assigned to {customer.username} by {request.user.username}; {what}"
+            payment.save(update_fields=['matched_customer', 'linked_transaction', 'subscription', 'status', 'notes'])
+
+            event = 'payment_confirmation' if subscription else 'balance_credit'
+            sub_id = subscription.id if subscription else None
+            customer_id = customer.id
+            db_transaction.on_commit(
+                lambda: send_payment_confirmation_sms.delay(customer_id, event, str(amount), sub_id), robust=True)
+    except Exception as e:
+        logger.error(f"Assigning C2B payment {payment.transaction_id} failed: {e}", exc_info=True)
+        return Response({'error': f'Could not activate on the router: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+
+    customer.refresh_from_db()
     return Response({
         'success': True,
-        'message': f"Payment assigned to {customer.username}; KES {payment.amount} credited to their balance",
+        'message': f"{payment.transaction_id} assigned to {customer.username}: "
+                   + (f"{plan.name} activated" if plan else f"KES {amount} credited to their balance"),
         'account_balance': customer.account_balance,
     })

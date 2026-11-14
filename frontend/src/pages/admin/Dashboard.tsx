@@ -1,19 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { toast } from 'react-hot-toast';
 import {
-    AlertTriangle, CalendarClock, CheckCircle2, Clock, CreditCard, Download, Gauge, Plus,
+    AlertTriangle, CalendarClock, CheckCircle2, Clock, CreditCard, Gauge, Plus,
     RefreshCw, Users, Wifi, WifiOff,
 } from 'lucide-react';
 import { analyticsAPI } from '../../services/api';
 import { useSites } from '../../hooks/useSites';
 import UsageChartPanels from '../../components/UsageChartPanels';
+import ExportMenu from '../../components/ExportMenu';
 import { useAuthStore } from '../../store/authStore';
 import {
     AlertRow, Chip, EmptyState, KpiCard, MpesaBadge, Panel, PanelHeader, PaymentsFeedRow,
     SegmentedControl, ShellHeader, SiteHealthRow, Skeleton, StatusBadge,
-    bandButtonClass, bandCtaClass, formatAmount, formatCompact, formatCount, formatDateEAT,
+    bandCtaClass, formatAmount, formatCompact, formatCount, formatDateEAT,
     formatKES, percentChange, timeAgo, TIME_ZONE,
     type FeedPayment,
 } from '../../components/savanna';
@@ -159,21 +159,6 @@ export default function Dashboard() {
         stats ? `${formatCount(stats.total_customers)} subscribers` : null,
     ].filter(Boolean).join(' · ');
 
-    const exportIncome = async () => {
-        try {
-            const start = eatDayKey(new Date(Date.now() - 29 * 86_400_000));
-            const res = await analyticsAPI.downloadIncomeReport({ start_date: start });
-            const url = URL.createObjectURL(res.data);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `collections_${start}_${eatDayKey(new Date())}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-        } catch {
-            toast.error('Could not export collections');
-        }
-    };
-
     // KPI figures
     const revenueChange = stats?.revenue_30d != null ? percentChange(stats.revenue_30d, stats.revenue_prev_30d) : null;
     const revenueSpark = fillDays(income30, 30).map((d) => d.total);
@@ -203,9 +188,12 @@ export default function Dashboard() {
                 actions={
                     <>
                         {showIncome && (
-                            <button onClick={exportIncome} className={bandButtonClass}>
-                                <Download className="h-[18px] w-[18px]" strokeWidth={1.8} /> Export
-                            </button>
+                            <ExportMenu
+                                path="/analytics/income/"
+                                params={{ start_date: eatDayKey(new Date(Date.now() - 29 * 86_400_000)), end_date: eatDayKey(new Date()) }}
+                                filename={`revenue_30d_${eatDayKey(new Date())}`}
+                                className="h-[42px] border-white/25 bg-white/5 px-5 text-[14px] text-white hover:bg-white/10"
+                            />
                         )}
                         <button onClick={() => navigate('/admin/settings?tab=manual')} className={bandCtaClass}>
                             <Plus className="h-[18px] w-[18px]" strokeWidth={2} /> New subscriber

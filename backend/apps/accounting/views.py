@@ -132,6 +132,30 @@ class ProfitDashboardView(APIView):
             for e in expense_qs.values('category').annotate(total=Sum('amount')).order_by('-total')
         ]
 
+        from apps.analytics.exports import Section, export_format, export_response
+        fmt = export_format(request)
+        if fmt:
+            return export_response(
+                fmt,
+                filename=f'profit_{start_day}_{end_day}',
+                title='Profit & loss',
+                subtitle=f"{start_day:%d %b %Y} to {end_day:%d %b %Y} · customer payments exclude balance re-use",
+                summary=[
+                    ('Customer revenue', f"KES {revenue_total:,.2f}"),
+                    ('Other income', f"KES {other_income_total:,.2f}"),
+                    ('Expenses', f"KES {expense_total:,.2f}"),
+                    ('Profit', f"KES {total_income - expense_total:,.2f}"),
+                ],
+                sections=[
+                    Section(['Date', 'Income (KES)', 'Expenses (KES)', 'Profit (KES)'],
+                            [[d['date'], d['income'], d['expenses'], d['profit']] for d in daily_series],
+                            heading='By day', numeric=(1, 2, 3)),
+                    Section(['Category', 'Expenses (KES)'],
+                            [[c['label'], c['total']] for c in expense_by_category],
+                            heading='Expenses by category', numeric=(1,)),
+                ],
+            )
+
         return Response({
             'start_date': start_day,
             'end_date': end_day,

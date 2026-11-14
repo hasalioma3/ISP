@@ -19,6 +19,10 @@ from apps.notifications.tasks import send_payment_confirmation_sms, send_payment
 logger = logging.getLogger('mpesa')
 
 
+# Every post-commit hook here is robust=True: the hooks only send SMS
+# confirmations, and a broker hiccup when queueing one used to propagate
+# out of the committed `with atomic()` block into the C2B `except` branch,
+# stamping a fully activated payment 'error' / "Activation failed".
 class PaymentProcessor:
     """
     Process M-Pesa payment callbacks and activate services
@@ -117,7 +121,18 @@ class PaymentProcessor:
         # Update payment request status
         payment_request.status = 'completed'
         payment_request.save()
-        
+
+        # The till's C2B confirmation for this same M-Pesa code can land
+        # first (see process_c2b_confirmation). If it already created the
+        # Transaction, the money is accounted for -- don't credit it twice.
+        already = Transaction.objects.filter(transaction_id=payment_callback.mpesa_receipt_number).first()
+        if already:
+            payment_callback.processed = True
+            payment_callback.processed_at = timezone.now()
+            payment_callback.save()
+            logger.info(f"STK {payment_callback.mpesa_receipt_number}: already processed via its C2B confirmation")
+            return
+
         # Create transaction record
         transaction = Transaction.objects.create(
             customer=customer,
@@ -153,7 +168,7 @@ class PaymentProcessor:
             db_transaction.on_commit(
                 lambda: send_payment_confirmation_sms.delay(
                     customer.id, 'balance_credit', str(payment_callback.amount), None
-                )
+                ), robust=True
             )
 
         # Link transaction to subscription (if the plan was actually applied)
@@ -164,6 +179,11 @@ class PaymentProcessor:
         payment_callback.processed = True
         payment_callback.processed_at = timezone.now()
         payment_callback.save()
+
+        # Link the till's C2B record for this code (recorded as
+        # 'awaiting_stk', or arriving later and linking itself).
+        for c2b in C2BPayment.objects.filter(transaction_id=transaction.transaction_id):
+            self._link_c2b_to_transaction(c2b, transaction)
 
         if applied:
             # Update customer status
@@ -184,7 +204,7 @@ class PaymentProcessor:
             db_transaction.on_commit(
                 lambda: send_payment_confirmation_sms.delay(
                     customer.id, 'payment_confirmation', str(payment_callback.amount), subscription.id
-                )
+                ), robust=True
             )
 
     def process_c2b_confirmation(self, data):
@@ -258,21 +278,103 @@ class PaymentProcessor:
             status='unmatched',
         )
 
+        # Paying a Buy Goods till through the portal's STK prompt makes
+        # Safaricom send BOTH an STK callback and this C2B confirmation for
+        # the same M-Pesa code. Handling both used to create the Transaction
+        # twice ("duplicate key ... transactions_transaction_id_key") and
+        # leave this record stuck at "Activation failed" though the STK side
+        # had already activated the plan. The STK side knows the exact
+        # account and plan bought (a phone can own several hotspot device
+        # accounts), so it always wins:
+        stk_transaction = Transaction.objects.filter(transaction_id=trans_id).select_related('customer').first()
+        if stk_transaction:
+            # (a) STK callback came first: just link to what it did.
+            self._link_c2b_to_transaction(payment, stk_transaction)
+            logger.info(f"C2B payment {trans_id}: already processed by its STK callback, linked")
+            return {'success': True, 'message': 'Already processed via STK', 'payment': payment}
+
+        pending = self._pending_stk_request(msisdn, amount)
+        if pending:
+            # (b) STK callback still on its way: let it activate; it links
+            # this record when it lands (cleanup_pending_payments applies
+            # it here instead if the STK request times out).
+            payment.matched_customer = pending.customer
+            payment.status = 'awaiting_stk'
+            payment.notes = f"Waiting for the STK callback of payment request {pending.id}"
+            payment.save(update_fields=['matched_customer', 'status', 'notes'])
+            logger.info(f"C2B payment {trans_id}: waiting for STK request {pending.id} to activate")
+            return {'success': True, 'message': 'Waiting for STK callback', 'payment': payment}
+
         if not customer:
             logger.warning(
                 f"C2B payment {trans_id}: no customer matched for "
                 f"BillRefNumber={bill_ref_number!r} MSISDN={msisdn}"
             )
             return {'success': True, 'message': 'Recorded, no customer match', 'payment': payment}
+        return self.apply_c2b_payment(payment, customer)
 
-        # Static IP plans require a technician to configure the fixed IP
-        # manually (see initiate_payment's same restriction for STK push),
-        # so they're never eligible for auto-activation here. When multiple
-        # remaining active plans share the same price -- a real case in
-        # this deployment's data -- prefer whichever matches the customer's
-        # own configured service_type before falling back to any match.
-        plan_candidates = BillingPlan.objects.filter(price=amount, is_active=True).exclude(service_type='static')
-        plan = plan_candidates.filter(service_type=customer.service_type).first() or plan_candidates.first()
+    @staticmethod
+    def _link_c2b_to_transaction(payment, txn):
+        payment.matched_customer = txn.customer
+        payment.linked_transaction = txn
+        payment.subscription_id = txn.subscription_id
+        payment.status = 'activated' if txn.subscription_id else 'matched_no_plan'
+        payment.notes = 'Paid through the portal (STK push); processed by its STK callback.'
+        payment.save(update_fields=['matched_customer', 'linked_transaction', 'subscription', 'status', 'notes'])
+
+    @staticmethod
+    def _pending_stk_request(msisdn, amount, window_minutes=15):
+        """An STK request still awaiting its callback, for this phone and amount."""
+        from datetime import timedelta
+        from apps.payments.services.phone_hash import hash_phone
+
+        if not msisdn:
+            return None
+        candidates = PaymentRequest.objects.filter(
+            status__in=['initiated', 'pending'], amount=Decimal(str(amount)),
+            created_at__gte=timezone.now() - timedelta(minutes=window_minutes),
+        ).select_related('customer').order_by('-created_at')
+        hashed = is_msisdn_hash(msisdn)
+        for request in candidates:
+            if hashed and hash_phone(request.phone_number) == msisdn.lower():
+                return request
+            if not hashed and request.phone_number and request.phone_number[-9:] == msisdn[-9:]:
+                return request
+        return None
+
+    def apply_c2b_payment(self, payment, customer):
+        """
+        Credit/activate a recorded C2B payment for `customer`: activate the
+        plan whose price matches the amount, else credit the balance. Also
+        called by cleanup_pending_payments for an 'awaiting_stk' payment
+        whose STK request timed out.
+        """
+        trans_id = payment.transaction_id
+        msisdn = payment.msisdn
+        amount = payment.amount
+        if not customer:
+            return {'success': True, 'message': 'Recorded, no customer match', 'payment': payment}
+        payment.matched_customer = customer
+
+        # Hotspot payers are left for an admin to assign (Payments -> Assign).
+        # A direct till payment from a hotspot user is ambiguous twice over:
+        # one phone often owns several device accounts (0720001333_ED57,
+        # _AAAA, ...), and a small amount like KES 5 happens to equal some
+        # hotspot plan's price, so auto-matching activated plans nobody
+        # chose. The phone's account is kept as a hint; nothing is credited.
+        if customer.service_type == 'hotspot':
+            payment.status = 'review'
+            payment.notes = (f"Hotspot payer (phone matches {customer.username}); "
+                             f"not applied automatically -- assign it from the Payments page")
+            payment.save(update_fields=['matched_customer', 'status', 'notes'])
+            logger.info(f"C2B payment {trans_id}: hotspot payer {customer.username}, left for manual assignment")
+            return {'success': True, 'message': 'Recorded, needs manual assignment', 'payment': payment}
+
+        # Only PPPoE plans are matched by amount. Static IP plans need a
+        # technician to configure the fixed IP first, and hotspot plans are
+        # never auto-applied to a till payment (see above) -- a PPPoE
+        # customer paying KES 5 must not land on a 5-shilling hotspot plan.
+        plan = BillingPlan.objects.filter(price=amount, is_active=True, service_type='pppoe').first()
         if not plan:
             # Wallet model: no plan costs exactly this amount, but the
             # money still moved -- credit it to account_balance rather than
@@ -302,7 +404,7 @@ class PaymentProcessor:
                 payment.save(update_fields=['linked_transaction', 'status', 'notes'])
 
                 db_transaction.on_commit(
-                    lambda: send_payment_confirmation_sms.delay(customer.id, 'balance_credit', str(amount), None)
+                    lambda: send_payment_confirmation_sms.delay(customer.id, 'balance_credit', str(amount), None), robust=True
                 )
 
             logger.info(f"C2B payment {trans_id}: KES {amount} credited to {customer.username}'s balance, no plan matched")
@@ -347,13 +449,13 @@ class PaymentProcessor:
                     db_transaction.on_commit(
                         lambda: send_payment_confirmation_sms.delay(
                             customer.id, 'payment_confirmation', str(amount), subscription.id
-                        )
+                        ), robust=True
                     )
                 else:
                     payment.status = 'matched_no_plan'
                     payment.notes = f"Matched {customer.username}; KES {amount} credited to balance but didn't cover {plan.name}"
                     db_transaction.on_commit(
-                        lambda: send_payment_confirmation_sms.delay(customer.id, 'balance_credit', str(amount), None)
+                        lambda: send_payment_confirmation_sms.delay(customer.id, 'balance_credit', str(amount), None), robust=True
                     )
                 payment.save()
         except Exception as e:

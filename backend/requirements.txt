@@ -19,6 +19,11 @@ redis==5.0.1
 django-celery-beat==2.5.0
 django-celery-results==2.5.1
 
+# PDF report exports (apps/analytics/exports.py)
+reportlab==4.2.5
+# Excel (.xlsx) report exports
+openpyxl==3.1.5
+
 # MikroTik API
 routeros-api==0.17.0
 

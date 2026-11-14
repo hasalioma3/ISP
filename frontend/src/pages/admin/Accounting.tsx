@@ -13,6 +13,7 @@ import { format, subDays } from 'date-fns';
 import toast from 'react-hot-toast';
 import AttachmentInput from '../../components/AttachmentInput';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import ExportMenu from '../../components/ExportMenu';
 
 const EXPENSE_CATEGORIES = [
     { value: 'salaries', label: 'Salaries & Wages' },
@@ -115,7 +116,8 @@ function DashboardTab() {
 
     return (
         <div>
-            <div className="flex flex-wrap justify-end mb-6">
+            <div className="flex flex-wrap items-center justify-end gap-2 mb-6">
+                <ExportMenu path="/accounting/dashboard/" params={{ start_date: startDate, end_date: endDate }} filename={`profit_${startDate}_${endDate}`} />
                 <div className="flex items-center gap-2 bg-secondary px-3 py-2 rounded-lg border flex-wrap">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm border-none focus:ring-0 p-0 text-muted-foreground bg-transparent" />

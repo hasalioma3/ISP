@@ -16,6 +16,7 @@ from apps.customers.permissions import RoleAllowed
 from apps.payments.models import C2BPayment
 from apps.payments.services.payer_name import payer_display_name
 from apps.analytics.utils import report_window
+from apps.analytics.exports import Section, export_format, export_response
 
 
 def mask_msisdn(value):
@@ -208,7 +209,7 @@ class IncomeReportView(APIView):
     permission_classes = [RoleAllowed('admin', 'sales')]
 
     def get(self, request):
-        export = request.query_params.get('export') == 'csv'
+        export = export_format(request)
         start_date_str = request.query_params.get('start_date')
         end_date_str = request.query_params.get('end_date')
         
@@ -245,13 +246,20 @@ class IncomeReportView(APIView):
         ).order_by('date')
         
         if export:
-            response = HttpResponse(content_type='text/csv')
-            response['Content-Disposition'] = f'attachment; filename="income_report.csv"'
-            writer = csv.writer(response)
-            writer.writerow(['Date', 'Transactions', 'Revenue'])
-            for entry in daily_revenue:
-                writer.writerow([entry['date'], entry['count'], entry['total']])
-            return response
+            rows = [[e['date'], e['count'], float(e['total'] or 0)] for e in daily_revenue]
+            first, last = timezone.localtime(start_date).date(), timezone.localtime(end_date).date()
+            return export_response(
+                export,
+                filename=f'revenue_{first}_{last}',
+                title='Revenue report',
+                subtitle=f"Completed payments, {first:%d %b %Y} to {last:%d %b %Y}",
+                summary=[
+                    ('Total revenue', f"KES {sum(r[2] for r in rows):,.2f}"),
+                    ('Payments', sum(r[1] for r in rows)),
+                    ('Days with payments', len(rows)),
+                ],
+                sections=Section(['Date', 'Transactions', 'Revenue (KES)'], rows, numeric=(1, 2)),
+            )
             
         return Response(daily_revenue)
 
@@ -295,7 +303,7 @@ class VoucherUsageReportView(APIView):
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         search = request.query_params.get('search', '').strip()
-        export = request.query_params.get('export') == 'csv'
+        export = export_format(request)
 
         try:
             page = max(int(request.query_params.get('page', 1)), 1)
@@ -345,20 +353,25 @@ class VoucherUsageReportView(APIView):
             }
 
         if export:
-            response = HttpResponse(content_type='text/csv')
-            response['Content-Disposition'] = 'attachment; filename="voucher_usage_report.csv"'
-            writer = csv.writer(response)
-            writer.writerow([
-                'Voucher Code', 'MAC Address', 'Customer Username', 'Customer Name',
-                'Plan', 'Amount', 'Redeemed At',
-            ])
+            rows = []
             for voucher in vouchers.iterator():
                 row = serialize_voucher(voucher)
-                writer.writerow([
+                rows.append([
                     row['voucher_code'], row['mac_address'], row['customer_username'],
                     row['customer_name'], row['plan_name'], row['amount'], row['used_at'],
                 ])
-            return response
+            period = ' to '.join(str(d) for d in (start_date, end_date) if d) or 'All time'
+            return export_response(
+                export,
+                filename='voucher_usage_report',
+                title='Voucher usage',
+                subtitle=f"Redeemed vouchers · {period}" + (f" · search '{search}'" if search else ''),
+                summary=[('Vouchers redeemed', len(rows))],
+                sections=Section(
+                    ['Voucher Code', 'MAC Address', 'Customer Username', 'Customer Name', 'Plan', 'Amount', 'Redeemed At'],
+                    rows, numeric=(5,),
+                ),
+            )
 
         total = vouchers.count()
         offset = (page - 1) * page_size
@@ -596,7 +609,7 @@ class DataUsageView(APIView):
         service_type = request.query_params.get('type')
         sort = request.query_params.get('sort', 'highest')
         limit = min(int(request.query_params.get('limit', 50) or 50), 200)
-        export = request.query_params.get('export') == 'csv'
+        export = export_format(request)
 
         try:
             ref_date = dt.date.fromisoformat(date_str) if date_str else timezone.now().date()
@@ -643,13 +656,21 @@ class DataUsageView(APIView):
         results = results[:limit]
 
         if export:
-            response = HttpResponse(content_type='text/csv')
-            response['Content-Disposition'] = f'attachment; filename="data_usage_{period}_{start}.csv"'
-            writer = csv.writer(response)
-            writer.writerow(['Username', 'Name', 'Upload (GB)', 'Download (GB)', 'Total (GB)'])
-            for r in results:
-                writer.writerow([r['username'], r['name'], r['upload_gb'], r['download_gb'], r['total_gb']])
-            return response
+            return export_response(
+                export,
+                filename=f'data_usage_{period}_{start}',
+                title='Data usage by subscriber',
+                subtitle=f"{period.title()} · {start:%d %b %Y} to {end:%d %b %Y}",
+                summary=[
+                    ('Subscribers', len(results)),
+                    ('Total', f"{sum(r['total_gb'] for r in results):,.2f} GB"),
+                ],
+                sections=Section(
+                    ['Username', 'Name', 'Upload (GB)', 'Download (GB)', 'Total (GB)'],
+                    [[r['username'], r['name'], r['upload_gb'], r['download_gb'], r['total_gb']] for r in results],
+                    numeric=(2, 3, 4),
+                ),
+            )
 
         totals_agg = qs.aggregate(up=Sum('upload_bytes'), down=Sum('download_bytes'))
         total_up = round((totals_agg['up'] or 0) / (1024 ** 3), 2)
@@ -705,7 +726,12 @@ class RecentPaymentsView(APIView):
         # pages beyond fetch_limit could be incomplete. Fine at this
         # project's payment volume -- would need a real DB-side UNION if
         # that ever changes.
-        fetch_limit = min(page * page_size, 1000)
+        export = export_format(request)
+        fetch_limit = 5000 if export else min(page * page_size, 1000)
+        # Optional period (Nairobi days, inclusive), for the page's date
+        # picker and its exports.
+        start_day = _parse_day(request.query_params.get('start_date'))
+        end_day = _parse_day(request.query_params.get('end_date'))
 
         # A matched C2B payment also produces a Transaction carrying the same
         # M-Pesa code (payment_processor / assign_c2b_payment), so listing
@@ -715,11 +741,44 @@ class RecentPaymentsView(APIView):
         stk_transactions = Transaction.objects.filter(payment_method='mpesa').exclude(
             transaction_id__in=c2b_codes
         ).exclude(mpesa_receipt_number__in=c2b_codes)
-        transactions = stk_transactions.select_related('customer').order_by('-created_at')[:fetch_limit]
-
-        c2b_payments = C2BPayment.objects.select_related(
-            'matched_customer'
+        c2b_all = C2BPayment.objects.all()
+        if start_day:
+            stk_transactions = stk_transactions.filter(created_at__date__gte=start_day)
+            c2b_all = c2b_all.filter(created_at__date__gte=start_day)
+        if end_day:
+            stk_transactions = stk_transactions.filter(created_at__date__lte=end_day)
+            c2b_all = c2b_all.filter(created_at__date__lte=end_day)
+        transactions = stk_transactions.select_related(
+            'customer', 'subscription__plan'
         ).order_by('-created_at')[:fetch_limit]
+
+        c2b_payments = c2b_all.select_related(
+            'matched_customer', 'subscription__plan', 'linked_transaction__subscription__plan'
+        ).order_by('-created_at')[:fetch_limit]
+
+        # The Transaction carrying the same M-Pesa code is the source of truth
+        # for what a Buy Goods/Paybill payment paid for -- it's what the
+        # subscriber's own history shows. The C2BPayment row's status/links
+        # can be stale: e.g. a post-commit SMS hiccup used to stamp a fully
+        # activated payment 'error' after the fact.
+        c2b_payments = list(c2b_payments)
+        twins = {
+            t.transaction_id: t
+            for t in Transaction.objects.filter(
+                transaction_id__in=[c.transaction_id for c in c2b_payments],
+            ).select_related('subscription__plan')
+        }
+        # Same rules as the assign endpoint (apps.payments.services.c2b_state),
+        # so Assign is only offered where it will be accepted.
+        from apps.payments.services import c2b_state
+        resolved = {c.id: c2b_state.resolve(c, twins.get(c.transaction_id)) for c in c2b_payments}
+
+        def c2b_used_for(c):
+            state, _, sub = resolved[c.id]
+            return c2b_state.used_for(c, state, sub)
+
+        def c2b_state_of(c):
+            return resolved[c.id][0]
 
         rows = []
         for t in transactions:
@@ -729,6 +788,7 @@ class RecentPaymentsView(APIView):
                 'customer': t.customer.username,
                 'matched': True,
                 'payer_name': t.customer.get_full_name(),
+                'used_for': t.subscription.plan.name if t.subscription_id and t.subscription.plan_id else 'Account balance',
                 'amount': float(t.amount),
                 'method': 'stk',
                 'status': 'utilized' if t.status == 'completed' else 'open',
@@ -746,20 +806,52 @@ class RecentPaymentsView(APIView):
                 # Name Safaricom sent with a Buy Goods/Paybill payment, so an
                 # unmatched payer is recognisable without their phone number.
                 'payer_name': payer_display_name(c),
+                'used_for': c2b_used_for(c),
+                'needs_assignment': c.status == 'review',
                 'amount': float(c.amount),
                 'method': 'c2b',
-                'status': 'utilized' if c.status == 'activated' else 'open',
+                'status': c2b_state_of(c),
                 'paid_at': c.transaction_time or c.created_at,
             })
 
         rows.sort(key=lambda r: r['paid_at'], reverse=True)
+        if export:
+            period = (
+                f"{start_day or '…'} to {end_day or timezone.localdate()}" if (start_day or end_day) else 'All time'
+            )
+            return export_response(
+                export,
+                filename=f"payments_{start_day or 'all'}_{end_day or timezone.localdate()}",
+                title='M-Pesa payments',
+                subtitle=f'STK push and Buy Goods / Paybill payments · {period}',
+                summary=[
+                    ('Payments', len(rows)),
+                    ('Total', f"KES {sum(r['amount'] for r in rows):,.2f}"),
+                    ('Unassigned', sum(1 for r in rows if not r['matched'])),
+                ],
+                sections=Section(
+                    ['Paid at', 'M-Pesa code', 'Payer', 'Account', 'Method', 'Used for', 'Amount (KES)', 'Status'],
+                    [[r['paid_at'], r['transaction_id'], r.get('payer_name') or '', r['customer'],
+                      'STK push' if r['method'] == 'stk' else 'Buy Goods / Paybill', r['used_for'] or 'Not assigned',
+                      r['amount'],
+                      {'utilized': 'Used', 'assigned': 'Assigned (balance)', 'review': 'Needs assignment'}.get(
+                          r['status'], 'Unmatched' if not r['matched'] else 'Open')]
+                     for r in rows],
+                    numeric=(6,),
+                ),
+            )
         start = (page - 1) * page_size
         page_rows = rows[start:start + page_size]
 
-        total = stk_transactions.count() + C2BPayment.objects.count()
+        total = stk_transactions.count() + c2b_all.count()
+        amount_total = float(
+            (stk_transactions.aggregate(t=Sum('amount'))['t'] or 0) + (c2b_all.aggregate(t=Sum('amount'))['t'] or 0)
+        )
 
         return Response({
             'results': page_rows,
+            'amount_total': amount_total,
+            'unassigned': c2b_all.filter(Q(matched_customer__isnull=True) | Q(status='review')).count(),
             'count': total,
             'page': page,
             'page_size': page_size,
@@ -936,6 +1028,24 @@ class DailyUsageView(APIView):
                 'users': r['users'] if r else 0,
             })
             day += timedelta(days=1)
+        fmt = export_format(request)
+        if fmt:
+            return export_response(
+                fmt,
+                filename=f'data_usage_daily_{start}_{end}',
+                title='Data usage overview',
+                subtitle=f"Whole network per day, {start:%d %b %Y} to {end:%d %b %Y}",
+                summary=[
+                    ('Total', f"{sum(d['total_gb'] for d in out):,.2f} GB"),
+                    ('Upload', f"{sum(d['upload_gb'] for d in out):,.2f} GB"),
+                    ('Download', f"{sum(d['download_gb'] for d in out):,.2f} GB"),
+                ],
+                sections=Section(
+                    ['Date', 'Upload (GB)', 'Download (GB)', 'Total (GB)', 'Active subscribers'],
+                    [[d['date'], d['upload_gb'], d['download_gb'], d['total_gb'], d['users']] for d in out],
+                    numeric=(1, 2, 3, 4),
+                ),
+            )
         return Response(out)
 
 
@@ -958,8 +1068,48 @@ class DayBreakdownView(APIView):
         if kind == 'revenue':
             if not can_see_income(request.user):
                 return Response({'error': 'Not allowed.'}, status=status.HTTP_403_FORBIDDEN)
-            return Response(self._revenue(day))
-        return Response(self._usage(day))
+            data = self._revenue(day)
+        else:
+            data = self._usage(day)
+        fmt = export_format(request)
+        if fmt:
+            return self._export(fmt, data, day)
+        return Response(data)
+
+    @staticmethod
+    def _export(fmt, data, day):
+        if data['kind'] == 'revenue':
+            return export_response(
+                fmt,
+                filename=f'revenue_{day}',
+                title=f"Revenue on {day:%d %b %Y}",
+                summary=[('Total', f"KES {data['total']:,.2f}"), ('Payments', data['count'])],
+                sections=[
+                    Section(['Plan', 'Payments', 'Amount (KES)'],
+                            [[r['name'], r['count'], r['amount']] for r in data['by_plan']],
+                            heading='By plan', numeric=(1, 2)),
+                    Section(['Method', 'Payments', 'Amount (KES)'],
+                            [[r['name'], r['count'], r['amount']] for r in data['by_method']],
+                            heading='By payment method', numeric=(1, 2)),
+                    Section(['Time', 'Subscriber', 'Plan', 'Method', 'Reference', 'Amount (KES)'],
+                            [[t['time'], t['customer'], t['plan'], t['method'], t['reference'], t['amount']] for t in data['items']],
+                            heading='Payments', numeric=(5,)),
+                ],
+            )
+        return export_response(
+            fmt,
+            filename=f'data_usage_{day}',
+            title=f"Data usage on {day:%d %b %Y}",
+            summary=[('Total', f"{data['total_gb']:,.2f} GB"), ('Subscribers', data['users'])],
+            sections=[
+                Section(['Service', 'Total (GB)', 'Subscribers'],
+                        [[r['name'], r['total_gb'], r['users']] for r in data['by_type']],
+                        heading='By service type', numeric=(1, 2)),
+                Section(['Subscriber', 'Username', 'Upload (GB)', 'Download (GB)', 'Total (GB)'],
+                        [[u['customer'], u['username'], u['upload_gb'], u['download_gb'], u['total_gb']] for u in data['items']],
+                        heading='Top subscribers', numeric=(2, 3, 4)),
+            ],
+        )
 
     @staticmethod
     def _revenue(day):

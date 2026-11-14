@@ -8,4 +8,11 @@
 
 
 1. Add gmail smtp to send email notifications, configuration be done on the frontend.
-2. resolve SMS and whatsapp intergration issues.
+2. Allow sending notifications to a certain customer/s, from the frontend, give admin option to choose between the available channels to use.
+3. A Scheduled email to the Super admins every 11 pm detailing sales and revenue for the day, and a breakdown of the sales by product.
+4. send super admin an email when a voucher is generated, with the details of the voucher or a new PPPoE customer registers, or a Manual top-up is made.
+5. add sorting of subscribers based on the subscription expiry date/creation date.
+
+
+
+1. change login so that an email address login is enabled, to setup a user, an email with the login credentials are sent.

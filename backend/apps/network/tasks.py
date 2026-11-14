@@ -584,8 +584,13 @@ def check_expired_subscriptions():
             sub.status = 'expired'
             sub.save()
 
-            from apps.notifications.tasks import send_suspension_notice
-            send_suspension_notice.delay(sub.customer_id, sub.id)
+            # No "you've been suspended" message when they've already renewed.
+            renewed = Subscription.objects.filter(
+                customer_id=sub.customer_id, status='active', expiry_date__gt=timezone.now()
+            ).exists()
+            if not renewed:
+                from apps.notifications.tasks import send_suspension_notice
+                send_suspension_notice.delay(sub.customer_id, sub.id)
 
             # 2. Trigger Network Suspension
             # Handled by the Subscription signal we just added? 
@@ -598,6 +603,11 @@ def check_expired_subscriptions():
             
             count += 1
             
+        from apps.billing.services import reconcile_customer_statuses
+        fixed = reconcile_customer_statuses()
+        if fixed:
+            logger.warning(f"Marked {fixed} customer(s) with a live subscription back to active")
+
         logger.info(f"Expiration check completed. Suspended {count} subscriptions.")
         return count
         

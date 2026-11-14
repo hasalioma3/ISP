@@ -224,3 +224,90 @@ class ReportsDrilldownAndPaymentsTests(TestCase):
         self.assertEqual(sorted(codes), ['SKC1', 'SKC9'])
         self.assertEqual(data['count'], 2)
         self.assertEqual([r['method'] for r in data['results'] if r['transaction_id'] == 'SKC9'], ['c2b'])
+
+
+class ReportExportTests(TestCase):
+    """Every report downloads as both CSV and PDF."""
+
+    def setUp(self):
+        for target in ('apps.billing.signals.sync_plan_to_routers.delay',
+                       'apps.billing.signals.network_automation.activate_customer'):
+            patcher = patch(target)
+            self.addCleanup(patcher.stop)
+            patcher.start()
+        from apps.billing.models import Transaction
+        self.client = APIClient()
+        self.client.force_authenticate(Customer.objects.create(username='boss', is_staff=True, is_superuser=True))
+        customer = Customer.objects.create(username='grace', first_name='Grace')
+        Transaction.objects.create(customer=customer, transaction_id='SKC1', amount=2500,
+                                   payment_method='mpesa', status='completed', mpesa_receipt_number='SKC1')
+        self.today = timezone.localdate().isoformat()
+
+    def check(self, url, params=None):
+        for fmt, ctype, magic in (
+            ('csv', 'text/csv', None),
+            ('xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', b'PK'),
+            ('pdf', 'application/pdf', b'%PDF'),
+        ):
+            res = self.client.get(url, {**(params or {}), 'export': fmt})
+            self.assertEqual(res.status_code, 200, f'{url} {fmt}')
+            self.assertTrue(res['Content-Type'].startswith(ctype), f'{url} {fmt}: {res["Content-Type"]}')
+            self.assertIn(f'.{fmt}"', res['Content-Disposition'])
+            if magic:
+                self.assertTrue(res.content.startswith(magic))
+
+    def test_all_reports_export_csv_and_pdf(self):
+        day = {'start_date': self.today, 'end_date': self.today}
+        self.check('/api/analytics/income/', day)
+        self.check('/api/analytics/voucher-usage/', day)
+        self.check('/api/analytics/data-usage/', {'period': 'daily', 'date': self.today})
+        self.check('/api/analytics/usage-daily/', day)
+        self.check('/api/analytics/day-breakdown/', {'kind': 'revenue', 'date': self.today})
+        self.check('/api/analytics/day-breakdown/', {'kind': 'usage', 'date': self.today})
+        self.check('/api/analytics/recent-payments/')
+        self.check('/api/accounting/dashboard/', day)
+
+    def test_income_csv_keeps_plain_header_row(self):
+        res = self.client.get('/api/analytics/income/', {'export': 'csv'})
+        first_line = res.content.decode().splitlines()[0]
+        self.assertTrue(first_line.startswith('Revenue report') or first_line.startswith('Date'))
+
+
+class PaymentsPageTests(TestCase):
+    def setUp(self):
+        for target in ('apps.billing.signals.sync_plan_to_routers.delay',
+                       'apps.billing.signals.network_automation.activate_customer'):
+            patcher = patch(target)
+            self.addCleanup(patcher.stop)
+            patcher.start()
+        from apps.billing.models import BillingPlan, Subscription, Transaction
+        self.client = APIClient()
+        self.client.force_authenticate(Customer.objects.create(username='boss', is_staff=True, is_superuser=True))
+        grace = Customer.objects.create(username='grace')
+        plan = BillingPlan.objects.create(name='Home 10', service_type='pppoe', download_speed=10,
+                                          upload_speed=10, price='2500.00', mikrotik_profile='h10')
+        sub = Subscription.objects.create(customer=grace, plan=plan, expiry_date=timezone.now() + timedelta(days=30))
+        Transaction.objects.create(customer=grace, subscription=sub, transaction_id='STK1', amount=2500,
+                                   payment_method='mpesa', status='completed')
+        old = Transaction.objects.create(customer=grace, transaction_id='STK0', amount=100,
+                                         payment_method='mpesa', status='completed')
+        Transaction.objects.filter(pk=old.pk).update(created_at=timezone.now() - timedelta(days=40))
+        from apps.payments.models import C2BPayment
+        C2BPayment.objects.create(transaction_id='TILL1', amount=50, msisdn='h' * 64, raw_data={}, first_name='SAMSON')
+
+    def test_used_for_and_assign_state(self):
+        rows = {r['transaction_id']: r for r in self.client.get('/api/analytics/recent-payments/').data['results']}
+        self.assertEqual(rows['STK1']['used_for'], 'Home 10')
+        self.assertEqual(rows['STK0']['used_for'], 'Account balance')
+        self.assertIsNone(rows['TILL1']['used_for'])  # unmatched -> the page offers Assign
+        self.assertFalse(rows['TILL1']['matched'])
+
+    def test_period_filter_and_totals(self):
+        today = timezone.localdate()
+        data = self.client.get('/api/analytics/recent-payments/', {
+            'start_date': (today - timedelta(days=7)).isoformat(), 'end_date': today.isoformat(),
+        }).data
+        self.assertEqual(sorted(r['transaction_id'] for r in data['results']), ['STK1', 'TILL1'])
+        self.assertEqual(data['count'], 2)
+        self.assertEqual(data['amount_total'], 2550.0)
+        self.assertEqual(data['unassigned'], 1)

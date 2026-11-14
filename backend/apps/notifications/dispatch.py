@@ -15,6 +15,7 @@ from apps.notifications.services.telegram_service import TelegramService
 from apps.notifications.models import NotificationSettings
 from apps.notifications.services.africastalking_whatsapp_service import AfricasTalkingWhatsAppService
 from apps.notifications.services.whatsapp_service import WhatsAppService
+from apps.notifications.services.email_service import EmailService
 
 logger = logging.getLogger('notifications')
 
@@ -28,6 +29,7 @@ SENDERS = {
     'sms': lambda recipient, message: AfricasTalkingService().send_sms(recipient, message),
     'whatsapp': lambda recipient, message: _send_whatsapp(recipient, message),
     'telegram': lambda recipient, message: TelegramService().send_message(recipient, message),
+    'email': lambda recipient, message: EmailService().send_email(recipient, message),
 }
 
 

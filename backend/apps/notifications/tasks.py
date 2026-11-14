@@ -57,17 +57,21 @@ def send_payment_confirmation_sms(self, customer_id, event_type, amount, subscri
     # SMS always reads "100.00", never "100.0" or "100.000000001".
     amount = Decimal(str(amount)).quantize(Decimal('0.01'))
 
+    # Only the service types ticked in Settings -> Notifications get
+    # confirmations (default: PPPoE only, not hotspot).
+    if not NotificationSettings.load().confirmations_enabled_for(customer.service_type):
+        logger.info(f"Confirmation for {customer.username} skipped: {customer.service_type} confirmations are off")
+        return
+
+    from apps.notifications.templates import render
     if event_type == 'payment_confirmation' and subscription:
-        message = (
-            f"Payment of KES {amount} received. Your {subscription.plan.name} plan is now "
-            f"active until {subscription.expiry_date.strftime('%d %b %Y')}."
-        )
+        message = render('payment_confirmation', {
+            'amount': amount, 'plan': subscription.plan.name,
+            'expiry': timezone.localtime(subscription.expiry_date).strftime('%d %b %Y %H:%M'),
+        }, customer)
     else:
         event_type = 'balance_credit'
-        message = (
-            f"Payment of KES {amount} received and credited to your account balance "
-            f"(KES {customer.account_balance}). Contact us to activate a plan."
-        )
+        message = render('balance_credit', {'amount': amount, 'balance': customer.account_balance}, customer)
 
     result = AfricasTalkingService().send_sms(customer.phone_number, message)
 
@@ -275,6 +279,7 @@ def send_promo_broadcast(message, channels, service_type_filter='pppoe'):
     limiter, just a sane pause.
     """
     from apps.customers.models import Customer
+    from apps.notifications.templates import customer_context, fill
 
     qs = Customer.objects.filter(status='active')
     if service_type_filter == 'pppoe':
@@ -287,11 +292,19 @@ def send_promo_broadcast(message, channels, service_type_filter='pppoe'):
     sent_count = 0
     for customer in qs.iterator():
         for channel in channels:
-            recipient = customer.telegram_chat_id if channel == 'telegram' else customer.phone_number
+            recipient = {
+                'telegram': customer.telegram_chat_id,
+                'email': customer.email,
+            }.get(channel, customer.phone_number)
             if not recipient:
                 continue
+            # Promotional templates can use {first_name}, {company}, ...
+            try:
+                text = fill(message, customer_context(customer))
+            except (ValueError, IndexError):
+                text = message  # stray braces: send it exactly as typed
             result = send_and_log(
-                channel=channel, recipient=recipient, message=message,
+                channel=channel, recipient=recipient, message=text,
                 event_type='promo_broadcast', customer=customer,
             )
             if result['success']:
@@ -318,9 +331,10 @@ def send_voucher_notification(voucher_id, recipient, channel, customer_id=None):
         return
 
     plan_name = voucher.plan.name if voucher.plan else 'your plan'
-    message = f"Your hotspot voucher code: {voucher.code}, valid for {plan_name}. Use it at the login page."
 
     customer = Customer.objects.filter(id=customer_id).first() if customer_id else None
+    from apps.notifications.templates import render
+    message = render('voucher_send', {'code': voucher.code, 'plan': plan_name}, customer)
     send_and_log(
         channel=channel, recipient=recipient, message=message,
         event_type='voucher_send', customer=customer,
@@ -340,11 +354,13 @@ def send_staff_alert(message, customer_id=None, subscription_id=None):
     from apps.billing.models import Subscription
 
     settings_obj = NotificationSettings.load()
-    if not settings_obj.staff_alert_phone:
+    channel = settings_obj.staff_alert_channel or 'sms'
+    recipient = settings_obj.staff_alert_email if channel == 'email' else settings_obj.staff_alert_phone
+    if not recipient:
         return
     send_and_log(
-        channel=settings_obj.staff_alert_channel or 'sms',
-        recipient=settings_obj.staff_alert_phone,
+        channel=channel,
+        recipient=recipient,
         message=message,
         event_type='staff_alert',
         customer=Customer.objects.filter(id=customer_id).first() if customer_id else None,
@@ -353,23 +369,56 @@ def send_staff_alert(message, customer_id=None, subscription_id=None):
 
 
 @shared_task
-def send_customer_account_notice(customer_id, message, event_type, subscription_id=None):
+def send_customer_account_notice(customer_id, template_key, context, event_type, subscription_id=None):
     """
-    SMS the customer about a change staff made to their account (plan
-    recharged or extended, cash credited). Skipped, but still logged as a
-    failure by send_and_log, when they have no phone number.
+    Tell the customer about a change staff made to their account (plan
+    recharged/extended, cash credited), worded by the `template_key`
+    template. SMS, plus email when email is set up and they have an address.
+    Follows the same service-type rule as payment confirmations.
     """
     from apps.customers.models import Customer
     from apps.billing.models import Subscription
+    from apps.notifications.templates import render
 
     customer = Customer.objects.filter(id=customer_id).first()
     if not customer:
         return
+    settings_obj = NotificationSettings.load()
+    if not settings_obj.confirmations_enabled_for(customer.service_type):
+        return
+    message = render(template_key, context, customer)
+    subscription = Subscription.objects.filter(id=subscription_id).first() if subscription_id else None
     send_and_log(
         channel='sms',
         recipient=customer.phone_number,
         message=message,
         event_type=event_type,
         customer=customer,
-        subscription=Subscription.objects.filter(id=subscription_id).first() if subscription_id else None,
+        subscription=subscription,
+    )
+    if customer.email and settings_obj.email_enabled:
+        send_and_log(
+            channel='email', recipient=customer.email, message=message,
+            event_type=event_type, customer=customer, subscription=subscription,
+        )
+
+
+@shared_task
+def send_payment_reminder(customer_id, channel='sms'):
+    """One subscriber's reminder from the Subscribers page bulk action."""
+    from apps.customers.models import Customer
+    from apps.customers.reminders import build_payment_reminder
+
+    customer = Customer.objects.filter(id=customer_id).first()
+    if not customer:
+        return
+    message = build_payment_reminder(customer)
+    if not message:
+        return
+    send_and_log(
+        channel=channel,
+        recipient=customer.email if channel == 'email' else customer.phone_number,
+        message=message,
+        event_type='payment_reminder',
+        customer=customer,
     )

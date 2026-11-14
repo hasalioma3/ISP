@@ -14,6 +14,22 @@ from apps.payments.services.phone_hash import normalize_phone
 
 logger = logging.getLogger('notifications')
 
+# Africa's Talking per-recipient statuses that need a human to act, explained
+# in the notification log / test-send result instead of a bare code.
+STATUS_HELP = {
+    'UserInBlacklist': (
+        "the number has blocked promotional SMS on Safaricom (Do Not Disturb). The customer can dial "
+        "*456*9*5# to allow them; to reach everyone, get a transactional Sender ID approved and set it here"
+    ),
+    'DoNotDisturbRejection': "rejected by the network's Do Not Disturb rules -- use an approved transactional Sender ID",
+    'InsufficientBalance': "your Africa's Talking account is out of credit -- top it up",
+    'InvalidSenderId': "the Sender ID isn't approved for this account -- clear the field or use an approved one",
+    'InvalidPhoneNumber': 'the phone number is not a valid mobile number',
+    'UnsupportedNumberType': 'the number type (e.g. landline) cannot receive SMS',
+    'AbsentSubscriber': 'the phone was off or out of coverage',
+    'RiskHold': "Africa's Talking held the message for review (risk check)",
+}
+
 
 class AfricasTalkingService:
     """
@@ -80,9 +96,19 @@ class AfricasTalkingService:
         }
 
         try:
-            response = requests.post(
-                f'{self.base_url}/version1/messaging', data=payload, headers=headers, timeout=30
-            )
+            try:
+                response = requests.post(
+                    f'{self.base_url}/version1/messaging', data=payload, headers=headers, timeout=30
+                )
+            except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as first_error:
+                # One retry for a dropped/garbled connection (seen as "SSL record
+                # layer failure" when the Pi's traffic goes through a tunnel such
+                # as Cloudflare WARP). The message wasn't accepted, so resending
+                # can't duplicate it.
+                logger.warning(f"SMS to {to}: connection error ({first_error}); retrying once")
+                response = requests.post(
+                    f'{self.base_url}/version1/messaging', data=payload, headers=headers, timeout=30
+                )
             response.raise_for_status()
             data = response.json()
 
@@ -95,6 +121,8 @@ class AfricasTalkingService:
                 recipients[0].get('status') if recipients
                 else data.get('SMSMessageData', {}).get('Message', 'Unknown error')
             )
+            if error_status in STATUS_HELP:
+                error_status = f'{error_status}: {STATUS_HELP[error_status]}'
             logger.warning(f"SMS to {to} not accepted: {error_status}")
             return {'success': False, 'error': error_status, 'data': data}
 
