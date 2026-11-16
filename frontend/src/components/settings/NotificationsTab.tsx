@@ -11,8 +11,11 @@ const SECTION_CARD = 'bg-card border rounded-lg p-4 sm:p-5';
 export default function NotificationsTab() {
     return (
         <div className="space-y-6 max-w-2xl">
-            <StaffAlertSection />
+            <AdminContactsSection />
+            <SalesContactsSection />
             <ConfirmationsSection />
+            <RenewalRemindersSection />
+            <SuperadminEmailsSection />
             <MessageTemplatesSection />
             <SmsSection />
             <WhatsAppSection />
@@ -31,6 +34,19 @@ function ConfirmationsSection() {
         queryFn: async () => (await notificationAPI.getSettings()).data,
     });
     const selected = new Set<string>((settings?.confirmation_service_types ?? 'pppoe').split(',').filter(Boolean));
+
+    const channels = new Set<string>((settings?.confirmation_channels ?? 'whatsapp').split(',').filter(Boolean));
+    const saveSettings = useMutation({
+        mutationFn: (data: Record<string, unknown>) => notificationAPI.updateSettings(data),
+        onSuccess: () => { toast.success('Saved'); queryClient.invalidateQueries({ queryKey: ['notification-settings'] }); },
+        onError: (err: any) => toast.error(getErrorMessage(err, 'Could not save')),
+    });
+    const toggleChannel = (c: string) => {
+        const next = new Set(channels);
+        if (next.has(c)) next.delete(c); else next.add(c);
+        if (!next.size) { toast.error('Keep at least one channel'); return; }
+        saveSettings.mutate({ confirmation_channels: [...next].join(',') });
+    };
 
     const save = useMutation({
         mutationFn: (types: string[]) => notificationAPI.updateSettings({ confirmation_service_types: types.join(',') }),
@@ -51,6 +67,7 @@ function ConfirmationsSection() {
                 Who gets a message when a payment activates their plan (and when staff recharge, extend or add cash).
                 Hotspot buyers already see the result on the login page.
             </p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Who gets them</p>
             <div className="flex flex-wrap gap-4">
                 {[['pppoe', 'PPPoE'], ['static', 'Static IP'], ['hotspot', 'Hotspot']].map(([value, label]) => (
                     <label key={value} className="flex items-center gap-2 text-sm">
@@ -59,6 +76,266 @@ function ConfirmationsSection() {
                     </label>
                 ))}
             </div>
+
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mt-4 mb-1.5">Send by</p>
+            <div className="flex flex-wrap gap-2">
+                {[['whatsapp', 'WhatsApp'], ['sms', 'SMS'], ['email', 'Email']].map(([value, label]) => (
+                    <button
+                        key={value}
+                        type="button"
+                        aria-pressed={channels.has(value)}
+                        disabled={saveSettings.isPending}
+                        onClick={() => toggleChannel(value)}
+                        className={`h-8 rounded-full px-4 text-[13px] font-semibold ${channels.has(value) ? 'bg-primary text-primary-foreground' : 'bg-chip text-muted-foreground'}`}
+                    >
+                        {label}
+                    </button>
+                ))}
+            </div>
+            {!channels.has('sms') && (
+                <label className="mt-3 flex items-start gap-2 text-sm">
+                    <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={settings?.confirmation_sms_fallback ?? true}
+                        disabled={saveSettings.isPending}
+                        onChange={(e) => saveSettings.mutate({ confirmation_sms_fallback: e.target.checked })}
+                    />
+                    <span>If it can't be delivered that way (e.g. WhatsApp isn't connected), send it by SMS instead.</span>
+                </label>
+            )}
+        </div>
+    );
+}
+
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const hourLabel = (h: number) => `${String(h).padStart(2, '0')}:00`;
+
+function useSettingsSave(successMsg = 'Saved') {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (data: Record<string, unknown>) => notificationAPI.updateSettings(data),
+        onSuccess: () => { toast.success(successMsg); queryClient.invalidateQueries({ queryKey: ['notification-settings'] }); },
+        onError: (err: any) => toast.error(getErrorMessage(err, 'Could not save')),
+    });
+}
+
+/**
+ * Sales team contacts: they get only the daily "expired today, not renewed"
+ * follow-up list (admin contacts get it too), not every admin notice.
+ */
+function SalesContactsSection() {
+    const { data: settings } = useQuery({
+        queryKey: ['notification-settings'],
+        queryFn: async () => (await notificationAPI.getSettings()).data,
+    });
+    const [phones, setPhones] = useState('');
+    const [emails, setEmails] = useState('');
+    useEffect(() => {
+        if (settings) { setPhones(settings.sales_phones || ''); setEmails(settings.sales_emails || ''); }
+    }, [settings]);
+    const save = useSettingsSave('Sales contacts saved');
+    const enabled = settings?.expired_followup_enabled ?? true;
+
+    return (
+        <div className={SECTION_CARD}>
+            <h3 className="text-lg font-bold mb-1">Sales contacts &amp; expired follow-up</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+                Every evening, admin and sales contacts get the list of PPPoE customers whose plan expired today and who
+                haven&apos;t renewed (hotspot users are left out) (name, phone, plan), so someone can follow up. Emails include a CSV. Phones use the
+                admin contacts&apos; channels. One per line.
+            </p>
+            <div className="flex flex-wrap items-center gap-4 mb-4 text-sm">
+                <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={enabled} disabled={save.isPending}
+                        onChange={(e) => save.mutate({ expired_followup_enabled: e.target.checked })} />
+                    Send the daily expired list
+                </label>
+                <label className="flex items-center gap-2">
+                    <span className="text-muted-foreground">at</span>
+                    <select className="border rounded-lg px-2 py-1 text-sm" disabled={!enabled || save.isPending}
+                        value={settings?.expired_followup_hour ?? 20}
+                        onChange={(e) => save.mutate({ expired_followup_hour: Number(e.target.value) })}>
+                        {HOURS.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
+                    </select>
+                </label>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); save.mutate({ sales_phones: phones, sales_emails: emails }); }} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label className="block text-sm font-medium text-foreground/80 mb-1">Sales phone numbers</label>
+                        <textarea rows={3} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder={'0722 123 456'}
+                            value={phones} onChange={(e) => setPhones(e.target.value)} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-foreground/80 mb-1">Sales email addresses</label>
+                        <textarea rows={3} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder={'sales@example.com'}
+                            value={emails} onChange={(e) => setEmails(e.target.value)} />
+                        {!settings?.email_enabled && <p className="mt-1 text-xs text-muted-foreground">Turn on Email below for these to be sent.</p>}
+                    </div>
+                </div>
+                <button type="submit" disabled={save.isPending} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50">
+                    {save.isPending ? 'Saving...' : 'Save sales contacts'}
+                </button>
+            </form>
+        </div>
+    );
+}
+
+/** Scheduled renewal reminders: when, how often, to whom and on which channels. */
+function RenewalRemindersSection() {
+    const { data: settings } = useQuery({
+        queryKey: ['notification-settings'],
+        queryFn: async () => (await notificationAPI.getSettings()).data,
+    });
+    const save = useSettingsSave();
+    const [daysBefore, setDaysBefore] = useState('3');
+    const [every, setEvery] = useState('3');
+    useEffect(() => {
+        if (settings) {
+            setDaysBefore(String(settings.reminder_days_before ?? 3));
+            setEvery(String(settings.reminder_every_days ?? 3));
+        }
+    }, [settings]);
+
+    const enabled = settings?.reminder_enabled ?? true;
+    const types = new Set<string>((settings?.reminder_service_types ?? 'pppoe,static').split(',').filter(Boolean));
+    const channels = new Set<string>((settings?.reminder_channels ?? 'whatsapp').split(',').filter(Boolean));
+    const schedule: number[] = settings?.reminder_schedule ?? [3, 0];
+
+    const toggleSet = (set: Set<string>, value: string, field: string, needOne: boolean) => {
+        const next = new Set(set);
+        if (next.has(value)) next.delete(value); else next.add(value);
+        if (needOne && !next.size) { toast.error('Keep at least one channel'); return; }
+        save.mutate({ [field]: [...next].join(',') });
+    };
+    const saveNumbers = () => save.mutate({ reminder_days_before: Number(daysBefore) || 0, reminder_every_days: Number(every) || 1 });
+    const scheduleText = schedule.length
+        ? schedule.map((d) => (d === 0 ? 'on the expiry day' : `${d} day${d === 1 ? '' : 's'} before`)).join(', ')
+        : 'no reminders';
+
+    return (
+        <div className={SECTION_CARD}>
+            <h3 className="text-lg font-bold mb-1">Renewal reminders</h3>
+            <p className="text-sm text-muted-foreground mb-3">
+                Automatic reminders before a plan expires, with the plan, amount and how to pay. Customers who have
+                already renewed aren&apos;t reminded. Wording: the &quot;Renewal reminder&quot; message template.
+            </p>
+            <label className="flex items-center gap-2 text-sm mb-4">
+                <input type="checkbox" checked={enabled} disabled={save.isPending}
+                    onChange={(e) => save.mutate({ reminder_enabled: e.target.checked })} />
+                Send renewal reminders
+            </label>
+            <fieldset disabled={!enabled || save.isPending} className="space-y-4 disabled:opacity-60">
+                <form onSubmit={(e) => { e.preventDefault(); saveNumbers(); }} className="flex flex-wrap items-end gap-3 text-sm">
+                    <label>
+                        <span className="block text-foreground/80 mb-1">First reminder (days before)</span>
+                        <input type="number" min={0} max={60} className="w-28 border rounded-lg px-3 py-2"
+                            value={daysBefore} onChange={(e) => setDaysBefore(e.target.value)} onBlur={saveNumbers} />
+                    </label>
+                    <label>
+                        <span className="block text-foreground/80 mb-1">Then every (days)</span>
+                        <input type="number" min={1} max={60} className="w-28 border rounded-lg px-3 py-2"
+                            value={every} onChange={(e) => setEvery(e.target.value)} onBlur={saveNumbers} />
+                    </label>
+                    <label>
+                        <span className="block text-foreground/80 mb-1">Send at</span>
+                        <select className="border rounded-lg px-3 py-2" value={settings?.reminder_hour ?? 8}
+                            onChange={(e) => save.mutate({ reminder_hour: Number(e.target.value) })}>
+                            {HOURS.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
+                        </select>
+                    </label>
+                    <label className="flex items-center gap-2 pb-2">
+                        <input type="checkbox" checked={settings?.reminder_on_expiry_day ?? true}
+                            onChange={(e) => save.mutate({ reminder_on_expiry_day: e.target.checked })} />
+                        Also on the expiry day
+                    </label>
+                </form>
+                <p className="text-sm rounded-lg bg-surface2 px-3 py-2">Reminders go out {scheduleText}.</p>
+
+                <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Who gets them</p>
+                    <div className="flex flex-wrap gap-4">
+                        {[['pppoe', 'PPPoE'], ['static', 'Static IP'], ['hotspot', 'Hotspot']].map(([value, label]) => (
+                            <label key={value} className="flex items-center gap-2 text-sm">
+                                <input type="checkbox" checked={types.has(value)} onChange={() => toggleSet(types, value, 'reminder_service_types', false)} />
+                                {label}
+                            </label>
+                        ))}
+                    </div>
+                </div>
+
+                <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Send by</p>
+                    <div className="flex flex-wrap gap-2">
+                        {[['whatsapp', 'WhatsApp'], ['sms', 'SMS'], ['email', 'Email']].map(([value, label]) => (
+                            <button key={value} type="button" aria-pressed={channels.has(value)}
+                                onClick={() => toggleSet(channels, value, 'reminder_channels', true)}
+                                className={`h-8 rounded-full px-4 text-[13px] font-semibold ${channels.has(value) ? 'bg-primary text-primary-foreground' : 'bg-chip text-muted-foreground'}`}>
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                    {!channels.has('sms') && (
+                        <label className="mt-3 flex items-start gap-2 text-sm">
+                            <input type="checkbox" className="mt-0.5" checked={settings?.reminder_sms_fallback ?? true}
+                                onChange={(e) => save.mutate({ reminder_sms_fallback: e.target.checked })} />
+                            <span>If it can&apos;t be delivered that way, send it by SMS instead.</span>
+                        </label>
+                    )}
+                </div>
+            </fieldset>
+        </div>
+    );
+}
+
+/**
+ * Emails to every superadmin with an email address: the 11 pm daily sales
+ * report, and event emails (vouchers generated, new PPPoE customer, manual
+ * top-up). Needs the Email (SMTP) section below to be set up.
+ */
+function SuperadminEmailsSection() {
+    const queryClient = useQueryClient();
+    const { data: settings } = useQuery({
+        queryKey: ['notification-settings'],
+        queryFn: async () => (await notificationAPI.getSettings()).data,
+    });
+    const save = useMutation({
+        mutationFn: (data: Record<string, boolean>) => notificationAPI.updateSettings(data),
+        onSuccess: () => { toast.success('Saved'); queryClient.invalidateQueries({ queryKey: ['notification-settings'] }); },
+        onError: (err: any) => toast.error(getErrorMessage(err, 'Could not save')),
+    });
+    const sendNow = useMutation({
+        mutationFn: () => notificationAPI.sendDailyReportNow(),
+        onSuccess: (res) => toast.success(`Report delivered ${res.data.sent} time${res.data.sent === 1 ? '' : 's'}`),
+        onError: (err: any) => toast.error(getErrorMessage(err, 'Could not send the report')),
+    });
+    return (
+        <div className={SECTION_CARD}>
+            <h3 className="text-lg font-bold mb-1">Admin notifications</h3>
+            <p className="text-sm text-muted-foreground mb-3">
+                Sent to the admin contacts above (emails get the full report; phones get a short summary).
+            </p>
+            <div className="space-y-2">
+                <label className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" className="mt-0.5" checked={!!settings?.daily_report_enabled} disabled={save.isPending}
+                        onChange={(e) => save.mutate({ daily_report_enabled: e.target.checked })} />
+                    <span><span className="font-medium">Daily sales report at 11 pm</span> -- revenue, payments, sales by plan and by payment method, with a PDF copy.</span>
+                </label>
+                <label className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" className="mt-0.5" checked={!!settings?.admin_event_emails} disabled={save.isPending}
+                        onChange={(e) => save.mutate({ admin_event_emails: e.target.checked })} />
+                    <span><span className="font-medium">Event emails</span> -- vouchers generated (with the codes), a new PPPoE customer, and every manual top-up or cash credit.</span>
+                </label>
+            </div>
+            <button
+                type="button"
+                disabled={sendNow.isPending}
+                onClick={() => sendNow.mutate()}
+                className="mt-3 px-3 py-1.5 border rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+                {sendNow.isPending ? 'Sending…' : "Send today's report now"}
+            </button>
         </div>
     );
 }
@@ -268,85 +545,73 @@ function WhatsAppSection() {
 }
 
 /**
- * A manager's number that's told whenever staff extend a subscription or
- * add cash to an account (the customer is notified separately).
+ * Admin contacts: everyone listed gets every admin notification -- staff
+ * alerts (extensions, cash), the daily report and event notices. Phones get
+ * a short text on the chosen channels; emails get the full email.
  */
-function StaffAlertSection() {
+function AdminContactsSection() {
     const queryClient = useQueryClient();
     const { data: settings } = useQuery({
         queryKey: ['notification-settings'],
         queryFn: async () => (await notificationAPI.getSettings()).data,
     });
-    const [form, setForm] = useState({ staff_alert_phone: '', staff_alert_email: '', staff_alert_channel: 'sms' });
+    const [phones, setPhones] = useState('');
+    const [emails, setEmails] = useState('');
+    const [channels, setChannels] = useState<string[]>(['sms']);
 
     useEffect(() => {
         if (settings) {
-            setForm({
-                staff_alert_phone: settings.staff_alert_phone || '',
-                staff_alert_email: settings.staff_alert_email || '',
-                staff_alert_channel: settings.staff_alert_channel || 'sms',
-            });
+            setPhones(settings.admin_phones || '');
+            setEmails(settings.admin_emails || '');
+            setChannels((settings.admin_phone_channels || 'sms').split(',').filter(Boolean));
         }
     }, [settings]);
 
-    const saveMutation = useMutation({
-        mutationFn: () => notificationAPI.updateSettings(form),
-        onSuccess: () => {
-            toast.success('Staff alert settings saved');
-            queryClient.invalidateQueries({ queryKey: ['notification-settings'] });
-        },
-        onError: (err: any) => toast.error(getErrorMessage(err, 'Failed to save staff alert settings')),
+    const save = useMutation({
+        mutationFn: () => notificationAPI.updateSettings({
+            admin_phones: phones, admin_emails: emails, admin_phone_channels: channels.join(','),
+        }),
+        onSuccess: () => { toast.success('Admin contacts saved'); queryClient.invalidateQueries({ queryKey: ['notification-settings'] }); },
+        onError: (err: any) => toast.error(getErrorMessage(err, 'Could not save admin contacts')),
     });
+
+    const toggle = (c: string) => setChannels((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+    const profileEmails: string[] = settings?.superadmin_recipients || [];
 
     return (
         <div className={SECTION_CARD}>
-            <h3 className="text-lg font-bold mb-1">Staff alerts</h3>
+            <h3 className="text-lg font-bold mb-1">Admin contacts</h3>
             <p className="text-sm text-muted-foreground mb-4">
-                Gets a message whenever staff recharge or extend a subscription, or add cash to an account.
-                The customer is also told. Leave blank to turn alerts off.
+                Everyone here gets admin notifications: staff extensions and cash credits, the daily report, and
+                voucher / new customer / top-up notices. One per line.
             </p>
-            <form onSubmit={e => { e.preventDefault(); saveMutation.mutate(); }} className="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-3 items-end">
-                {form.staff_alert_channel === 'email' ? (
+            <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <label className="block text-sm font-medium text-foreground/80 mb-1">Alert email address</label>
-                        <input
-                            type="email"
-                            className="w-full border rounded-lg px-3 py-2 text-sm"
-                            placeholder="manager@example.com"
-                            value={form.staff_alert_email}
-                            onChange={e => setForm({ ...form, staff_alert_email: e.target.value })}
-                        />
+                        <label className="block text-sm font-medium text-foreground/80 mb-1">Phone numbers</label>
+                        <textarea rows={3} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder={'0722 123 456\n0733 987 654'}
+                            value={phones} onChange={(e) => setPhones(e.target.value)} />
+                        <div className="mt-1.5 flex gap-4 text-sm">
+                            <span className="text-muted-foreground">Send by:</span>
+                            {[['sms', 'SMS'], ['whatsapp', 'WhatsApp']].map(([value, label]) => (
+                                <label key={value} className="flex items-center gap-1.5">
+                                    <input type="checkbox" checked={channels.includes(value)} onChange={() => toggle(value)} /> {label}
+                                </label>
+                            ))}
+                        </div>
                     </div>
-                ) : (
                     <div>
-                        <label className="block text-sm font-medium text-foreground/80 mb-1">Alert phone number</label>
-                        <input
-                            type="tel"
-                            className="w-full border rounded-lg px-3 py-2 text-sm"
-                            placeholder="e.g. 0722 123 456"
-                            value={form.staff_alert_phone}
-                            onChange={e => setForm({ ...form, staff_alert_phone: e.target.value })}
-                        />
+                        <label className="block text-sm font-medium text-foreground/80 mb-1">Email addresses</label>
+                        <textarea rows={3} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder={'manager@example.com\nowner@example.com'}
+                            value={emails} onChange={(e) => setEmails(e.target.value)} />
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {profileEmails.length ? <>Superadmins are always included: {profileEmails.join(', ')}.</> : 'Superadmins with an email on their profile are always included.'}
+                            {!settings?.email_enabled && ' Turn on Email below for these to be sent.'}
+                        </p>
                     </div>
-                )}
-                <div>
-                    <label className="block text-sm font-medium text-foreground/80 mb-1">Send by</label>
-                    <select
-                        className="w-full border rounded-lg px-3 py-2 text-sm"
-                        value={form.staff_alert_channel}
-                        onChange={e => setForm({ ...form, staff_alert_channel: e.target.value })}
-                    >
-                        <option value="sms">SMS</option>
-                        <option value="whatsapp">WhatsApp</option>
-                        <option value="email">Email</option>
-                    </select>
                 </div>
-                <button
-                    type="submit"
-                    disabled={saveMutation.isPending}
-                    className="h-10 px-5 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50"
-                >
-                    {saveMutation.isPending ? 'Saving...' : 'Save'}
+                <button type="submit" disabled={save.isPending} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50">
+                    {save.isPending ? 'Saving...' : 'Save admin contacts'}
                 </button>
             </form>
         </div>

@@ -2,12 +2,13 @@ import { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, billingAPI, siteSettingsAPI } from '../../services/api';
-import { Users as UsersIcon, CreditCard, Plus, Pencil, Trash2, X, Copy, ShieldCheck, Image as ImageIcon, Building2, Download, Upload, UploadCloud, ShieldAlert, Bell } from 'lucide-react';
+import { Users as UsersIcon, CreditCard, Plus, Pencil, Trash2, X, Copy, ShieldCheck, Image as ImageIcon, Building2, Download, Upload, UploadCloud, ShieldAlert, Bell, DatabaseBackup } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSiteSettings } from '../../hooks/useSiteSettings';
 import { downloadBlob } from '../../utils/downloadBlob';
 import { useAuthStore } from '../../store/authStore';
 import NotificationsTab from '../../components/settings/NotificationsTab';
+import BackupsTab from '../../components/settings/BackupsTab';
 
 const ROLES = [
     { value: 'admin', label: 'Admin' },
@@ -102,6 +103,18 @@ export default function Settings() {
                         <Bell className="h-4 w-4 mr-2" />
                         Notifications
                     </button>
+                    {user?.is_superuser && (
+                        <button
+                            onClick={() => setActiveTab('backups')}
+                            className={`flex items-center shrink-0 px-4 sm:px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'backups'
+                                ? 'border-ring text-primary'
+                                : 'border-transparent text-muted-foreground hover:text-foreground/80 hover:bg-secondary'
+                                }`}
+                        >
+                            <DatabaseBackup className="h-4 w-4 mr-2" />
+                            Backups
+                        </button>
+                    )}
                 </div>
 
                 {/* Content */}
@@ -111,6 +124,7 @@ export default function Settings() {
                     {activeTab === 'manual' && <ManualUserTab />}
                     {activeTab === 'bulk-import' && <BulkImportTab />}
                     {activeTab === 'notifications' && <NotificationsTab />}
+                    {activeTab === 'backups' && user?.is_superuser && <BackupsTab />}
                 </div>
             </div>
         </div>

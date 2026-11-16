@@ -19,6 +19,12 @@ else
     exit 1
 fi
 
+# Volumes are external (see docker-compose.yml); create any added since the
+# first deploy (idempotent).
+for v in isp_postgres_data isp_static_volume isp_media_volume isp_whatsapp_session isp_backup_volume; do
+    docker volume create "$v" >/dev/null
+done
+
 echo "🏗️ Building (cached layers are reused -- only what changed rebuilds)..."
 docker compose build
 

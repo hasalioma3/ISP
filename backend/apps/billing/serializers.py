@@ -92,7 +92,7 @@ class VoucherBatchSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = VoucherBatch
-        fields = ['id', 'created_at', 'quantity', 'value', 'plan', 'plan_name', 'note', 'generated_by_username', 'vouchers']
+        fields = ['id', 'created_at', 'quantity', 'value', 'plan', 'plan_name', 'note', 'generated_by_username', 'sent_to', 'sent_at', 'vouchers']
 
 
 class VoucherGenerationSerializer(serializers.Serializer):

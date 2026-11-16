@@ -7,7 +7,7 @@ into dispatch.send_and_log.
 import logging
 from email.utils import formataddr
 
-from django.core.mail import EmailMessage, get_connection
+from django.core.mail import EmailMultiAlternatives, get_connection
 
 from apps.notifications.models import NotificationSettings
 
@@ -34,7 +34,8 @@ class EmailService:
             fail_silently=False,
         )
 
-    def send_email(self, recipient, message, subject=None):
+    def send_email(self, recipient, message, subject=None, html=None, attachments=None):
+        """message is the plain-text body; html an optional rich version; attachments [(name, bytes, mimetype)]."""
         s = self.settings
         if not s.email_enabled:
             return {'success': False, 'error': 'Email is turned off in Settings -> Notifications', 'data': None, 'config_error': True}
@@ -47,10 +48,15 @@ class EmailService:
             # Notifications are short texts; use the first sentence as subject.
             subject = (message.split('. ')[0] or message)[:78]
         try:
-            sent = EmailMessage(
+            email = EmailMultiAlternatives(
                 subject=subject, body=message, from_email=from_header, to=[recipient],
                 connection=self._connection(),
-            ).send()
+            )
+            if html:
+                email.attach_alternative(html, 'text/html')
+            for name, content, mimetype in attachments or []:
+                email.attach(name, content, mimetype)
+            sent = email.send()
             return {'success': bool(sent), 'error': '' if sent else 'Mail server accepted no recipients', 'data': {'sent': sent}}
         except Exception as e:  # SMTPAuthenticationError, timeouts, refused connections...
             hint = ''

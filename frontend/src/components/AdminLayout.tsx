@@ -26,8 +26,10 @@ import {
     Wifi,
     X,
     MoreHorizontal,
+    ScrollText,
     Moon,
     Sun,
+    MessageSquare,
 } from 'lucide-react';
 import { useSiteSettings } from '../hooks/useSiteSettings';
 import AccountModal from './AccountModal';
@@ -87,7 +89,10 @@ export default function AdminLayout() {
         { name: 'Network Ops', href: '/admin/network-ops', icon: Activity, roles: ['admin', 'technician'] },
         { name: 'Accounting', href: '/admin/accounting', icon: Wallet, roles: ['admin', 'sales'] },
         { name: 'Inventory', href: '/admin/inventory', icon: Boxes },
+        { name: 'Messages', href: '/admin/messages', icon: MessageSquare, roles: ['admin'] },
         { name: 'Settings', href: '/admin/settings', icon: Settings, roles: ['admin'] },
+        // Superadmins only (empty role list, so only the superuser bypass passes).
+        { name: 'Logs', href: '/admin/logs', icon: ScrollText, roles: [] as string[] },
     ];
     const canSee = (roles?: string[]) => !roles || user?.is_superuser || roles.includes(user?.role || '');
     const navigation = allNavigation.filter(item => canSee(item.roles));

@@ -49,6 +49,13 @@ DEFAULTS = {
         {'plan': 'Plan name', 'price': 'Plan price', 'expiry_text': '"expires on ..." / "expired on ..."',
          'how_to_pay': 'Buy Goods / Paybill instructions'},
     ),
+    'expiry_reminder': (
+        'Renewal reminder (scheduled)',
+        'Hi {first_name}, your {plan} plan {when}. To renew, {how_to_pay}.',
+        {'plan': 'Plan name', 'when': '"expires in 3 days (on 14 Dec)" / "expires today at 23:59"',
+         'days_left': 'Days until expiry (0 = today)', 'expiry': 'Expiry date and time',
+         'price': 'Plan price', 'how_to_pay': 'Buy Goods / Paybill instructions'},
+    ),
     'voucher_send': (
         'Voucher code',
         'Your hotspot voucher code: {code}, valid for {plan}. Use it at the login page.',

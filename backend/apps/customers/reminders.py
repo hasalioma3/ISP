@@ -49,3 +49,13 @@ def build_payment_reminder(customer):
     return render('payment_reminder', {
         'plan': sub.plan.name, 'price': price, 'expiry_text': when, 'how_to_pay': how,
     }, customer)
+
+
+
+def how_to_pay(customer, price_text):
+    """The "pay KES X via Buy Goods/Paybill ..." clause used in reminders."""
+    if settings.MPESA_SHORTCODE_TYPE == 'till':
+        till = settings.MPESA_TILL_NUMBER or settings.MPESA_SHORTCODE
+        phone = _local_phone(customer.phone_number)
+        return f"pay {price_text} via M-Pesa Buy Goods, Till {till}" + (f", from {phone}" if phone else '')
+    return f"pay {price_text} via M-Pesa Paybill {settings.MPESA_SHORTCODE}, account {customer.username}"

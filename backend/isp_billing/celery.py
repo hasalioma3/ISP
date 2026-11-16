@@ -43,9 +43,27 @@ app.conf.beat_schedule = {
         'task': 'apps.network.tasks.enforce_subscription_fup',
         'schedule': crontab(minute='*'),
     },
+    'send-daily-sales-report': {
+        'task': 'apps.notifications.admin_emails.send_daily_report',
+        'schedule': crontab(hour=23, minute=0),  # 11 pm EAT (CELERY_TIMEZONE)
+    },
     'send-expiry-reminders': {
         'task': 'apps.notifications.tasks.send_expiry_reminders',
-        'schedule': crontab(hour=8, minute=0),  # Once daily -- covers both the 3-day and day-of stages
+        # Hourly; the task itself only sends in the hour chosen under
+        # Settings -> Notifications -> Renewal reminders.
+        'schedule': crontab(minute=0),
+    },
+    'scheduled-backup': {
+        'task': 'apps.backups.tasks.scheduled_backup',
+        'schedule': crontab(minute=10),  # hourly; runs in the hour set under Settings -> Backups
+    },
+    'purge-old-audit-logs': {
+        'task': 'apps.audit.tasks.purge_old_audit_logs',
+        'schedule': crontab(hour=3, minute=30),
+    },
+    'send-expired-followup': {
+        'task': 'apps.notifications.tasks.send_expired_followup',
+        'schedule': crontab(minute=5),  # hourly; sends at expired_followup_hour
     },
 }
 

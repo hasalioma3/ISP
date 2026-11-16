@@ -33,3 +33,20 @@ def sync_customer_to_router_on_save(sender, instance, **kwargs):
                 network_automation.activate_customer(instance, sub.plan)
             except Exception as e:
                 logger.error(f"Failed to re-sync {instance.username} to router on customer save: {e}")
+
+
+
+@receiver(post_save, sender=Customer)
+def email_superadmins_on_new_pppoe_customer(sender, instance, created, **kwargs):
+    """
+    Superadmins get an email for every new PPPoE customer, however they were
+    created (self-registration, manual add, a PPPoE voucher). The bulk import
+    suppresses these and sends one summary instead.
+    """
+    if not created or instance.is_staff or instance.service_type not in ('pppoe', 'both'):
+        return
+    from django.db import transaction
+    from apps.notifications.admin_emails import email_new_pppoe_customer, new_customer_emails_suppressed
+    if new_customer_emails_suppressed():
+        return
+    transaction.on_commit(lambda: email_new_pppoe_customer.delay(instance.id), robust=True)

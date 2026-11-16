@@ -212,3 +212,46 @@ class FourLetterVoucherTests(TestCase):
 		# Another device on the same site isn't blocked.
 		res = self.client.post('/api/billing/vouchers/redeem/', {'code': code, 'mac_address': '11:22:33:44:55:66'}, format='json')
 		self.assertEqual(res.status_code, 200, res.data)
+
+
+class VoucherBatchToSalesTests(TestCase):
+    def setUp(self):
+        for target in ('apps.billing.signals.sync_plan_to_routers.delay',):
+            p = patch(target)
+            self.addCleanup(p.stop)
+            p.start()
+        from apps.billing.models import Voucher, VoucherBatch
+        from apps.notifications.models import NotificationSettings
+        NotificationSettings.objects.update_or_create(pk=1, defaults={'sales_phones': '0711000009'})
+        self.plan = BillingPlan.objects.create(name='Daily', service_type='hotspot', download_speed=5, upload_speed=5,
+                                               price='50.00', mikrotik_profile='d')
+        self.batch = VoucherBatch.objects.create(quantity=3, value=50, plan=self.plan)
+        for code, st in (('ABCD', 'active'), ('EFGH', 'active'), ('JKLM', 'used')):
+            Voucher.objects.create(batch=self.batch, code=code, amount=50, plan=self.plan, status=st)
+        self.seller = Customer.objects.create(username='mo', first_name='Mo', is_staff=True, role='sales',
+                                              phone_number='0711000001')
+        self.client = APIClient()
+        self.client.force_authenticate(self.seller)
+
+    def test_contacts_include_sales_staff_and_settings(self):
+        res = self.client.get('/api/billing/batches/sales-contacts/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual({c['value'] for c in res.data['contacts']}, {'0711000001', '0711000009'})
+
+    def test_send_unused_codes(self):
+        from apps.notifications.admin_emails import send_voucher_batch
+        with patch('apps.notifications.dispatch.AfricasTalkingService.send_sms',
+                   return_value={'success': True, 'data': {}}) as sms, \
+             patch('apps.notifications.admin_emails.send_voucher_batch.delay', side_effect=send_voucher_batch):
+            res = self.client.post(f'/api/billing/batches/{self.batch.id}/send/',
+                                   {'phones': ['0711000009'], 'channels': ['sms']}, format='json')
+        self.assertEqual(res.status_code, 200)
+        text = sms.call_args.args[1]
+        self.assertIn('ABCD', text)
+        self.assertNotIn('JKLM', text)
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.sent_to, '0711000009')
+
+    def test_needs_a_recipient(self):
+        res = self.client.post(f'/api/billing/batches/{self.batch.id}/send/', {'phones': []}, format='json')
+        self.assertEqual(res.status_code, 400)

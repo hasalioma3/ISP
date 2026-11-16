@@ -336,7 +336,11 @@ class VoucherBatch(models.Model):
         related_name='generated_batches'
     )
     note = models.CharField(max_length=255, blank=True)
-    
+    # Who the batch's codes were last handed to (sales people), and when --
+    # shown on the Vouchers page so it's clear which batch is with whom.
+    sent_to = models.CharField(max_length=500, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         db_table = 'voucher_batches'
         ordering = ['-created_at']

@@ -5,6 +5,7 @@ import { X, Save, PlusCircle, Eye, EyeOff, KeyRound, Wallet, ArrowLeftRight, Pen
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import UsageChartPanels from './UsageChartPanels';
+import LiveActivity from './LiveActivity';
 import { useAuthStore } from '../store/authStore';
 
 export default function SubscriberDetailModal({ id, onClose, initialTab = 'details' }: { id: number; onClose: () => void; initialTab?: 'details' | 'usage' | 'plans' }) {
@@ -302,6 +303,7 @@ export default function SubscriberDetailModal({ id, onClose, initialTab = 'detai
                             <div className="text-center py-8 text-muted-foreground">Loading usage...</div>
                         ) : (
                             <div>
+                                <LiveActivity customerId={id} />
                                 <div className="mb-6">
                                     <UsageChartPanels chart={usageData?.chart} loading={false} />
                                 </div>

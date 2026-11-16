@@ -190,3 +190,63 @@ own recommendation, for accurate numbers), so there's no port mapping to
 manage. `restart: unless-stopped` + Docker starting on boot means it survives
 reboots on its own. No login by default — see the note at the top of the
 compose file if that matters on your LAN.
+
+## Backups and moving to a new host
+
+Everything is in **Settings → Backups** (superadmins only).
+
+**What a backup holds:** the database (`pg_dump`), every MikroTik's config (settings read over the API, plus a full
+`/export` `.rsc` and binary `.backup` fetched over the router's FTP), uploaded files, and, only when an encryption
+passphrase is set, the server's env (`SECRET_KEY`, `NOTIFICATIONS_ENCRYPTION_KEY`, M-Pesa keys) and the WhatsApp
+login. Without `NOTIFICATIONS_ENCRYPTION_KEY`, the stored SMS/SMTP/router credentials restore blank, so set a
+passphrase and keep it somewhere safe.
+
+Archives are kept in the `isp_backup_volume` Docker volume (`/backups` in the backend and worker containers) and,
+copied off-site to Google Drive and/or a Synology NAS (WebDAV, see below). Scheduled backups run hourly from beat
+(`scheduled-backup`) and only start at the configured hour/day. From the shell:
+`docker compose exec backend python manage.py backup_now`.
+
+**Synology NAS** (Settings → Backups → Synology NAS), two ways in:
+
+- *QuickConnect* (default; no port forwarding or VPN): enable QuickConnect on the NAS with DSM allowed under
+  Advanced → Permission settings, and enter its ID. The app asks Synology's directory where the NAS is, tries its
+  direct addresses first, and falls back to Synology's relay (speed-limited, so large archives take longer). It
+  uses the File Station API, so the NAS account needs the File Station application and **must not have 2-step
+  verification** (an unattended login can't answer it); use a dedicated account.
+- *Direct address (WebDAV)*: install the *WebDAV Server* package with HTTPS (5006); the Pi needs a route to the
+  NAS (LAN, VPN, or DDNS with 5006 forwarded).
+
+Either way, create a shared folder and a dedicated user with Read/Write on it only, then "Test & save". Uploads go
+to `<name>.part` and are renamed when complete, then size-checked. The app deletes copies beyond "Keep on the NAS",
+so it needs delete rights; turn on the shared folder's Recycle Bin and Snapshot Replication so a compromised server
+can't wipe the NAS copies too. To restore from the NAS, download the archive in File Station and use
+`restore_backup` as below.
+
+**Move to a new host with ~1 minute of downtime** (from this Mac):
+
+```bash
+ssh-copy-id USER@NEW_HOST
+./migrate_host.sh prepare  NEW_HOST USER   # copy + build + warm DB copy + router reachability check; no downtime
+./migrate_host.sh cutover  NEW_HOST USER   # stop old app, final DB/WhatsApp/media copy, start new, old forwards 80/443/8000
+#   ...point DNS / port-forward / tunnel at NEW_HOST, update PI_HOST in deploy_update.sh...
+./migrate_host.sh finish   NEW_HOST USER   # remove the forwarder, stop the old stack (its volumes are kept)
+./migrate_host.sh rollback NEW_HOST USER   # if needed: make the old host live again (optionally copying new data back)
+```
+
+The old host defaults to production; override it with `OLD_HOST=... OLD_USER=...`. Other tenants (`companies/*`)
+are not moved by the script.
+
+**Restore when the old host is gone:**
+
+```bash
+./deploy_fresh.sh                                   # on the new host (set PI_HOST first); restore .env.prod from
+                                                    # the backup's secrets/env if you no longer have it
+docker compose stop celery_worker celery_beat
+docker compose cp isp-backup-XXXX.tar.gz.enc backend:/backups/
+docker compose exec backend python manage.py restore_backup /backups/isp-backup-XXXX.tar.gz.enc --passphrase '...'
+docker compose exec backend python manage.py migrate
+docker compose up -d
+```
+
+`restore_backup` restores the database and media, and extracts router configs, env and the WhatsApp login next to
+the archive so you can apply them by hand. Delete that folder afterwards, because it holds passwords.

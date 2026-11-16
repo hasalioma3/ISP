@@ -43,6 +43,7 @@ export ISP_POSTGRES_VOLUME=isp_local_postgres_data
 export ISP_STATIC_VOLUME=isp_local_static_volume
 export ISP_MEDIA_VOLUME=isp_local_media_volume
 export ISP_WHATSAPP_VOLUME=isp_local_whatsapp_session
+export ISP_BACKUP_VOLUME=isp_local_backup_volume
 export ISP_SHARED_NETWORK=isp-local_shared_network
 # Distinct from the production defaults (172.28/172.29.0.0/24) so a local
 # stack can never collide with a production-style one on the same host.
@@ -55,6 +56,7 @@ docker volume create "$ISP_POSTGRES_VOLUME" >/dev/null
 docker volume create "$ISP_STATIC_VOLUME" >/dev/null
 docker volume create "$ISP_MEDIA_VOLUME" >/dev/null
 docker volume create "$ISP_WHATSAPP_VOLUME" >/dev/null
+docker volume create "$ISP_BACKUP_VOLUME" >/dev/null
 
 printf 'Building and starting the isolated local web stack...\n'
 "${COMPOSE[@]}" up -d --build db redis backend frontend

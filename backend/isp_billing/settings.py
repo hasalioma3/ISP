@@ -63,6 +63,8 @@ INSTALLED_APPS = [
     'apps.sitesettings',
     'apps.accounting',
     'apps.inventory',
+    'apps.audit',
+    'apps.backups',
 ]
 
 if DEBUG:
@@ -75,6 +77,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # After auth so request.user exists; records who changed what (apps/audit).
+    'apps.audit.middleware.AuditMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -205,6 +209,13 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+# Tests: an in-memory broker, so code that queues tasks (on_commit hooks,
+# .delay calls) never waits on connection retries to a Redis that isn't there.
+import sys as _sys
+if 'test' in _sys.argv[1:2]:
+    CELERY_BROKER_URL = 'memory://'
+    CELERY_RESULT_BACKEND = 'cache+memory://'
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 # M-Pesa Configuration
@@ -416,3 +427,16 @@ LOGGING = {
         },
     },
 }
+
+
+# Audit log (apps/audit): rows older than this are purged nightly. 0 = keep forever.
+AUDIT_RETENTION_DAYS = config('AUDIT_RETENTION_DAYS', default=365, cast=int)
+
+# Backups (apps/backups). In Docker, /backups is its own volume
+# (isp_backup_volume) -- outside the ./backend bind mount so an rsync
+# deploy with --delete can never touch it. Locally it falls back to
+# backend/backups/ (gitignored).
+BACKUP_DIR = config('BACKUP_DIR', default='/backups' if Path('/backups').is_dir() else str(BASE_DIR / 'backups'))
+# The WhatsApp sidecar's login, mounted read-only into celery_worker so
+# backups can include it (encrypted archives only).
+WHATSAPP_AUTH_BACKUP_DIR = config('WHATSAPP_AUTH_BACKUP_DIR', default='/whatsapp_auth')

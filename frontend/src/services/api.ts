@@ -106,12 +106,39 @@ export const paymentAPI = {
 // Voucher API
 export const voucherAPI = {
     getBatches: () => api.get('/billing/batches/'),
-    generate: (data: { quantity: number; value: number; note?: string }) =>
+    generate: (data: { quantity: number; value?: number; plan_id?: number | string; note?: string }) =>
         api.post('/billing/vouchers/generate/', data),
     redeem: (code: string, macAddress?: string) =>
         api.post('/billing/vouchers/redeem/', { code, mac_address: macAddress }),
     send: (voucherId: number, data: { recipient: string; channel: 'sms' | 'whatsapp' | 'telegram' }) =>
         api.post(`/billing/vouchers/${voucherId}/send/`, data),
+    salesContacts: () => api.get('/billing/batches/sales-contacts/'),
+    sendBatch: (batchId: number, data: { phones: string[]; emails: string[]; channels: string[] }) =>
+        api.post(`/billing/batches/${batchId}/send/`, data),
+};
+
+// Backups, Google Drive, migration checks (superadmins only)
+export const backupAPI = {
+    list: () => api.get('/backups/'),
+    runNow: () => api.post('/backups/'),
+    download: (id: number) => api.get(`/backups/${id}/`, { responseType: 'blob', timeout: 0 }),
+    remove: (id: number, remote = false) => api.delete(`/backups/${id}/`, { params: remote ? { remote: 1 } : undefined }),
+    upload: (id: number, target: 'gdrive' | 'nas' = 'gdrive') => api.post(`/backups/${id}/upload/`, { target }),
+    getSettings: () => api.get('/backups/settings/'),
+    updateSettings: (data: Record<string, unknown>) => api.patch('/backups/settings/', data),
+    connectDrive: () => api.post('/backups/gdrive/'),
+    pollDrive: () => api.put('/backups/gdrive/'),
+    disconnectDrive: () => api.delete('/backups/gdrive/'),
+    testDrive: () => api.post('/backups/gdrive/test/'),
+    // Takes the unsaved form values so the NAS can be tested before saving.
+    testNas: (data: Record<string, unknown>) => api.post('/backups/nas/test/', data, { timeout: 120000 }),
+    migrationCheck: () => api.get('/backups/migration-check/', { timeout: 120000 }),
+};
+
+// Audit log (superadmins only)
+export const auditAPI = {
+    getLogs: (params: Record<string, string | number | undefined>) => api.get('/audit/logs/', { params }),
+    getFacets: (params: Record<string, string | number | undefined>) => api.get('/audit/logs/facets/', { params }),
 };
 
 // Notifications (SMS/WhatsApp/Telegram settings, test-send, promo broadcast)
@@ -126,6 +153,10 @@ export const notificationAPI = {
     updatePromoTemplate: (id: number, data: { name?: string; body?: string }) => api.patch(`/notifications/templates/promo/${id}/`, data),
     deletePromoTemplate: (id: number) => api.delete(`/notifications/templates/promo/${id}/`),
     previewTemplate: (body: string) => api.post('/notifications/templates/preview/', { body }),
+    sendDailyReportNow: () => api.post('/notifications/daily-report/send-now/'),
+    // Delivery report over every outgoing message, and resending one.
+    getReport: (params: Record<string, string | number | undefined>) => api.get('/notifications/report/', { params }),
+    resendMessage: (id: number) => api.post(`/notifications/log/${id}/resend/`),
     testSend: (data: { channel: 'sms' | 'whatsapp' | 'telegram' | 'email'; recipient: string; message?: string }) =>
         api.post('/notifications/test-send/', data),
     getWhatsAppStatus: () => api.get('/notifications/whatsapp/status/'),
@@ -168,15 +199,18 @@ export const analyticsAPI = {
 // Admin Management API
 export const adminAPI = {
     // Subscribers
-    getSubscribers: (params?: { search?: string; service_type?: string; status?: string; expiring?: string; plan?: string; ordering?: string; router?: string; is_new?: string; page?: number; page_size?: number }) =>
+    getSubscribers: (params?: { search?: string; service_type?: string; status?: string; expiring?: string; plan?: string; ordering?: string; sort?: string; router?: string; is_new?: string; page?: number; page_size?: number }) =>
         api.get('/customers/subscribers/', { params }),
     // Tab counts (all/active/expiring/expired/suspended/new) under the same filters as the list.
     getSubscriberSummary: (params?: { search?: string; service_type?: string; plan?: string; router?: string }) =>
         api.get('/customers/subscribers/summary/', { params }),
     bulkStkReminder: (ids: number[]) => api.post('/customers/subscribers/bulk-stk-reminder/', { ids }),
-    // SMS/WhatsApp payment reminder; preview=true returns the message without sending.
-    bulkReminder: (ids: number[], channel: 'sms' | 'whatsapp' | 'email', preview = false) =>
-        api.post('/customers/subscribers/bulk-reminder/', { ids, channel, preview }),
+    // Message subscribers on one or more channels: their payment reminder, or
+    // `message` (with {first_name} etc.); preview=true returns the text without sending.
+    bulkMessage: (ids: number[], channels: string[], opts: { message?: string; preview?: boolean } = {}) =>
+        api.post('/customers/subscribers/bulk-reminder/', { ids, channels, ...opts }),
+    // One subscriber's live session (byte counters) straight from their router.
+    getSubscriberLive: (id: number) => api.get(`/customers/subscribers/${id}/live/`),
     getSubscriber: (id: number) => api.get(`/customers/subscribers/${id}/`),
     updateSubscriber: (id: number, data: any) => api.patch(`/customers/subscribers/${id}/`, data),
     getSubscriberUsage: (id: number) => api.get(`/customers/subscribers/${id}/usage/`),

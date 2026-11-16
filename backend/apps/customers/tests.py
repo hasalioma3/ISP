@@ -239,7 +239,7 @@ class StaffMoneyActionsTests(TestCase):
 	def test_staff_alert_task_uses_configured_number(self):
 		from apps.notifications.models import NotificationSettings, NotificationLog
 		from apps.notifications.tasks import send_staff_alert
-		NotificationSettings.objects.update_or_create(pk=1, defaults={'staff_alert_phone': '0711000000'})
+		NotificationSettings.objects.update_or_create(pk=1, defaults={'admin_phones': '0711000000'})
 		with patch('apps.notifications.dispatch.AfricasTalkingService.send_sms', return_value={'success': True, 'data': {}}) as sms:
 			send_staff_alert('hello', customer_id=self.customer.pk)
 		sms.assert_called_once_with('0711000000', 'hello')
@@ -313,7 +313,7 @@ class SubscriberExportAndReminderTests(TestCase):
 			res = self.client.post('/api/customers/subscribers/bulk-reminder/',
 								   {'ids': [self.grace.pk, self.nophone.pk, self.noplan.pk], 'channel': 'whatsapp'}, format='json')
 		self.assertEqual(res.data['queued'], 1)
-		task.assert_called_once_with(self.grace.pk, 'whatsapp')
+		task.assert_called_once_with(self.grace.pk, 'whatsapp', None)
 		self.assertEqual(len(res.data['skipped']), 2)
 
 	def test_reminder_task_sends_and_logs(self):
@@ -373,3 +373,68 @@ class RenewedCustomerStatusTests(TestCase):
 		self.suspend.assert_called()
 		self.customer.refresh_from_db()
 		self.assertEqual(self.customer.status, 'expired')
+
+
+class SubscriberMessagingSortLiveTests(TestCase):
+	def setUp(self):
+		for target in ('apps.billing.signals.sync_plan_to_routers.delay',
+					   'apps.billing.signals.network_automation.activate_customer'):
+			patcher = patch(target)
+			self.addCleanup(patcher.stop)
+			patcher.start()
+		self.plan = BillingPlan.objects.create(
+			name='Home 10', service_type='pppoe', download_speed=10,
+			upload_speed=10, price='2500.00', mikrotik_profile='home-10',
+		)
+		self.client = APIClient()
+		self.client.force_authenticate(Customer.objects.create(username='boss', is_staff=True, is_superuser=True))
+		self.a = Customer.objects.create(username='alpha', first_name='Ann', phone_number='0722000001', email='ann@example.com', service_type='pppoe')
+		self.b = Customer.objects.create(username='bravo', phone_number='0722000002', service_type='pppoe')
+		self.c = Customer.objects.create(username='charlie', service_type='pppoe')  # never had a plan
+		Subscription.objects.create(customer=self.a, plan=self.plan, expiry_date=timezone.now() + timedelta(days=20))
+		Subscription.objects.create(customer=self.b, plan=self.plan, expiry_date=timezone.now() + timedelta(days=2))
+
+	def test_custom_message_multi_channel_with_placeholders(self):
+		with patch('apps.notifications.tasks.send_payment_reminder.delay') as task:
+			res = self.client.post('/api/customers/subscribers/bulk-reminder/', {
+				'ids': [self.a.id, self.b.id], 'channels': ['sms', 'email'], 'message': 'Hi {first_name}!',
+			}, format='json')
+		self.assertEqual(res.data['queued'], 3)  # alpha sms+email, bravo sms (no email)
+		self.assertEqual(len(res.data['skipped']), 1)
+		preview = self.client.post('/api/customers/subscribers/bulk-reminder/', {
+			'ids': [self.a.id], 'channels': ['sms'], 'message': 'Hi {first_name}!', 'preview': True,
+		}, format='json').data['preview']
+		self.assertEqual(preview, 'Hi Ann!')
+
+	def test_custom_message_task_logs_custom_event(self):
+		from apps.notifications.models import NotificationLog
+		from apps.notifications.tasks import send_payment_reminder
+		with patch('apps.notifications.dispatch.AfricasTalkingService.send_sms', return_value={'success': True, 'data': {}}) as sms:
+			send_payment_reminder(self.a.id, 'sms', 'Hello {first_name}')
+		self.assertEqual(sms.call_args.args[1], 'Hello Ann')
+		self.assertEqual(NotificationLog.objects.get().event_type, 'custom_message')
+
+	def test_sort_by_expiry_and_creation(self):
+		def usernames(sort):
+			return [r['username'] for r in self.client.get('/api/customers/subscribers/', {'sort': sort}).data['results']]
+		self.assertEqual(usernames('expiry_asc')[:2], ['bravo', 'alpha'])
+		self.assertEqual(usernames('expiry_asc')[-1], 'charlie')  # no plan: last
+		self.assertEqual(usernames('expiry_desc')[-1], 'charlie')
+		self.assertEqual(usernames('created_desc')[0], 'charlie')
+		self.assertEqual(usernames('created_asc')[0], 'alpha')
+
+	def test_live_session(self):
+		from apps.network.models import Router, PPPoESecret
+		router = Router.objects.create(name='r1', ip_address='10.0.0.1', username='u', password='p')
+		PPPoESecret.objects.create(customer=self.a, router=router, username='alpha', password='x', profile='home-10')
+		sessions = {'success': True, 'sessions': [{'username': 'alpha', 'address': '10.5.60.9', 'mac_address': 'AA:BB',
+													'uptime': '1h', 'service_type': 'pppoe', 'upload_bytes': 10, 'download_bytes': 20}]}
+		with patch('apps.network.services.mikrotik_service.MikroTikService.get_active_sessions', return_value=sessions):
+			data = self.client.get(f'/api/customers/subscribers/{self.a.id}/live/').data
+		self.assertTrue(data['active'])
+		self.assertEqual((data['address'], data['download_bytes']), ('10.5.60.9', 20))
+		Router.objects.filter(pk=router.pk).update(is_online=False, status_checked_at=timezone.now())
+		with patch('apps.network.services.mikrotik_service.MikroTikService.get_active_sessions') as live:
+			data = self.client.get(f'/api/customers/subscribers/{self.a.id}/live/').data
+		live.assert_not_called()  # known-offline router isn't contacted
+		self.assertTrue(data['router_offline'])

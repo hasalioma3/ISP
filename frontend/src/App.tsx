@@ -35,6 +35,8 @@ const Payments = lazy(() => import('./pages/admin/Payments'));
 const Accounting = lazy(() => import('./pages/admin/Accounting'));
 const Inventory = lazy(() => import('./pages/admin/Inventory'));
 const NetworkOps = lazy(() => import('./pages/admin/NetworkOps'));
+const NotificationReport = lazy(() => import('./pages/admin/NotificationReport'));
+const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
 
 /** Shown while a lazily loaded page's chunk downloads. */
 function PageFallback() {
@@ -137,6 +139,8 @@ function App() {
             <Route path="vouchers" element={<VoucherManager />} />
             <Route path="mikrotik" element={<MikroTikSync />} />
             <Route path="billing-plans" element={<BillingPlans />} />
+            <Route path="messages" element={<NotificationReport />} />
+            <Route path="logs" element={<AuditLogs />} />
             <Route index element={<Navigate to="dashboard" />} />
           </Route>
 

@@ -12,6 +12,7 @@ services:
       - ./backend:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/mediafiles
+      - backup_volume:/backups
     env_file:
       - ${ISP_ENV_FILE:-.env.prod}
     environment:
@@ -73,6 +74,10 @@ services:
     volumes:
       - ./backend:/app
       - media_volume:/app/mediafiles
+      # Backups are built by the worker (apps/backups). The WhatsApp login
+      # is mounted read-only only so encrypted backups can include it.
+      - backup_volume:/backups
+      - whatsapp_session:/whatsapp_auth:ro
     env_file:
       - ${ISP_ENV_FILE:-.env.prod}
     environment:
@@ -141,3 +146,6 @@ volumes:
   whatsapp_session:
     external: true
     name: ${ISP_WHATSAPP_VOLUME:-isp_whatsapp_session}
+  backup_volume:
+    external: true
+    name: ${ISP_BACKUP_VOLUME:-isp_backup_volume}

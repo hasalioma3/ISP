@@ -23,6 +23,8 @@ const {
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
     DisconnectReason,
+    Browsers,
+    makeCacheableSignalKeyStore,
 } = require('@whiskeysockets/baileys');
 
 const AUTH_DIR = process.env.WHATSAPP_AUTH_DIR || '/app/auth';
@@ -44,7 +46,36 @@ let connected = false;
 let connectedNumber = null;
 let reconnectTimer = null;
 let reconnectDelay = RECONNECT_MIN_MS;
+let qrUpdatedAt = null;
 let lastError = null;
+
+// "Waiting for this message. This may take a while." on the recipient's
+// phone means they couldn't decrypt what we sent (a new device of theirs, or
+// our session with them was reset) and asked us to resend it. Baileys answers
+// that retry request by calling getMessage(key) -- with no store it gets
+// nothing back, the retry silently fails and the placeholder stays forever.
+// So remember what we sent recently. In memory only: retries come within
+// seconds to minutes, and a restart losing the cache just means those few
+// messages fall back to the old behaviour.
+const SENT_CACHE_MAX = 1000;
+const sentMessages = new Map(); // message id -> proto message content
+function rememberSent(result) {
+    const id = result?.key?.id;
+    if (!id || !result.message) return;
+    sentMessages.set(id, result.message);
+    if (sentMessages.size > SENT_CACHE_MAX) sentMessages.delete(sentMessages.keys().next().value);
+}
+
+// Minimal CacheStore (get/set/del/flushAll) for Baileys' retry counters, so a
+// message isn't re-sent endlessly and the counters survive socket restarts.
+// Kept here rather than adding node-cache, which would mean a lockfile change.
+const retryCounts = new Map();
+const msgRetryCounterCache = {
+    get: (k) => retryCounts.get(k),
+    set: (k, v) => { retryCounts.set(k, v); if (retryCounts.size > 5000) retryCounts.delete(retryCounts.keys().next().value); return true; },
+    del: (k) => retryCounts.delete(k),
+    flushAll: () => retryCounts.clear(),
+};
 
 function clearAuthState() {
     // AUTH_DIR is the mounted volume itself, so empty it rather than
@@ -89,10 +120,18 @@ async function startSocket() {
     const { version } = await fetchLatestBaileysVersion();
 
     sock = makeWASocket({
-        auth: state,
+        // Caching the Signal keys in memory means a burst of sends (or a
+        // retry) doesn't re-read every key file from the SD card, and keeps
+        // key reads and writes consistent while several sends overlap.
+        auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, baileysLogger) },
+        getMessage: async (key) => sentMessages.get(key.id),
+        msgRetryCounterCache,
         version,
         logger: baileysLogger,
         printQRInTerminal: false,
+        // Present as a standard desktop client. Without a browser identity
+        // some phones refuse to link ("Couldn't link device").
+        browser: Browsers.macOS('Desktop'),
         markOnlineOnConnect: false,
         syncFullHistory: false,
         shouldSyncHistoryMessage: () => false,
@@ -106,6 +145,7 @@ async function startSocket() {
 
         if (qr) {
             latestQrDataUri = await QRCode.toDataURL(qr);
+            qrUpdatedAt = Date.now();
         }
 
         if (connection === 'open') {
@@ -120,6 +160,11 @@ async function startSocket() {
         if (connection === 'close') {
             connected = false;
             connectedNumber = null;
+            // A QR code is only valid for ~20s and dies with this socket --
+            // keeping it would leave an expired code on the settings page
+            // for the whole reconnect delay, and scanning it always fails.
+            latestQrDataUri = null;
+            qrUpdatedAt = null;
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const reason = lastDisconnect?.error?.message || 'unknown reason';
             lastError = `${reason} (code ${statusCode})`;
@@ -146,8 +191,23 @@ async function startSocket() {
                 return;
             }
             if (statusCode === DisconnectReason.restartRequired) {
-                // Expected once right after pairing -- not a failure.
+                // Expected once right after scanning: WhatsApp has saved the
+                // new login and wants a fresh connection with it. Do that
+                // promptly (after the creds write has had a moment).
+                logger.info('Paired -- restarting the connection with the new login.');
                 reconnectDelay = RECONNECT_MIN_MS;
+                scheduleReconnect(1500);
+                return;
+            }
+            const paired = Boolean(sock?.authState?.creds?.registered);
+            if (!paired && statusCode === DisconnectReason.timedOut) {
+                // Waiting to be scanned and the batch of QR codes ran out:
+                // get a fresh one right away rather than backing off (the
+                // backoff is for a paired session that keeps dropping).
+                logger.info('QR code expired unscanned -- generating a new one.');
+                reconnectDelay = RECONNECT_MIN_MS;
+                scheduleReconnect(2000);
+                return;
             }
 
             logger.warn(`WhatsApp connection closed (code=${statusCode}, ${reason}).`);
@@ -192,6 +252,7 @@ app.post('/send', async (req, res) => {
             return res.status(404).json({ success: false, error: `${digitsOnly} is not on WhatsApp` });
         }
         const result = await sock.sendMessage(lookup.jid, { text: message });
+        rememberSent(result);
         res.json({ success: true, messageId: result?.key?.id || null });
     } catch (err) {
         logger.error({ err }, 'WhatsApp send failed');

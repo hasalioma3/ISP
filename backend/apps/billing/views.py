@@ -86,7 +86,6 @@ class BillingPlanViewSet(viewsets.ModelViewSet):
 
         valid_service_types = {choice[0] for choice in BillingPlan.SERVICE_TYPE_CHOICES}
         created, errors = [], []
-
         for i, row in enumerate(reader, start=2):  # row 1 is the header
             name = (row.get('name') or '').strip()
             service_type = (row.get('service_type') or '').strip().lower()
@@ -194,10 +193,10 @@ class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = SubscriptionSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         return Subscription.objects.filter(customer=self.request.user)
-    
+
     @action(detail=False, methods=['get'])
     def current(self, request):
         """
@@ -207,11 +206,11 @@ class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
             customer=request.user,
             status='active'
         ).first()
-        
+    
         if subscription:
             serializer = self.get_serializer(subscription)
             return Response(serializer.data)
-        
+    
         return Response({
             'message': 'No active subscription'
         }, status=status.HTTP_404_NOT_FOUND)
@@ -223,7 +222,7 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         return Transaction.objects.filter(customer=self.request.user)
 
@@ -234,7 +233,7 @@ class UsageRecordViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = UsageRecordSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         return UsageRecord.objects.filter(customer=self.request.user)
 
@@ -327,13 +326,66 @@ class VoucherBatchViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = VoucherBatchSerializer
     permission_classes = [RoleAllowed('admin', 'sales')]
 
+    @action(detail=False, methods=['get'], url_path='sales-contacts')
+    def sales_contacts(self, request):
+        """
+        Who a batch can be sent to: the sales contacts from Settings ->
+        Notifications, plus every active staff account with the Sales role
+        (its phone/email). Served here rather than from the notification
+        settings so sales staff, who can't read those settings, can use it.
+        """
+        from apps.customers.models import Customer
+        from apps.notifications.models import NotificationSettings
+        ns = NotificationSettings.load()
+        contacts = []
+        for u in Customer.objects.filter(is_staff=True, is_active=True, role='sales').order_by('first_name', 'username'):
+            name = u.get_full_name() or u.username
+            if u.phone_number:
+                contacts.append({'name': name, 'kind': 'phone', 'value': u.phone_number})
+            if u.email:
+                contacts.append({'name': name, 'kind': 'email', 'value': u.email})
+        known = {c['value'].lower() for c in contacts}
+        contacts += [{'name': 'Sales contact', 'kind': 'phone', 'value': p} for p in ns.sales_phone_list() if p.lower() not in known]
+        contacts += [{'name': 'Sales contact', 'kind': 'email', 'value': e} for e in ns.sales_email_list() if e not in known]
+        return Response({'contacts': contacts, 'email_enabled': ns.email_enabled})
+
+    @action(detail=True, methods=['post'])
+    def send(self, request, pk=None):
+        """
+        Hand a batch's unused codes to sales people: {phones: [...],
+        emails: [...], channels: ['sms'|'whatsapp']}. Phones get the codes as
+        a text on each chosen channel; emails get a table plus a CSV. Used
+        and expired codes are left out. Records who it went to on the batch.
+        """
+        from apps.notifications.admin_emails import send_voucher_batch
+        batch = self.get_object()
+        phones = [str(p).strip() for p in request.data.get('phones') or [] if str(p).strip()]
+        emails = [str(e).strip().lower() for e in request.data.get('emails') or [] if str(e).strip()]
+        channels = [c for c in request.data.get('channels') or ['sms'] if c in ('sms', 'whatsapp')]
+        if not phones and not emails:
+            return Response({'error': 'Choose at least one phone number or email address'}, status=status.HTTP_400_BAD_REQUEST)
+        if phones and not channels:
+            return Response({'error': 'Choose SMS and/or WhatsApp for the phone numbers'}, status=status.HTTP_400_BAD_REQUEST)
+        from apps.payments.services.phone_hash import normalize_phone
+        bad = [p for p in phones if not (normalize_phone(p).isdigit() and len(normalize_phone(p)) == 12)]
+        if bad:
+            return Response({'error': f"Not valid phone number(s): {', '.join(bad)}"}, status=status.HTTP_400_BAD_REQUEST)
+        if not batch.vouchers.filter(status='active').exists():
+            return Response({'error': 'This batch has no unused vouchers left'}, status=status.HTTP_400_BAD_REQUEST)
+        from django.utils import timezone
+        batch.sent_to = ', '.join(phones + emails)[:500]
+        batch.sent_at = timezone.now()
+        batch.save(update_fields=['sent_to', 'sent_at'])
+        send_voucher_batch.delay(batch.id, phones, emails, channels, request.user.username)
+        return Response({'queued': len(phones) * len(channels) + len(emails)})
+
 
 class VoucherGenerationView(APIView):
     """
     Generate bulk vouchers (admin/sales only)
     """
     permission_classes = [RoleAllowed('admin', 'sales')]
-    
+
     def post(self, request):
         serializer = VoucherGenerationSerializer(data=request.data)
         if serializer.is_valid():
@@ -341,7 +393,7 @@ class VoucherGenerationView(APIView):
             value = serializer.validated_data.get('value')
             plan_id = serializer.validated_data.get('plan_id')
             note = serializer.validated_data.get('note', '')
-            
+        
             plan = None
             if plan_id:
                 try:
@@ -349,7 +401,7 @@ class VoucherGenerationView(APIView):
                     value = plan.price # Use plan price as value if not explicit
                 except BillingPlan.DoesNotExist:
                      return Response({'error': 'Invalid plan ID'}, status=status.HTTP_400_BAD_REQUEST)
-            
+        
             # Create Batch
             with transaction.atomic():
                 batch = VoucherBatch.objects.create(
@@ -359,7 +411,7 @@ class VoucherGenerationView(APIView):
                     generated_by=request.user,
                     note=note
                 )
-                
+            
                 vouchers_to_create = []
                 try:
                     codes = _new_voucher_codes(quantity)
@@ -375,12 +427,17 @@ class VoucherGenerationView(APIView):
                         plan=plan,
                         status='active'
                     ))
-                
-                Voucher.objects.bulk_create(vouchers_to_create)
             
+                Voucher.objects.bulk_create(vouchers_to_create)
+        
+            # Superadmins get the generated codes by email.
+            from apps.notifications.admin_emails import email_vouchers_generated
+            batch_id = batch.id
+            transaction.on_commit(lambda: email_vouchers_generated.delay(batch_id), robust=True)
+
             # Refetch batch to include vouchers in serialization
             batch = VoucherBatch.objects.prefetch_related('vouchers').get(id=batch.id)
-            
+        
             return Response(
                 VoucherBatchSerializer(batch).data,
                 status=status.HTTP_201_CREATED
@@ -422,7 +479,7 @@ class VoucherRedeemView(APIView):
     Redeem a voucher code
     """
     permission_classes = [AllowAny]
-    
+
     def post(self, request):
         serializer = VoucherRedeemSerializer(data=request.data)
         if serializer.is_valid():
@@ -441,22 +498,22 @@ class VoucherRedeemView(APIView):
             if not voucher:
                 _record_redeem_failure(client_keys)
                 return Response({'error': 'Invalid voucher code'}, status=status.HTTP_400_BAD_REQUEST)
-            
+        
             if voucher.status != 'active':
                 return Response({'error': 'Voucher has already been used'}, status=status.HTTP_400_BAD_REQUEST)
-            
+        
             if voucher.expiry_date and voucher.expiry_date < timezone.now():
                 return Response({'error': 'Voucher has expired'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Check if voucher has a plan associated (REQUIRED for auto-account creation)
             if not voucher.plan:
                  return Response({'error': 'This voucher is not linked to a plan. Cannot auto-redeem.'}, status=status.HTTP_400_BAD_REQUEST)
-            
+        
             # Redeem logic
             with transaction.atomic():
                 # Lock voucher row
                 voucher = Voucher.objects.select_for_update().get(id=voucher.id)
-                
+            
                 if voucher.status != 'active':
                      return Response({'error': 'Voucher already used'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -471,18 +528,18 @@ class VoucherRedeemView(APIView):
                             {'error': 'This device has already used a promo voucher in the last 7 days'},
                             status=status.HTTP_400_BAD_REQUEST
                         )
-                
+            
                 # 1. Create Customer
                 # Check if user already exists
                 from apps.customers.models import Customer
-                
+            
                 username = voucher.code
                 if Customer.objects.filter(username=username).exists():
                      # User exists, append random 3 digits to ensure unique new user record
                      import random
                      suffix = ''.join(random.choices('0123456789', k=3))
                      username = f"{voucher.code}{suffix}"
-                
+            
                 customer = Customer.objects.create(
                     username=username,
                     # Inherit service type from the plan
@@ -492,14 +549,14 @@ class VoucherRedeemView(APIView):
                     first_name='',
                     last_name='',
                 )
-                
+            
                 customer.set_password(voucher.code) # Password = Voucher Code
-                
+            
                 # Set credentials based on plan service type
                 if voucher.plan.service_type in ['pppoe', 'both']:
                     customer.pppoe_username = customer.username
                     customer.pppoe_password = voucher.code
-                
+            
                 if voucher.plan.service_type in ['hotspot', 'both']:
                     customer.hotspot_username = customer.username
                     customer.hotspot_password = voucher.code
@@ -513,27 +570,27 @@ class VoucherRedeemView(APIView):
 
                 # Logic used to vary if using get_or_create, now significantly simplified for "always create new" logic requested
                 created = True
-                
+            
                 # 2. Update Voucher
                 voucher.status = 'used'
                 voucher.used_by = customer
                 voucher.used_at = timezone.now()
                 voucher.used_mac = mac_address or ''
                 voucher.save()
-                
+            
                 # 3. Create Subscription
                 from apps.billing.models import Subscription
-                
+            
                 # Calculate expiry
                 expiry_date = timezone.now() + voucher.plan.get_duration_timedelta()
-                
+            
                 Subscription.objects.create(
                     customer=customer,
                     plan=voucher.plan,
                     expiry_date=expiry_date,
                     status='active'
                 )
-                
+            
                 # 4. Generate Tokens
                 from rest_framework_simplejwt.tokens import RefreshToken
                 from apps.customers.serializers import CustomerSerializer
@@ -655,7 +712,7 @@ class ManualSubscriptionView(APIView):
         from apps.billing.services import apply_subscription
         subscription, credited = apply_subscription(customer, plan)
 
-        Transaction.objects.create(
+        manual_txn = Transaction.objects.create(
             customer=customer,
             subscription=subscription,
             transaction_id='MANUAL-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=10)),
@@ -664,6 +721,9 @@ class ManualSubscriptionView(APIView):
             status='completed',
             notes=f"Manual activation by {request.user.username}"
         )
+        # Superadmins get an email for every manual activation (Settings -> Notifications).
+        from apps.notifications.admin_emails import email_manual_topup
+        transaction.on_commit(lambda: email_manual_topup.delay(manual_txn.id), robust=True)
 
         message = f'Subscription activated for {customer.username}'
         if credited:
@@ -818,65 +878,76 @@ class PPPoEBulkImportView(APIView):
 
         created, errors = [], []
 
-        for i, row in enumerate(reader, start=2):  # row 1 is the header
-            username = (row.get('username') or '').strip()
-            password = (row.get('password') or '').strip()
-            phone_number = (row.get('phone_number') or '').strip()
-            plan_name = (row.get('plan_name') or '').strip()
+        from apps.notifications.admin_emails import email_new_pppoe_import, suppress_new_customer_emails
+        created_ids = []
+        suppress = suppress_new_customer_emails()
+        suppress.__enter__()
+        try:
+            for i, row in enumerate(reader, start=2):  # row 1 is the header
+                username = (row.get('username') or '').strip()
+                password = (row.get('password') or '').strip()
+                phone_number = (row.get('phone_number') or '').strip()
+                plan_name = (row.get('plan_name') or '').strip()
 
-            if not username or not password or not plan_name:
-                errors.append({'row': i, 'username': username, 'error': 'username, password and plan_name are required'})
-                continue
-
-            if len(password) < 3:
-                errors.append({'row': i, 'username': username, 'error': 'password must be at least 3 characters'})
-                continue
-
-            if Customer.objects.filter(username=username).exists():
-                errors.append({'row': i, 'username': username, 'error': 'Username already exists'})
-                continue
-
-            plan = BillingPlan.objects.filter(name__iexact=plan_name).first()
-            if not plan:
-                errors.append({'row': i, 'username': username, 'error': f'No billing plan named "{plan_name}"'})
-                continue
-
-            expiry_raw = (row.get('expiry_date') or '').strip()
-            if expiry_raw:
-                try:
-                    expiry_date = timezone.make_aware(datetime.strptime(expiry_raw, '%Y-%m-%d'))
-                except ValueError:
-                    errors.append({'row': i, 'username': username, 'error': 'expiry_date must be YYYY-MM-DD'})
+                if not username or not password or not plan_name:
+                    errors.append({'row': i, 'username': username, 'error': 'username, password and plan_name are required'})
                     continue
-            else:
-                expiry_date = timezone.now() + plan.get_duration_timedelta()
 
-            try:
-                with transaction.atomic():
-                    customer = Customer.objects.create(
-                        username=username,
-                        email=(row.get('email') or '').strip(),
-                        phone_number=phone_number,
-                        first_name=(row.get('first_name') or '').strip(),
-                        last_name=(row.get('last_name') or '').strip(),
-                        service_type='pppoe',
-                        status='pending',
-                        is_verified=True,
-                        pppoe_username=username,
-                        pppoe_password=password,
-                    )
-                    customer.set_password(password)
-                    customer.save()
+                if len(password) < 3:
+                    errors.append({'row': i, 'username': username, 'error': 'password must be at least 3 characters'})
+                    continue
 
-                    Subscription.objects.create(
-                        customer=customer,
-                        plan=plan,
-                        expiry_date=expiry_date,
-                        status='active',
-                    )
-                created.append({'row': i, 'username': username})
-            except Exception as e:
-                errors.append({'row': i, 'username': username, 'error': str(e)})
+                if Customer.objects.filter(username=username).exists():
+                    errors.append({'row': i, 'username': username, 'error': 'Username already exists'})
+                    continue
+
+                plan = BillingPlan.objects.filter(name__iexact=plan_name).first()
+                if not plan:
+                    errors.append({'row': i, 'username': username, 'error': f'No billing plan named "{plan_name}"'})
+                    continue
+
+                expiry_raw = (row.get('expiry_date') or '').strip()
+                if expiry_raw:
+                    try:
+                        expiry_date = timezone.make_aware(datetime.strptime(expiry_raw, '%Y-%m-%d'))
+                    except ValueError:
+                        errors.append({'row': i, 'username': username, 'error': 'expiry_date must be YYYY-MM-DD'})
+                        continue
+                else:
+                    expiry_date = timezone.now() + plan.get_duration_timedelta()
+
+                try:
+                    with transaction.atomic():
+                        customer = Customer.objects.create(
+                            username=username,
+                            email=(row.get('email') or '').strip(),
+                            phone_number=phone_number,
+                            first_name=(row.get('first_name') or '').strip(),
+                            last_name=(row.get('last_name') or '').strip(),
+                            service_type='pppoe',
+                            status='pending',
+                            is_verified=True,
+                            pppoe_username=username,
+                            pppoe_password=password,
+                        )
+                        customer.set_password(password)
+                        customer.save()
+
+                        Subscription.objects.create(
+                            customer=customer,
+                            plan=plan,
+                            expiry_date=expiry_date,
+                            status='active',
+                        )
+                    created.append({'row': i, 'username': username})
+                    created_ids.append(customer.id)
+                except Exception as e:
+                    errors.append({'row': i, 'username': username, 'error': str(e)})
+        finally:
+            suppress.__exit__(None, None, None)
+        if created_ids:
+            # One email for the whole import, not one per customer.
+            transaction.on_commit(lambda: email_new_pppoe_import.delay(created_ids), robust=True)
 
         return Response({
             'success': True,

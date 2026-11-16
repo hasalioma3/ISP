@@ -7,6 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.db import transaction
 from django.utils import timezone
+from django.db.models import F
 from apps.customers.models import Customer
 from apps.customers.serializers import CustomerRegistrationSerializer, CustomerSerializer
 from apps.notifications.tasks import send_welcome_notification
@@ -62,7 +63,9 @@ def login(request):
         if Voucher.objects.filter(code__iexact=username.strip()).exists():
             customer = authenticate(username=username.strip().upper(), password=password.strip().upper())
 
+    from apps.audit.signals import log_login
     if customer:
+        log_login(customer, request)
         from apps.customers.models import LoginActivity
         LoginActivity.objects.create(
             customer=customer,
@@ -88,6 +91,7 @@ def login(request):
             }
         })
     
+    log_login(None, request, success=False, username=username or '')
     return Response({
         'error': 'Invalid credentials'
     }, status=status.HTTP_401_UNAUTHORIZED)
@@ -185,7 +189,7 @@ def _notify_change(*, staff_message, template_key, context, event_type, customer
     """
     After a manual extension or cash credit commits, tell both the customer
     (SMS to their phone) and the manager alert number
-    (NotificationSettings.staff_alert_phone). Queued on commit so nothing is
+    (Settings -> Notifications -> Admin contacts). Queued on commit so nothing is
     sent for a change that rolled back.
     """
     from apps.notifications.tasks import send_customer_account_notice, send_staff_alert
@@ -314,6 +318,73 @@ class SubscriberViewSet(
             qs = qs.filter(created_at__gte=timezone.now() - timezone.timedelta(days=7))
         return qs
 
+    SORTS = {
+        # Subscribers page "Sort" menu. Expiry sorts keep subscribers with no
+        # plan at the end either way (a plain ordering would put them first
+        # when descending).
+        'expiry_asc': lambda: [F('calculated_expiry').asc(nulls_last=True)],
+        'expiry_desc': lambda: [F('calculated_expiry').desc(nulls_last=True)],
+        'created_desc': lambda: ['-created_at'],
+        'created_asc': lambda: ['created_at'],
+    }
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        sort = self.SORTS.get(self.request.query_params.get('sort') or '')
+        # Applied after OrderingFilter, which would otherwise impose the
+        # default '-latest_subscription_at' ordering over it.
+        return queryset.order_by(*sort(), 'id') if sort else queryset
+
+    @action(detail=True, methods=['get'])
+    def live(self, request, pk=None):
+        """
+        This subscriber's session right now, read from their router (for the
+        Usage tab's live graph, polled every few seconds): online, IP, MAC,
+        uptime and cumulative byte counters -- the page turns two readings
+        into a speed. Never waits on a router already known to be offline.
+        """
+        from apps.network.models import ActiveSession
+        from apps.network.services import router_status
+        from apps.network.services.mikrotik_service import MikroTikService
+
+        customer = self.get_object()
+        router = None
+        if hasattr(customer, 'pppoe_secret'):
+            router = customer.pppoe_secret.router
+        elif hasattr(customer, 'hotspot_user'):
+            router = customer.hotspot_user.router
+        if router is None:
+            last = ActiveSession.objects.filter(customer=customer).select_related('router').first()
+            router = last.router if last else None
+        if router is None:
+            return Response({'active': False, 'reason': 'No router is linked to this subscriber.'})
+        base = {'router': router.name, 'service_type': customer.service_type, 'ts': timezone.now()}
+        if router_status.known_offline(router):
+            return Response({**base, 'active': False, 'router_offline': True, 'reason': f'{router.name} is offline.'})
+
+        mikrotik = MikroTikService(host=router.ip_address, username=router.username,
+                                   password=router.password, port=router.port, use_ssl=router.use_ssl)
+        if customer.service_type == 'static':
+            if not customer.static_ip_address:
+                return Response({**base, 'active': False, 'reason': 'No static IP on file.'})
+            res = mikrotik.get_static_sessions([{'username': customer.username, 'ip': str(customer.static_ip_address)}])
+        else:
+            res = mikrotik.get_active_sessions()
+        if not res.get('success'):
+            router_status.mark_offline(router, res.get('error'))
+            return Response({**base, 'active': False, 'router_offline': True, 'reason': res.get('error')})
+
+        names = {n for n in (customer.username, customer.pppoe_username, customer.hotspot_username) if n}
+        session = next((x for x in res['sessions'] if x.get('username') in names), None)
+        if not session or (customer.service_type == 'static' and not session.get('online')):
+            return Response({**base, 'active': False, 'reason': 'Not connected right now.'})
+        return Response({
+            **base, 'active': True,
+            'address': session.get('address'), 'mac_address': session.get('mac_address'),
+            'uptime': session.get('uptime'), 'session_type': session.get('service_type'),
+            'upload_bytes': session.get('upload_bytes', 0), 'download_bytes': session.get('download_bytes', 0),
+        })
+
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """
@@ -385,50 +456,72 @@ class SubscriberViewSet(
     @action(detail=False, methods=['post'], url_path='bulk-reminder')
     def bulk_reminder(self, request):
         """
-        Text the selected subscribers a payment reminder (their plan, amount,
-        expiry and how to pay) by SMS or WhatsApp. `preview: true` returns
-        the message for the first one without sending. Admin/sales/superadmin.
-        Each send is its own Celery task, so a large selection returns at
-        once; every attempt shows up in the notification log.
+        Message the selected subscribers -- POST {ids, channels: [...],
+        message?, preview?}. Without `message` it's their payment reminder
+        (plan, amount, expiry, how to pay); with one it's that text, where
+        {first_name}, {name}, {username}, {company} and {support_phone} are
+        filled in per customer. Channels: sms, whatsapp, email, telegram --
+        each customer gets it on every chosen channel they have an address
+        for. `preview: true` returns the text for the first subscriber.
+        Admin/sales/superadmin; each send is its own Celery task and lands
+        in the notification log.
         """
         from apps.customers.reminders import build_payment_reminder
         from apps.notifications.tasks import send_payment_reminder
+        from apps.notifications.templates import customer_context, fill
 
         user = request.user
         if not (user.is_superuser or user.role in ('admin', 'sales')):
-            return Response({'error': 'Only admins and sales can send payment reminders.'},
+            return Response({'error': 'Only admins and sales can message subscribers.'},
                             status=status.HTTP_403_FORBIDDEN)
-        channel = request.data.get('channel', 'sms')
-        if channel not in ('sms', 'whatsapp', 'email'):
-            return Response({'error': "channel must be 'sms', 'whatsapp' or 'email'."}, status=status.HTTP_400_BAD_REQUEST)
+        channels = request.data.get('channels') or [request.data.get('channel') or 'sms']
+        if isinstance(channels, str):
+            channels = [channels]
+        allowed = ('sms', 'whatsapp', 'email', 'telegram')
+        if not channels or any(c not in allowed for c in channels):
+            return Response({'error': f"channels must be some of {', '.join(allowed)}."}, status=status.HTTP_400_BAD_REQUEST)
         ids = request.data.get('ids') or []
         if not isinstance(ids, list) or not ids:
             return Response({'error': 'Select at least one subscriber.'}, status=status.HTTP_400_BAD_REQUEST)
         if len(ids) > self.BULK_REMINDER_LIMIT:
-            return Response({'error': f'Send at most {self.BULK_REMINDER_LIMIT} reminders at a time.'},
+            return Response({'error': f'Send to at most {self.BULK_REMINDER_LIMIT} subscribers at a time.'},
                             status=status.HTTP_400_BAD_REQUEST)
+        custom = (request.data.get('message') or '').strip() or None
+        if custom:
+            try:
+                fill(custom, customer_context(None))
+            except (ValueError, IndexError) as e:
+                return Response({'error': f'Check the curly braces in the message: {e}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        def text_for(customer):
+            return fill(custom, customer_context(customer)) if custom else build_payment_reminder(customer)
 
         customers = list(Customer.objects.filter(is_staff=False, id__in=ids).order_by('id'))
         if request.data.get('preview'):
             for customer in customers:
-                message = build_payment_reminder(customer)
+                message = text_for(customer)
                 if message:
                     return Response({'preview': message, 'customer': customer.username})
             return Response({'preview': None})
 
-        queued, skipped = [], []
+        address = {
+            'sms': lambda c: c.phone_number, 'whatsapp': lambda c: c.phone_number,
+            'email': lambda c: c.email, 'telegram': lambda c: c.telegram_chat_id,
+        }
+        missing = {'sms': 'phone number', 'whatsapp': 'phone number', 'email': 'email address', 'telegram': 'linked Telegram'}
+        queued, skipped = 0, []
         for customer in customers:
             name = customer.get_full_name() or customer.username
-            if channel == 'email' and not customer.email:
-                skipped.append(f'{name}: no email address')
-            elif channel != 'email' and not customer.phone_number:
-                skipped.append(f'{name}: no phone number')
-            elif not build_payment_reminder(customer):
+            if not custom and not build_payment_reminder(customer):
                 skipped.append(f'{name}: has never had a plan')
-            else:
-                send_payment_reminder.delay(customer.id, channel)
-                queued.append(name)
-        return Response({'queued': len(queued), 'skipped': skipped})
+                continue
+            for channel in channels:
+                if not address[channel](customer):
+                    skipped.append(f'{name}: no {missing[channel]} for {channel}')
+                    continue
+                send_payment_reminder.delay(customer.id, channel, custom)
+                queued += 1
+        return Response({'queued': queued, 'skipped': skipped})
 
     @action(detail=False, methods=['get'])
     def export(self, request):
@@ -546,7 +639,7 @@ class SubscriberViewSet(
                 status=status.HTTP_502_BAD_GATEWAY
             )
 
-        Transaction.objects.create(
+        manual_txn = Transaction.objects.create(
             customer=customer,
             subscription=subscription,
             transaction_id='TOPUP-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=10)),
@@ -558,6 +651,9 @@ class SubscriberViewSet(
                 + (f" (KES {credited} credited to balance from previous plan)" if credited else "")
             )
         )
+        # Superadmins get an email for every manual top-up (Settings -> Notifications).
+        from apps.notifications.admin_emails import email_manual_topup
+        transaction.on_commit(lambda: email_manual_topup.delay(manual_txn.id), robust=True)
 
         expires = timezone.localtime(subscription.expiry_date).strftime('%d %b %Y %H:%M')
         _notify_change(
@@ -641,7 +737,7 @@ class SubscriberViewSet(
         customer.account_balance += amount
         customer.save(update_fields=['account_balance'])
 
-        Transaction.objects.create(
+        manual_txn = Transaction.objects.create(
             customer=customer,
             transaction_id='BAL-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=10)),
             amount=amount,
@@ -649,6 +745,9 @@ class SubscriberViewSet(
             status='completed',
             notes=f"Manual balance top-up by {request.user.username}",
         )
+        # Superadmins get an email for every manual cash credit (Settings -> Notifications).
+        from apps.notifications.admin_emails import email_manual_topup
+        transaction.on_commit(lambda: email_manual_topup.delay(manual_txn.id), robust=True)
         _notify_change(
             staff_message=(
                 f"{request.user.username} added KES {amount} cash to "

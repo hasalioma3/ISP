@@ -20,6 +20,8 @@ class NotificationSettingsSerializer(serializers.ModelSerializer):
     telegram_bot_token_is_set = serializers.SerializerMethodField()
     telegram_webhook_secret_is_set = serializers.SerializerMethodField()
     smtp_password_is_set = serializers.SerializerMethodField()
+    superadmin_recipients = serializers.SerializerMethodField()
+    reminder_schedule = serializers.SerializerMethodField()
 
     class Meta:
         model = NotificationSettings
@@ -28,7 +30,7 @@ class NotificationSettingsSerializer(serializers.ModelSerializer):
             'whatsapp_enabled', 'whatsapp_sender_number', 'whatsapp_provider', 'whatsapp_at_number',
             'telegram_bot_token', 'telegram_webhook_secret', 'telegram_bot_username',
             'telegram_bot_token_is_set', 'telegram_webhook_secret_is_set',
-            'staff_alert_phone', 'staff_alert_channel', 'staff_alert_email', 'confirmation_service_types',
+            'admin_phones', 'admin_emails', 'admin_phone_channels', 'confirmation_service_types', 'admin_event_emails', 'daily_report_enabled', 'confirmation_channels', 'confirmation_sms_fallback', 'reminder_enabled', 'reminder_days_before', 'reminder_every_days', 'reminder_on_expiry_day', 'reminder_hour', 'reminder_service_types', 'reminder_channels', 'reminder_sms_fallback', 'reminder_schedule', 'sales_phones', 'sales_emails', 'expired_followup_enabled', 'expired_followup_hour', 'superadmin_recipients',
             'email_enabled', 'smtp_provider', 'smtp_host', 'smtp_port', 'smtp_security',
             'smtp_username', 'smtp_password', 'smtp_password_is_set', 'email_from_address', 'email_from_name',
             'updated_at',
@@ -46,6 +48,78 @@ class NotificationSettingsSerializer(serializers.ModelSerializer):
 
     def get_smtp_password_is_set(self, obj):
         return bool(obj.smtp_password)
+
+    def get_superadmin_recipients(self, obj):
+        # Superadmin profile emails, which always get admin emails too.
+        from apps.notifications.admin_emails import superadmin_emails
+        return superadmin_emails()
+
+    def validate_admin_emails(self, value):
+        from django.core.validators import validate_email
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        emails = NotificationSettings._split(value)
+        bad = []
+        for e in emails:
+            try:
+                validate_email(e)
+            except DjangoValidationError:
+                bad.append(e)
+        if bad:
+            raise serializers.ValidationError(f"Not valid email address(es): {', '.join(bad)}")
+        return '\n'.join(dict.fromkeys(e.lower() for e in emails))
+
+    def validate_admin_phones(self, value):
+        from apps.payments.services.phone_hash import normalize_phone
+        phones = NotificationSettings._split(value)
+        bad = [p for p in phones if not (normalize_phone(p).isdigit() and len(normalize_phone(p)) == 12)]
+        if bad:
+            raise serializers.ValidationError(f"Not valid phone number(s): {', '.join(bad)} (use 07XXXXXXXX or 2547XXXXXXXX)")
+        return '\n'.join(dict.fromkeys(phones))
+
+    def validate_sales_emails(self, value):
+        return self.validate_admin_emails(value)
+
+    def validate_sales_phones(self, value):
+        return self.validate_admin_phones(value)
+
+    def validate_expired_followup_hour(self, value):
+        return self.validate_reminder_hour(value)
+
+    def get_reminder_schedule(self, obj):
+        # Days before expiry that currently get a reminder, for the settings page.
+        return obj.reminder_offsets()
+
+    def validate_reminder_channels(self, value):
+        return self.validate_confirmation_channels(value)
+
+    def validate_reminder_days_before(self, value):
+        if value > 60:
+            raise serializers.ValidationError('At most 60 days before expiry.')
+        return value
+
+    def validate_reminder_every_days(self, value):
+        if not 1 <= value <= 60:
+            raise serializers.ValidationError('Repeat every 1 to 60 days.')
+        return value
+
+    def validate_reminder_hour(self, value):
+        if value > 23:
+            raise serializers.ValidationError('Hour must be 0-23.')
+        return value
+
+    def validate_reminder_service_types(self, value):
+        types = [t for t in NotificationSettings._split(value) if t in ('pppoe', 'static', 'hotspot')]
+        return ','.join(dict.fromkeys(types))
+
+    def validate_confirmation_channels(self, value):
+        channels = [c for c in NotificationSettings._split(value) if c in ('sms', 'whatsapp', 'email')]
+        if not channels:
+            raise serializers.ValidationError('Choose at least one channel for confirmations.')
+        return ','.join(dict.fromkeys(channels))
+
+    def validate_admin_phone_channels(self, value):
+        channels = [c for c in NotificationSettings._split(value) if c in ('sms', 'whatsapp')]
+        return ','.join(dict.fromkeys(channels))
 
     def validate_at_api_key(self, value):
         # A truncated paste (e.g. the first 9 characters) saved silently

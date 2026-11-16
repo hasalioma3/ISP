@@ -72,6 +72,45 @@ class NotificationSettings(models.Model):
     # captive portal, and texting every KES 10 voucher-sized purchase costs
     # more in SMS than it's worth. 'both' counts as PPPoE.
     confirmation_service_types = models.CharField(max_length=50, default='pppoe', blank=True)
+    # How confirmations go out (comma list of sms/whatsapp/email). WhatsApp
+    # by default; when every chosen channel fails (e.g. WhatsApp not paired)
+    # and the fallback is on, SMS is tried so the customer still hears back.
+    confirmation_channels = models.CharField(max_length=30, default='whatsapp', blank=True)
+    confirmation_sms_fallback = models.BooleanField(default=True)
+
+    # --- Renewal (expiry) reminders ---
+    # First reminder `reminder_days_before` days before expiry, then every
+    # `reminder_every_days` days, plus one on the expiry day if enabled --
+    # the defaults (3, 3, day-of) are the original "3 days out + day of".
+    # Checked hourly; sent at `reminder_hour` (Nairobi time).
+    reminder_enabled = models.BooleanField(default=True)
+    reminder_days_before = models.PositiveSmallIntegerField(default=3)
+    reminder_every_days = models.PositiveSmallIntegerField(default=3)
+    reminder_on_expiry_day = models.BooleanField(default=True)
+    reminder_hour = models.PositiveSmallIntegerField(default=8)
+    reminder_service_types = models.CharField(max_length=50, default='pppoe,static', blank=True)
+    reminder_channels = models.CharField(max_length=30, default='whatsapp', blank=True)
+    reminder_sms_fallback = models.BooleanField(default=True)
+
+    def reminder_offsets(self):
+        """Days-before-expiry that get a reminder, e.g. [3, 0] or [7, 5, 3, 1, 0]."""
+        every = max(1, self.reminder_every_days or 1)
+        days = set(range(self.reminder_days_before, -1, -every)) if self.reminder_days_before else set()
+        if self.reminder_on_expiry_day:
+            days.add(0)
+        return sorted(days, reverse=True)
+
+    def reminder_channel_list(self):
+        chosen = [c.strip() for c in (self.reminder_channels or '').split(',') if c.strip()]
+        return [c for c in chosen if c in ('sms', 'whatsapp', 'email')] or ['sms']
+
+    def reminder_service_type_list(self):
+        types = [t.strip() for t in (self.reminder_service_types or '').split(',') if t.strip()]
+        return types + (['both'] if 'pppoe' in types or 'hotspot' in types else [])
+
+    def confirmation_channel_list(self):
+        chosen = [c.strip() for c in (self.confirmation_channels or '').split(',') if c.strip()]
+        return [c for c in chosen if c in ('sms', 'whatsapp', 'email')] or ['sms']
 
     def confirmations_enabled_for(self, service_type):
         allowed = {t.strip() for t in (self.confirmation_service_types or '').split(',') if t.strip()}
@@ -79,15 +118,54 @@ class NotificationSettings(models.Model):
             return bool(allowed & {'pppoe', 'hotspot'})
         return service_type in allowed
 
+    # --- Superadmin emails (to every superuser with an email address) ---
+    # Event emails: vouchers generated, new PPPoE customer, manual top-up.
+    admin_event_emails = models.BooleanField(default=True)
+    # Daily sales & revenue report, sent at 23:00 EAT.
+    daily_report_enabled = models.BooleanField(default=True)
+
     # --- Staff alerts ---
     # A manager's number that gets a message whenever staff extend a
     # subscription or record cash on an account, so money-affecting manual
     # actions never happen unnoticed. Blank = off.
-    STAFF_ALERT_CHANNEL_CHOICES = [('sms', 'SMS'), ('whatsapp', 'WhatsApp'), ('email', 'Email')]
-    staff_alert_phone = models.CharField(max_length=20, blank=True)
-    # Used instead of the phone when staff_alert_channel is 'email'.
-    staff_alert_email = models.EmailField(blank=True)
-    staff_alert_channel = models.CharField(max_length=10, choices=STAFF_ALERT_CHANNEL_CHOICES, default='sms')
+    # Admin contacts: everyone here gets every admin notification -- staff
+    # alerts (extensions, cash), the daily report and the event notices.
+    # Phones get a short text on each channel in admin_phone_channels;
+    # emails get the full email. One entry per line (commas also accepted).
+    # Superadmins' profile emails are always included as well.
+    admin_phones = models.TextField(blank=True)
+    admin_emails = models.TextField(blank=True)
+    admin_phone_channels = models.CharField(max_length=30, default='sms', blank=True)
+
+    @staticmethod
+    def _split(value):
+        import re
+        return [v for v in (x.strip() for x in re.split(r'[\n,;]+', value or '')) if v]
+
+    def phone_list(self):
+        return list(dict.fromkeys(self._split(self.admin_phones)))
+
+    def email_list(self):
+        return list(dict.fromkeys(e.lower() for e in self._split(self.admin_emails)))
+
+    def phone_channels(self):
+        return [c for c in self._split(self.admin_phone_channels) if c in ('sms', 'whatsapp')]
+
+    # Sales contacts: only get the "expired today" follow-up list (below), not
+    # every admin notice. Same format as the admin contacts; phones use the
+    # admin phone channels.
+    sales_phones = models.TextField(blank=True)
+    sales_emails = models.TextField(blank=True)
+    # Daily list of customers whose plan ran out today and who haven't
+    # renewed, sent to admin and sales contacts at expired_followup_hour.
+    expired_followup_enabled = models.BooleanField(default=True)
+    expired_followup_hour = models.PositiveSmallIntegerField(default=20)
+
+    def sales_phone_list(self):
+        return list(dict.fromkeys(self._split(self.sales_phones)))
+
+    def sales_email_list(self):
+        return list(dict.fromkeys(e.lower() for e in self._split(self.sales_emails)))
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -128,6 +206,8 @@ class NotificationLog(models.Model):
     EVENT_TYPE_CHOICES = [
         ('expiry_reminder_3day', 'Expiry Reminder (3 days out)'),
         ('expiry_reminder_dayof', 'Expiry Reminder (day of)'),
+        ('expiry_reminder', 'Renewal Reminder'),
+        ('expired_followup', 'Expired Today (follow-up list)'),
         ('payment_confirmation', 'Payment Confirmation'),
         ('balance_credit', 'Balance Credit (payment applied to balance, no plan)'),
         ('welcome', 'Welcome Message'),
@@ -138,6 +218,10 @@ class NotificationLog(models.Model):
         ('staff_alert', 'Staff Alert (manual extension / cash)'),
         ('subscription_extended', 'Subscription Extended by Staff'),
         ('payment_reminder', 'Payment Reminder (sent by staff)'),
+        ('daily_report', 'Daily Sales Report (superadmins)'),
+        ('admin_event', 'Superadmin Event Email'),
+        ('voucher_batch_sent', 'Vouchers sent to sales'),
+        ('custom_message', 'Message sent by staff'),
     ]
 
     STATUS_CHOICES = [

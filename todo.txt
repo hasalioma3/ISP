@@ -13,6 +13,10 @@
 4. send super admin an email when a voucher is generated, with the details of the voucher or a new PPPoE customer registers, or a Manual top-up is made.
 5. add sorting of subscribers based on the subscription expiry date/creation date.
 
-
+1. Add invoice feature where an Invoice can be generated for a payment made by a PPPoE customer(have templates to choose and different designs like in Quickbooks)
+2. Add intergration with etims(KRA) to sign the invoices if required.
+3. during backup, Router TEST: export did not run: 'id' error.
+4. do not send payment failed messages to hotspot customers
+5. auto resolve this error by adding 254 before the number, do it for all the places where a phone number is require(invalid phone number '725316559' (expected 07XXXXXXXX / 2547XXXXXXXX))
 
 1. change login so that an email address login is enabled, to setup a user, an email with the login credentials are sent.

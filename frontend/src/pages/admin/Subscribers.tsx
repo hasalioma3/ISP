@@ -11,6 +11,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useSites } from '../../hooks/useSites';
 import SubscriberDetailModal from '../../components/SubscriberDetailModal';
 import ExportMenu from '../../components/ExportMenu';
+import SendMessageDialog from '../../components/SendMessageDialog';
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
@@ -87,9 +88,8 @@ export default function Subscribers() {
     const [bulkBusy, setBulkBusy] = useState<'stk' | 'renew' | null>(null);
     // SMS/WhatsApp reminder dialog for the selection.
     const [reminderOpen, setReminderOpen] = useState(false);
-    const [reminderChannel, setReminderChannel] = useState<'sms' | 'whatsapp' | 'email'>('sms');
-    const [reminderPreview, setReminderPreview] = useState<string | null | undefined>(undefined);
-    const [reminderSending, setReminderSending] = useState(false);
+    // "Sort" menu: server-side sort by expiry or creation date ('' = default).
+    const [sort, setSort] = useState('');
 
     // Debounce typing so every keystroke isn't a query.
     useEffect(() => {
@@ -120,13 +120,14 @@ export default function Subscribers() {
     });
 
     const { data, isLoading, isError, error } = useQuery({
-        queryKey: ['admin-subscribers', filters, activeTab, sortField, sortDesc, page, pageSize],
+        queryKey: ['admin-subscribers', filters, activeTab, sortField, sortDesc, sort, page, pageSize],
         queryFn: async () => (await adminAPI.getSubscribers({
             ...filters,
             status: ['active', 'expired', 'suspended'].includes(activeTab) ? activeTab : undefined,
             expiring: activeTab === 'expiring' ? 'true' : undefined,
             is_new: activeTab === 'new' ? 'true' : undefined,
-            ordering: sortField ? `${sortDesc ? '-' : ''}${sortField}` : undefined,
+            ordering: !sort && sortField ? `${sortDesc ? '-' : ''}${sortField}` : undefined,
+            sort: sort || undefined,
             page,
             page_size: pageSize,
         })).data,
@@ -157,6 +158,7 @@ export default function Subscribers() {
     const selectTab = (key: TabKey) => { setActiveTab(key); setPage(1); };
 
     const toggleSort = (field: SortField) => {
+        setSort('');
         if (sortField === field) setSortDesc(!sortDesc);
         else { setSortField(field); setSortDesc(true); }
     };
@@ -194,40 +196,13 @@ export default function Subscribers() {
     // Reminders go out to customers, so admins/sales/superadmin only (API enforces it too).
     const canRemind = !!user?.is_superuser || ['admin', 'sales'].includes(user?.role || '');
 
-    const openReminder = async () => {
-        setReminderOpen(true);
-        setReminderPreview(undefined);
-        try {
-            const res = await adminAPI.bulkReminder(selectedRows.map((r) => r.id), reminderChannel, true);
-            setReminderPreview(res.data.preview);
-        } catch (err: any) {
-            setReminderPreview(null);
-            toast.error(err.response?.data?.error || 'Could not prepare the reminder');
-        }
-    };
-
-    const sendReminder = async () => {
-        setReminderSending(true);
-        try {
-            const res = await adminAPI.bulkReminder(selectedRows.map((r) => r.id), reminderChannel);
-            const { queued = 0, skipped = [] } = res.data;
-            if (queued) toast.success(`${queued} reminder${queued === 1 ? '' : 's'} sending by ${reminderChannel === 'sms' ? 'SMS' : reminderChannel === 'whatsapp' ? 'WhatsApp' : 'email'}`);
-            skipped.forEach((msg: string) => toast.error(msg, { duration: 6000 }));
-            setReminderOpen(false);
-            setSelected({});
-        } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Could not send reminders');
-        } finally {
-            setReminderSending(false);
-        }
-    };
-
     // Same filters/tab as the table, for "Export" with nothing selected.
     const exportParams = {
         ...filters,
         status: ['active', 'expired', 'suspended'].includes(activeTab) ? activeTab : undefined,
         expiring: activeTab === 'expiring' ? 'true' : undefined,
         is_new: activeTab === 'new' ? 'true' : undefined,
+        sort: sort || undefined,
     };
 
     const renewSelected = async () => {
@@ -387,6 +362,21 @@ export default function Subscribers() {
                                 <option value="pppoe">PPPoE</option>
                                 <option value="hotspot">Hotspot</option>
                                 <option value="static">Static</option>
+                            </select>
+                        </label>
+                        <label className="relative">
+                            <span className="sr-only">Sort</span>
+                            <ArrowUpDown className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-foreground" />
+                            <select
+                                value={sort}
+                                onChange={(e) => { setSort(e.target.value); setSortField(''); setPage(1); }}
+                                className={selectClass}
+                            >
+                                <option value="">Sort: Recent activity</option>
+                                <option value="expiry_asc">Expiry: soonest first</option>
+                                <option value="expiry_desc">Expiry: latest first</option>
+                                <option value="created_desc">Created: newest first</option>
+                                <option value="created_asc">Created: oldest first</option>
                             </select>
                         </label>
                         <ExportMenu
@@ -552,10 +542,10 @@ export default function Subscribers() {
                             </button>}
                             {canRemind && (
                                 <button
-                                    onClick={openReminder}
+                                    onClick={() => setReminderOpen(true)}
                                     className="flex h-10 items-center gap-2 rounded-full border border-white/25 px-4 text-[14px] font-semibold hover:bg-white/10"
                                 >
-                                    <MessageSquare className="h-4 w-4" /> Send reminder
+                                    <MessageSquare className="h-4 w-4" /> Send message
                                 </button>
                             )}
                             <ExportMenu
@@ -610,64 +600,11 @@ export default function Subscribers() {
             </Panel>
 
             {reminderOpen && (
-                <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="reminder-title">
-                    <div className="w-full max-w-lg rounded-card border border-border bg-card p-6 shadow-card">
-                        <div className="mb-4 flex items-start justify-between gap-3">
-                            <div>
-                                <h2 id="reminder-title" className="text-[18px] font-bold text-foreground">Send payment reminder</h2>
-                                <p className="text-[13px] text-muted-foreground">
-                                    To {selectedRows.length} subscriber{selectedRows.length === 1 ? '' : 's'}. Each gets their own plan, amount and expiry.
-                                </p>
-                            </div>
-                            <button onClick={() => setReminderOpen(false)} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-accent">
-                                <X className="h-4 w-4" />
-                            </button>
-                        </div>
-
-                        <div className="mb-4 inline-flex rounded-full bg-chip p-1" role="radiogroup" aria-label="Send by">
-                            {(['sms', 'whatsapp', 'email'] as const).map((c) => (
-                                <button
-                                    key={c}
-                                    role="radio"
-                                    aria-checked={reminderChannel === c}
-                                    onClick={() => setReminderChannel(c)}
-                                    className={cn(
-                                        'h-8 rounded-full px-4 text-[13px] font-semibold',
-                                        reminderChannel === c ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
-                                    )}
-                                >
-                                    {c === 'sms' ? 'SMS' : c === 'whatsapp' ? 'WhatsApp' : 'Email'}
-                                </button>
-                            ))}
-                        </div>
-
-                        <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-faint">Preview (first subscriber)</p>
-                        <div className="min-h-[72px] rounded-2xl bg-surface2 p-4 text-[14px] leading-relaxed text-foreground">
-                            {reminderPreview === undefined ? (
-                                <span className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Preparing…</span>
-                            ) : reminderPreview ?? (
-                                <span className="text-muted-foreground">None of the selected subscribers has a plan to remind them about.</span>
-                            )}
-                        </div>
-                        <p className="mt-2 text-[12.5px] text-muted-foreground">
-                            Subscribers without a phone number (or email address, for Email) or a plan are skipped and listed after sending.
-                        </p>
-
-                        <div className="mt-5 flex justify-end gap-2">
-                            <button onClick={() => setReminderOpen(false)} className="h-10 rounded-full border border-input px-5 text-[14px] font-semibold text-foreground hover:bg-accent">
-                                Cancel
-                            </button>
-                            <button
-                                onClick={sendReminder}
-                                disabled={reminderSending || !reminderPreview}
-                                className="flex h-10 items-center gap-2 rounded-full bg-primary px-5 text-[14px] font-semibold text-primary-foreground disabled:opacity-60"
-                            >
-                                {reminderSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
-                                Send to {selectedRows.length}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <SendMessageDialog
+                    ids={selectedRows.map((r) => r.id)}
+                    onClose={() => setReminderOpen(false)}
+                    onSent={() => { setReminderOpen(false); setSelected({}); }}
+                />
             )}
 
             {selectedId !== null && (

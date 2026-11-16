@@ -17,6 +17,7 @@ services:
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/mediafiles
+      - backup_volume:/backups
     env_file:
       - companies/${COMPANY_SLUG}.env
     restart: always
@@ -48,6 +49,8 @@ services:
     command: celery -A isp_billing worker -l info
     volumes:
       - media_volume:/app/mediafiles
+      - backup_volume:/backups
+      - whatsapp_session:/whatsapp_auth:ro
     env_file:
       - companies/${COMPANY_SLUG}.env
     depends_on:
@@ -89,3 +92,4 @@ volumes:
   static_volume:
   media_volume:
   whatsapp_session:
+  backup_volume:

@@ -1,6 +1,6 @@
 import logging
 import time
-from datetime import timedelta
+from datetime import datetime, time as dtime, timedelta
 from decimal import Decimal
 
 from celery import shared_task
@@ -31,8 +31,20 @@ def _log(*, customer, subscription, event_type, phone, message, result):
     )
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def send_payment_confirmation_sms(self, customer_id, event_type, amount, subscription_id=None):
+def send_confirmation(customer, message, event_type, subscription=None):
+    """
+    Deliver a confirmation on the channels chosen in Settings ->
+    Notifications -> Payment confirmations (WhatsApp by default). If none of
+    them got through and the SMS fallback is on, try SMS. Every attempt is
+    in the notification log. Returns True if any channel delivered it.
+    """
+    settings_obj = NotificationSettings.load()
+    return send_with_fallback(customer, message, event_type, settings_obj.confirmation_channel_list(),
+                              settings_obj.confirmation_sms_fallback, subscription=subscription)
+
+
+@shared_task
+def send_payment_confirmation_sms(customer_id, event_type, amount, subscription_id=None):
     """
     Confirms a completed M-Pesa payment by SMS -- enqueued from
     payment_processor.py after a successful STK/C2B payment, via
@@ -73,78 +85,224 @@ def send_payment_confirmation_sms(self, customer_id, event_type, amount, subscri
         event_type = 'balance_credit'
         message = render('balance_credit', {'amount': amount, 'balance': customer.account_balance}, customer)
 
-    result = AfricasTalkingService().send_sms(customer.phone_number, message)
+    send_confirmation(customer, message, event_type, subscription)
 
-    # send_sms never raises -- a transient failure (network/timeout) shows
-    # up as data=None, distinct from AT explicitly rejecting the recipient
-    # (data present, just not a 'Success' status, which retrying won't fix).
-    # Only the former is worth retrying -- not a config_error (missing
-    # credentials / bad number), which fails without ever reaching AT.
-    if (not result['success'] and result.get('data') is None and not result.get('config_error')
-            and self.request.retries < self.max_retries):
-        self.retry(exc=Exception(result.get('error', 'SMS send failed')))
-        return
+def send_with_fallback(customer, message, event_type, channels, sms_fallback, subscription=None):
+    """
+    Send `message` to the customer on each channel in `channels` they have an
+    address for; if none delivered and sms_fallback is on, try SMS. Every
+    attempt is in the notification log. Returns True if anything got through.
+    """
+    delivered = False
+    for channel in channels:
+        recipient = customer.email if channel == 'email' else customer.phone_number
+        if not recipient:
+            continue
+        result = send_and_log(channel=channel, recipient=recipient, message=message, event_type=event_type,
+                              customer=customer, subscription=subscription)
+        delivered = delivered or result['success']
+    if not delivered and sms_fallback and 'sms' not in channels and customer.phone_number:
+        logger.info(f"{event_type} for {customer.username} not delivered on {channels}; falling back to SMS")
+        delivered = send_and_log(channel='sms', recipient=customer.phone_number, message=message,
+                                 event_type=event_type, customer=customer, subscription=subscription)['success']
+    return delivered
 
-    _log(
-        customer=customer, subscription=subscription, event_type=event_type,
-        phone=customer.phone_number, message=message, result=result,
-    )
+
+def _reminder_when(days_left, expiry):
+    local = timezone.localtime(expiry)
+    if days_left == 0:
+        return f"expires today at {local.strftime('%H:%M')}"
+    if days_left == 1:
+        return f"expires tomorrow ({local.strftime('%d %b, %H:%M')})"
+    return f"expires in {days_left} days (on {local.strftime('%d %b')})"
 
 
 @shared_task
-def send_expiry_reminders():
+def send_expiry_reminders(force=False):
     """
-    Two-stage reminder, checked in one daily pass: subscriptions expiring
-    in exactly 3 days get 'expiry_reminder_3day', subscriptions expiring
-    today get 'expiry_reminder_dayof'. Dedup is via NotificationLog (has a
-    'sent' row for this subscription+stage+today already?) rather than a
-    flag on Subscription, so a renewal naturally opens a fresh window
-    without needing a reset step. Scheduled in celery.py.
+    Renewal reminders, as set in Settings -> Notifications -> Renewal
+    reminders: the first `reminder_days_before` days before expiry, then
+    every `reminder_every_days` days, plus one on the expiry day itself
+    (NotificationSettings.reminder_offsets). Runs hourly from beat and only
+    does anything in the configured hour, so changing the send time in the
+    UI needs no beat change; `force` skips the hour check (tests/manual runs).
+
+    Only the customer's latest live subscription is reminded -- someone who
+    already renewed (a later subscription is queued/active) isn't nagged
+    about the old one. Dedup is one 'expiry_reminder' log row per
+    subscription per day, so a re-run in the same hour never double-sends,
+    and a renewal opens a fresh window by itself.
     """
     from apps.billing.models import Subscription
 
-    today = timezone.now().date()
-    stages = {
-        'expiry_reminder_3day': today + timedelta(days=3),
-        'expiry_reminder_dayof': today,
-    }
+    ns = NotificationSettings.load()
+    if not ns.reminder_enabled:
+        return 0
+    now = timezone.localtime()
+    if not force and now.hour != ns.reminder_hour:
+        return 0
+    offsets = ns.reminder_offsets()
+    if not offsets:
+        return 0
+    today = now.date()
+    targets = {today + timedelta(days=d): d for d in offsets}
 
-    # Not filtered to status='active' -- check_expired_subscriptions (runs
-    # every minute, see celery.py) flips a subscription to 'expired' the
-    # instant its expiry_date passes, so a subscription expiring earlier
-    # today would already be 'expired' by the time this runs, and a
-    # status='active' filter would silently skip its day-of reminder.
-    # 'cancelled'/'suspended' are excluded -- those aren't a plain expiry.
-    subs = Subscription.objects.filter(
-        status__in=['active', 'expired'], expiry_date__date__in=stages.values()
-    ).select_related('customer', 'plan')
+    # 'expired' too: check_expired_subscriptions flips a subscription the
+    # minute it passes expiry, so one that ran out this morning would
+    # otherwise miss its day-of reminder.
+    subs = (
+        Subscription.objects.filter(status__in=['active', 'expired'])
+        .filter(plan__service_type__in=ns.reminder_service_type_list())
+        .select_related('customer', 'plan')
+    )
+    # expiry_date__date uses the DB/UTC date on some backends; compare in
+    # Nairobi time in Python over a slightly wider window instead.
+    lo = timezone.make_aware(datetime.combine(min(targets), dtime.min)) - timedelta(days=1)
+    hi = timezone.make_aware(datetime.combine(max(targets), dtime.max)) + timedelta(days=1)
+    subs = subs.filter(expiry_date__gte=lo, expiry_date__lte=hi)
 
+    from apps.notifications.templates import render
+    from apps.customers.reminders import how_to_pay
+
+    channels = ns.reminder_channel_list()
     sent_count = 0
     for sub in subs:
-        for event_type, target_date in stages.items():
-            if sub.expiry_date.date() != target_date:
-                continue
+        days_left = targets.get(timezone.localtime(sub.expiry_date).date())
+        if days_left is None:
+            continue
+        # Already renewed: a later subscription exists for this customer.
+        if Subscription.objects.filter(
+            customer=sub.customer, status__in=['active', 'pending'], expiry_date__gt=sub.expiry_date
+        ).exclude(pk=sub.pk).exists():
+            continue
+        if NotificationLog.objects.filter(
+            subscription=sub, event_type='expiry_reminder', created_at__date=today
+        ).exists():
+            continue
+        price = f"KES {sub.plan.price:,.0f}"
+        message = render('expiry_reminder', {
+            'plan': sub.plan.name,
+            'when': _reminder_when(days_left, sub.expiry_date),
+            'days_left': days_left,
+            'expiry': timezone.localtime(sub.expiry_date).strftime('%d %b %Y %H:%M'),
+            'price': price,
+            'how_to_pay': how_to_pay(sub.customer, price),
+        }, sub.customer)
+        if send_with_fallback(sub.customer, message, 'expiry_reminder', channels,
+                              ns.reminder_sms_fallback, subscription=sub):
+            sent_count += 1
 
-            already_sent = NotificationLog.objects.filter(
-                subscription=sub, event_type=event_type, created_at__date=today, status='sent'
-            ).exists()
-            if already_sent:
-                continue
-
-            message = (
-                f"Your {sub.plan.name} plan expires on {sub.expiry_date.strftime('%d %b')}. "
-                f"Renew via M-Pesa or the customer portal to avoid disconnection."
-            )
-            result = AfricasTalkingService().send_sms(sub.customer.phone_number, message)
-            _log(
-                customer=sub.customer, subscription=sub, event_type=event_type,
-                phone=sub.customer.phone_number, message=message, result=result,
-            )
-            if result['success']:
-                sent_count += 1
-
-    logger.info(f"send_expiry_reminders: sent {sent_count} reminders")
+    logger.info(f"send_expiry_reminders: sent {sent_count} reminders (days before: {offsets})")
     return sent_count
+
+
+def expired_today(day=None):
+    """
+    Subscriptions that ran out on `day` (default today, Nairobi time) whose
+    customer hasn't renewed since -- the sales follow-up list.
+
+    PPPoE only: hotspot users are walk-up/voucher buyers with no account to
+    chase (and are most of the expiries, which would bury the real
+    follow-ups), and static-IP customers are excluded too, as asked.
+    """
+    from apps.billing.models import Subscription
+
+    day = day or timezone.localdate()
+    start = timezone.make_aware(datetime.combine(day, dtime.min))
+    end = min(start + timedelta(days=1), timezone.now())
+    rows = []
+    seen = set()
+    subs = (
+        Subscription.objects.filter(expiry_date__gte=start, expiry_date__lt=end, plan__service_type='pppoe')
+        .exclude(status='cancelled')
+        .select_related('customer', 'plan').order_by('expiry_date')
+    )
+    for sub in subs:
+        c = sub.customer
+        if c.id in seen or c.is_staff:
+            continue
+        if Subscription.objects.filter(customer=c, status__in=['active', 'pending'],
+                                       expiry_date__gt=timezone.now()).exists():
+            continue  # renewed already
+        seen.add(c.id)
+        rows.append({
+            'name': c.get_full_name() or c.username,
+            'username': c.username,
+            'phone': c.phone_number or '',
+            'plan': sub.plan.name,
+            'service_type': sub.plan.service_type,
+            'price': sub.plan.price,
+            'expired_at': timezone.localtime(sub.expiry_date).strftime('%H:%M'),
+        })
+    return rows
+
+
+@shared_task
+def send_expired_followup(force=False):
+    """
+    Evening list of customers who expired today and haven't renewed, to the
+    admin contacts and the sales contacts so someone can call them. Runs
+    hourly from beat; sends in expired_followup_hour, once a day (dedup on
+    the log). Nothing is sent on a day with no expiries.
+    """
+    import csv
+    import io
+    from apps.notifications.admin_emails import admin_email_recipients, _html_page, _company
+    from apps.notifications.services.email_service import EmailService
+
+    ns = NotificationSettings.load()
+    if not ns.expired_followup_enabled:
+        return 0
+    now = timezone.localtime()
+    if not force and now.hour != ns.expired_followup_hour:
+        return 0
+    if not force and NotificationLog.objects.filter(
+        event_type='expired_followup', created_at__date=now.date()
+    ).exists():
+        return 0
+    rows = expired_today(now.date())
+    if not rows:
+        logger.info("send_expired_followup: no unrenewed expiries today")
+        return 0
+
+    day = now.strftime('%d %b %Y')
+    subject = f"{len(rows)} customer{'s' if len(rows) != 1 else ''} expired today ({day}) - follow up"
+    cols = ['Name', 'Username', 'Phone', 'Plan', 'Type', 'Price', 'Expired at']
+    table = [[r['name'], r['username'], r['phone'], r['plan'], r['service_type'].upper(),
+              f"KES {r['price']:,.0f}", r['expired_at']] for r in rows]
+    text = subject + '\n\n' + '\n'.join(
+        f"- {r['name']} ({r['username']}) {r['phone']} - {r['plan']}, expired {r['expired_at']}" for r in rows)
+    html = _html_page(f'Expired today - {day}',
+                      'These customers\' plans ran out today and they have not renewed yet.',
+                      [(None, cols, table)])
+    buf = io.StringIO()
+    csv.writer(buf).writerows([cols] + table)
+    attachments = [(f"expired_{now.strftime('%Y%m%d')}.csv", buf.getvalue(), 'text/csv')]
+
+    # Phones get a compact list; long lists are cut to keep SMS cost sane.
+    lines = [f"{r['name']} {r['phone']} ({r['plan']})" for r in rows[:15]]
+    if len(rows) > 15:
+        lines.append(f"+{len(rows) - 15} more (see email)")
+    short = f"{_company()}: {len(rows)} expired today, not renewed:\n" + '\n'.join(lines)
+
+    delivered = 0
+    emails = list(dict.fromkeys(admin_email_recipients() + ns.sales_email_list())) if ns.email_enabled else []
+    if emails:
+        service = EmailService()
+        for recipient in emails:
+            result = service.send_email(recipient, text, subject=subject, html=html, attachments=attachments)
+            NotificationLog.objects.create(
+                channel='email', event_type='expired_followup', recipient=recipient,
+                message=text[:5000], status='sent' if result['success'] else 'failed',
+                error='' if result['success'] else str(result.get('error', '')),
+            )
+            delivered += bool(result['success'])
+    for phone in dict.fromkeys(ns.phone_list() + ns.sales_phone_list()):
+        for channel in ns.phone_channels():
+            delivered += bool(send_and_log(channel=channel, recipient=phone, message=short,
+                                           event_type='expired_followup')['success'])
+    logger.info(f"send_expired_followup: {len(rows)} customers, {delivered} deliveries")
+    return delivered
 
 
 @shared_task
@@ -344,25 +502,17 @@ def send_voucher_notification(voucher_id, recipient, channel, customer_id=None):
 @shared_task
 def send_staff_alert(message, customer_id=None, subscription_id=None):
     """
-    Tell the configured manager number (NotificationSettings.staff_alert_phone)
+    Tell every admin contact (Settings -> Notifications -> Admin contacts)
     about a money-affecting manual action: a subscription extended or cash
-    added to an account. Enqueued with transaction.on_commit by the admin
-    actions in apps.customers.views, so it only goes out once the change is
-    saved. Logged like every other message; does nothing if no number is set.
+    added. Phones get the text on each chosen channel; emails get it by
+    email. Enqueued on commit by apps.customers.views.
     """
     from apps.customers.models import Customer
     from apps.billing.models import Subscription
+    from apps.notifications.admin_emails import notify_admins
 
-    settings_obj = NotificationSettings.load()
-    channel = settings_obj.staff_alert_channel or 'sms'
-    recipient = settings_obj.staff_alert_email if channel == 'email' else settings_obj.staff_alert_phone
-    if not recipient:
-        return
-    send_and_log(
-        channel=channel,
-        recipient=recipient,
-        message=message,
-        event_type='staff_alert',
+    notify_admins(
+        'staff_alert', subject=message[:78], text=message, sms_text=message,
         customer=Customer.objects.filter(id=customer_id).first() if customer_id else None,
         subscription=Subscription.objects.filter(id=subscription_id).first() if subscription_id else None,
     )
@@ -388,37 +538,34 @@ def send_customer_account_notice(customer_id, template_key, context, event_type,
         return
     message = render(template_key, context, customer)
     subscription = Subscription.objects.filter(id=subscription_id).first() if subscription_id else None
-    send_and_log(
-        channel='sms',
-        recipient=customer.phone_number,
-        message=message,
-        event_type=event_type,
-        customer=customer,
-        subscription=subscription,
-    )
-    if customer.email and settings_obj.email_enabled:
-        send_and_log(
-            channel='email', recipient=customer.email, message=message,
-            event_type=event_type, customer=customer, subscription=subscription,
-        )
+    send_confirmation(customer, message, event_type, subscription)
 
 
 @shared_task
-def send_payment_reminder(customer_id, channel='sms'):
-    """One subscriber's reminder from the Subscribers page bulk action."""
+def send_payment_reminder(customer_id, channel='sms', message=None):
+    """
+    One subscriber's message from the Subscribers page "Send message": their
+    payment reminder, or `message` (staff-written text with placeholders).
+    """
     from apps.customers.models import Customer
     from apps.customers.reminders import build_payment_reminder
+    from apps.notifications.templates import customer_context, fill
 
     customer = Customer.objects.filter(id=customer_id).first()
     if not customer:
         return
-    message = build_payment_reminder(customer)
-    if not message:
+    if message:
+        text, event_type = fill(message, customer_context(customer)), 'custom_message'
+    else:
+        text, event_type = build_payment_reminder(customer), 'payment_reminder'
+    if not text:
         return
-    send_and_log(
-        channel=channel,
-        recipient=customer.email if channel == 'email' else customer.phone_number,
-        message=message,
-        event_type='payment_reminder',
-        customer=customer,
-    )
+    recipient = {
+        'email': customer.email, 'telegram': customer.telegram_chat_id,
+    }.get(channel, customer.phone_number)
+    send_and_log(channel=channel, recipient=recipient, message=text, event_type=event_type, customer=customer)
+
+
+
+# Superadmin email tasks live in admin_emails.py; importing registers them with Celery.
+from apps.notifications import admin_emails  # noqa: E402,F401

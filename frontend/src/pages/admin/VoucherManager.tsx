@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { voucherAPI, billingAPI } from '../../services/api';
-import { Plus, Eye, X, Copy, Send } from 'lucide-react';
+import { Plus, Eye, X, Copy, Send, UserCheck } from 'lucide-react';
+import SendBatchDialog from '../../components/SendBatchDialog';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { getErrorMessage } from '../../utils/getErrorMessage';
@@ -10,6 +11,7 @@ export default function VoucherManager() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [genParams, setGenParams] = useState({ quantity: 10, plan_id: '' });
     const [viewingBatch, setViewingBatch] = useState<any>(null);
+    const [sendingBatch, setSendingBatch] = useState<any>(null);
     const [sendingVoucherId, setSendingVoucherId] = useState<number | null>(null);
     const [sendForm, setSendForm] = useState({ recipient: '', channel: 'sms' as 'sms' | 'whatsapp' | 'telegram' });
 
@@ -168,12 +170,26 @@ export default function VoucherManager() {
                                     )}
                                 </td>
                                 <td className="px-6 py-4 text-right text-sm font-medium">
-                                    <button
-                                        onClick={() => setViewingBatch(batch)}
-                                        className="text-primary hover:text-primary flex items-center justify-end w-full"
-                                    >
-                                        <Eye className="h-4 w-4 mr-1" /> View Codes
-                                    </button>
+                                    <div className="flex items-center justify-end gap-4">
+                                        <button
+                                            onClick={() => setSendingBatch(batch)}
+                                            className="text-primary flex items-center whitespace-nowrap"
+                                            title={batch.sent_to ? `Last sent to ${batch.sent_to}` : 'Send the unused codes to a sales person'}
+                                        >
+                                            <UserCheck className="h-4 w-4 mr-1" /> Send to sales
+                                        </button>
+                                        <button
+                                            onClick={() => setViewingBatch(batch)}
+                                            className="text-primary flex items-center whitespace-nowrap"
+                                        >
+                                            <Eye className="h-4 w-4 mr-1" /> View Codes
+                                        </button>
+                                    </div>
+                                    {batch.sent_at && (
+                                        <p className="mt-1 text-xs font-normal text-muted-foreground">
+                                            Sent to {batch.sent_to} · {format(new Date(batch.sent_at), 'MMM d, HH:mm')}
+                                        </p>
+                                    )}
                                 </td>
                             </tr>
                         ))}
@@ -259,6 +275,12 @@ export default function VoucherManager() {
 
                         <div className="p-4 border-t flex justify-end gap-2">
                             <button
+                                onClick={() => setSendingBatch(viewingBatch)}
+                                className="flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium"
+                            >
+                                <UserCheck className="h-4 w-4 mr-2" /> Send to sales
+                            </button>
+                            <button
                                 onClick={() => handleCopyAll(viewingBatch)}
                                 className="flex items-center px-4 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/10 text-sm font-medium"
                             >
@@ -273,6 +295,14 @@ export default function VoucherManager() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {sendingBatch && (
+                <SendBatchDialog
+                    batch={sendingBatch}
+                    onClose={() => setSendingBatch(null)}
+                    onSent={() => { setSendingBatch(null); queryClient.invalidateQueries({ queryKey: ['voucher-batches'] }); }}
+                />
             )}
         </div>
     );
