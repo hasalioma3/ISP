@@ -20,6 +20,7 @@ class BillingPlanSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        self._validate_daily_fup(attrs)
         fup_values = {
             field: attrs.get(field, getattr(self.instance, field, None))
             for field in ('fup_limit_gb', 'fup_download_speed', 'fup_upload_speed')
@@ -45,6 +46,26 @@ class BillingPlanSerializer(serializers.ModelSerializer):
         if data_limit_gb is not None and fup_values['fup_limit_gb'] >= data_limit_gb:
             raise serializers.ValidationError({'fup_limit_gb': 'FUP threshold must be below the plan data limit.'})
         return attrs
+
+
+    def _validate_daily_fup(self, attrs):
+        get = lambda f: attrs.get(f, getattr(self.instance, f, None))
+        values = {f: get(f) for f in ('daily_fup_limit_gb', 'daily_fup_download_speed', 'daily_fup_upload_speed')}
+        if all(v is None for v in values.values()):
+            return
+        if any(v is None for v in values.values()):
+            raise serializers.ValidationError({
+                'daily_fup_limit_gb': 'Set the daily limit and both daily speeds, or leave all three blank.'})
+        if get('service_type') != 'pppoe':
+            raise serializers.ValidationError({'daily_fup_limit_gb': 'Daily FUP is only available on PPPoE plans.'})
+        if values['daily_fup_limit_gb'] <= 0:
+            raise serializers.ValidationError({'daily_fup_limit_gb': 'Daily limit must be more than 0 GB.'})
+        if values['daily_fup_download_speed'] < 1 or values['daily_fup_upload_speed'] < 1:
+            raise serializers.ValidationError({'daily_fup_download_speed': 'Daily FUP speeds must be at least 1 Mbps.'})
+        if get('download_speed') is not None and values['daily_fup_download_speed'] > get('download_speed'):
+            raise serializers.ValidationError({'daily_fup_download_speed': 'Daily FUP download speed cannot exceed the plan speed.'})
+        if get('upload_speed') is not None and values['daily_fup_upload_speed'] > get('upload_speed'):
+            raise serializers.ValidationError({'daily_fup_upload_speed': 'Daily FUP upload speed cannot exceed the plan speed.'})
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):

@@ -1,0 +1,6 @@
+*
+!saas/frontend
+!frontend/src
+!frontend/tailwind.config.js
+saas/frontend/node_modules
+saas/frontend/dist

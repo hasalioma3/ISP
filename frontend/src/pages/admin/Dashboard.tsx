@@ -9,6 +9,7 @@ import { analyticsAPI } from '../../services/api';
 import { useSites } from '../../hooks/useSites';
 import UsageChartPanels from '../../components/UsageChartPanels';
 import ExportMenu from '../../components/ExportMenu';
+import TopHotspotUsers from '../../components/TopHotspotUsers';
 import { useAuthStore } from '../../store/authStore';
 import {
     AlertRow, Chip, EmptyState, KpiCard, MpesaBadge, Panel, PanelHeader, PaymentsFeedRow,
@@ -505,6 +506,8 @@ export default function Dashboard() {
                     )}
                 </Panel>
             </div>
+
+            <TopHotspotUsers />
 
             {showIncome && (
                 <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-2">

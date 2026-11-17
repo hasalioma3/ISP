@@ -98,11 +98,9 @@ class MpesaService:
                 'error': 'Failed to get access token'
             }
         
-        # Format phone number
-        if phone_number.startswith('0'):
-            phone_number = '254' + phone_number[1:]
-        elif phone_number.startswith('+'):
-            phone_number = phone_number[1:]
+        # Format phone number (07..., +254..., or a bare 9-digit 7XXXXXXXX)
+        from apps.payments.services.phone_hash import normalize_phone
+        phone_number = normalize_phone(phone_number)
         
         # Generate timestamp and password
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')

@@ -337,8 +337,30 @@ class NetworkAutomation:
         ).order_by('-created_at').first()
         return bool(subscription and subscription.fup_applied)
 
-    def apply_customer_fup(self, customer, plan):
-        """Apply reduced speeds to this customer's active network account."""
+    def _pppoe_profile_for(self, customer, plan):
+        """Which profile a (re)activated PPPoE secret should carry right now:
+        the plan-period FUP one if that applies, else the daily-FUP one if
+        today's limit was hit, else the plan's own. Re-activations (router
+        resync, password change) must not lift a throttle by accident."""
+        from apps.billing.models import Subscription
+        sub = Subscription.objects.filter(
+            customer=customer, plan=plan, status='active', expiry_date__gt=timezone.now(),
+        ).order_by('-created_at').first()
+        if sub and sub.fup_applied:
+            return plan.get_fup_mikrotik_profile()
+        if sub and plan.has_daily_fup and sub.daily_fup_date == timezone.localdate():
+            return plan.get_daily_fup_mikrotik_profile()
+        return plan.mikrotik_profile
+
+    def apply_customer_fup(self, customer, plan, profile_name=None):
+        """Apply reduced speeds to this customer's active network account.
+
+        profile_name picks the PPPoE/hotspot profile to move them onto: the
+        plan-period FUP profile by default, the "-dfup" one for the daily
+        FUP, or the plan's own profile to lift a daily FUP at midnight.
+        Static customers always get the plan-period FUP queue (daily FUP is
+        PPPoE-only)."""
+        profile_name = profile_name or plan.get_fup_mikrotik_profile()
         plan_routers = plan.routers.filter(is_active=True)
         target_routers = plan_routers if plan_routers.exists() else Router.objects.filter(is_active=True)
         all_routers = Router.objects.filter(is_active=True)
@@ -360,9 +382,9 @@ class NetworkAutomation:
             )
             try:
                 if customer.service_type in ['pppoe', 'both'] and plan.service_type in ['pppoe', 'both'] and not enable_only_hotspot:
-                    self._activate_pppoe(customer, plan, router, mikrotik, profile_name=plan.get_fup_mikrotik_profile())
+                    self._activate_pppoe(customer, plan, router, mikrotik, profile_name=profile_name)
                 if customer_hotspot:
-                    self._activate_hotspot(customer, plan, router, mikrotik, profile_name=plan.get_fup_mikrotik_profile())
+                    self._activate_hotspot(customer, plan, router, mikrotik, profile_name=profile_name)
                 if customer.service_type == 'static' and plan.service_type == 'static' and not enable_only_hotspot:
                     self._activate_static(customer, plan, router, mikrotik, fup_applied=True)
             except Exception as e:
@@ -373,9 +395,7 @@ class NetworkAutomation:
         return {'success': True}
     
     def _activate_pppoe(self, customer, plan, router, mikrotik, profile_name=None):
-        profile_name = profile_name or (
-            plan.get_fup_mikrotik_profile() if self._customer_has_fup(customer, plan) else plan.mikrotik_profile
-        )
+        profile_name = profile_name or self._pppoe_profile_for(customer, plan)
         pppoe_secret, created = PPPoESecret.objects.get_or_create(
             customer=customer,
             defaults={
@@ -706,6 +726,14 @@ class NetworkAutomation:
                         fup_res = mikrotik.add_pppoe_profile(fup_profile, fup_rate, remote_address='pppoe_pool', local_address=pppoe_gateway)
                     if fup_res['success']: results['success'].append(f"PPPoE FUP: {plan.name}")
                     else: results['failed'].append(f"PPPoE FUP: {plan.name} - {fup_res.get('error')}")
+                if plan.has_daily_fup:
+                    dfup_profile = plan.get_daily_fup_mikrotik_profile()
+                    dfup_rate = f"{plan.daily_fup_upload_speed}M/{plan.daily_fup_download_speed}M"
+                    dfup_res = mikrotik.update_pppoe_profile(dfup_profile, dfup_rate, remote_address='pppoe_pool', local_address=pppoe_gateway)
+                    if not dfup_res['success'] and 'not found' in dfup_res.get('error', ''):
+                        dfup_res = mikrotik.add_pppoe_profile(dfup_profile, dfup_rate, remote_address='pppoe_pool', local_address=pppoe_gateway)
+                    if dfup_res['success']: results['success'].append(f"PPPoE daily FUP: {plan.name}")
+                    else: results['failed'].append(f"PPPoE daily FUP: {plan.name} - {dfup_res.get('error')}")
             if plan.service_type in ['hotspot', 'both']:
                 res = mikrotik.update_hotspot_profile(plan.mikrotik_profile, rate_limit)
                 if not res['success'] and 'not found' in res.get('error', ''):

@@ -65,6 +65,18 @@ app.conf.beat_schedule = {
         'task': 'apps.notifications.tasks.send_expired_followup',
         'schedule': crontab(minute=5),  # hourly; sends at expired_followup_hour
     },
+    'scheduled-archive': {
+        'task': 'apps.archive.tasks.scheduled_archive',
+        'schedule': crontab(minute=40),  # hourly; archives in the hour set under Settings -> Archive
+    },
+    'expire-loyalty-points': {
+        'task': 'apps.loyalty.tasks.expire_points',
+        'schedule': crontab(hour=1, minute=15),
+    },
+    'retry-etims-signing': {
+        'task': 'apps.invoicing.tasks.retry_failed_signing',
+        'schedule': crontab(hour='*/6', minute=25),
+    },
 }
 
 @beat_init.connect

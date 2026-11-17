@@ -4,7 +4,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from apps.payments.services.phone_hash import hash_phone
+from apps.payments.services.phone_hash import fix_bare_phone, hash_phone
 
 
 class Customer(AbstractUser):
@@ -99,6 +99,11 @@ class Customer(AbstractUser):
         return f"{self.username} - {self.phone_number}"
 
     def save(self, *args, **kwargs):
+        # A bare "725316559" (leading 0 / 254 forgotten) is stored as
+        # "254725316559" so SMS, STK and C2B hash matching all work; numbers
+        # already in 07... or 254... form are kept exactly as entered.
+        if self.phone_number:
+            self.phone_number = fix_bare_phone(self.phone_number)
         self.phone_hash = hash_phone(self.phone_number) if self.phone_number else ''
         super().save(*args, **kwargs)
         self._detach_mac_from_stale_customers()

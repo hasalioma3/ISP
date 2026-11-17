@@ -10,6 +10,7 @@ import {
     formatDateEAT, formatKES, type PayState,
 } from '../../components/savanna';
 import { BarTrend } from '../../components/savanna/charts';
+import LoyaltyCard from '../../components/LoyaltyCard';
 
 const GB = 1024 ** 3;
 const eatDayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Nairobi' }).format(d);
@@ -371,6 +372,8 @@ export default function CustomerDashboard() {
                     ) : (
                         <Panel><EmptyState message="No plans available to buy right now." /></Panel>
                     )}
+
+                    <LoyaltyCard />
 
                     {siteSettings?.support_phone && (
                         <div className="rounded-card bg-sunset p-[22px] text-white shadow-card">

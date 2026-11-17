@@ -372,6 +372,14 @@ def send_payment_failed_notification(customer_id, plan_id, reason):
         return
 
     plan = BillingPlan.objects.filter(id=plan_id).first()
+    # Hotspot buyers are walk-up guests who watch the captive portal while
+    # paying -- it already tells them the payment failed, and a cancelled
+    # STK prompt (the usual "failure") is them changing their mind. An SMS
+    # on top only costs money and reads as spam. PPPoE/static customers
+    # still get it: they often pay away from the screen.
+    if (plan and plan.service_type == 'hotspot') or customer.service_type == 'hotspot':
+        logger.info(f"send_payment_failed_notification: skipped hotspot customer {customer.username}")
+        return
     plan_name = plan.name if plan else 'your plan'
     message = (
         f"Your payment for {plan_name} could not be completed ({reason}). "
@@ -569,3 +577,48 @@ def send_payment_reminder(customer_id, channel='sms', message=None):
 
 # Superadmin email tasks live in admin_emails.py; importing registers them with Celery.
 from apps.notifications import admin_emails  # noqa: E402,F401
+
+
+def _gb(value):
+    return f"{value:.2f}".rstrip('0').rstrip('.') if isinstance(value, float) else str(value)
+
+
+@shared_task
+def send_data_usage_alert(subscription_id, percent, used_bytes):
+    """One "you've used N% of your data" heads-up (see
+    apps.network.tasks.send_data_usage_alerts, which decides when)."""
+    from apps.billing.models import Subscription
+    from apps.notifications.templates import render
+
+    sub = Subscription.objects.filter(pk=subscription_id).select_related('customer', 'plan').first()
+    if not sub or not sub.plan.data_limit_gb:
+        return
+    cfg = NotificationSettings.load()
+    limit_gb = float(sub.plan.data_limit_gb)
+    used_gb = round(used_bytes / 1024 ** 3, 2)
+    message = render('data_usage_alert', {
+        'percent': percent, 'plan': sub.plan.name, 'used_gb': _gb(used_gb), 'limit_gb': _gb(limit_gb),
+        'remaining_gb': _gb(round(max(0.0, limit_gb - used_gb), 2)),
+    }, sub.customer)
+    send_with_fallback(sub.customer, message, 'data_usage_alert', cfg.usage_alert_channel_list(),
+                       sms_fallback=True, subscription=sub)
+
+
+@shared_task
+def send_daily_fup_notice(subscription_id, used_gb):
+    from apps.billing.models import Subscription
+    from apps.notifications.templates import render
+
+    cfg = NotificationSettings.load()
+    if not cfg.daily_fup_notify:
+        return
+    sub = Subscription.objects.filter(pk=subscription_id).select_related('customer', 'plan').first()
+    if not sub:
+        return
+    plan = sub.plan
+    message = render('daily_fup_applied', {
+        'plan': plan.name, 'used_gb': _gb(float(used_gb)), 'limit_gb': plan.daily_fup_limit_gb,
+        'speed': f"{plan.daily_fup_download_speed}/{plan.daily_fup_upload_speed} Mbps",
+    }, sub.customer)
+    send_with_fallback(sub.customer, message, 'daily_fup', cfg.confirmation_channel_list(),
+                       cfg.confirmation_sms_fallback, subscription=sub)

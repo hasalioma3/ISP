@@ -11,6 +11,7 @@ const emptyForm = {
     download_speed: 5, upload_speed: 5, price: '', currency: 'KES',
     duration_value: 30, duration_unit: 'days',
     data_limit_gb: '', fup_limit_gb: '', fup_download_speed: '', fup_upload_speed: '',
+    daily_fup_limit_gb: '', daily_fup_download_speed: '', daily_fup_upload_speed: '',
     mikrotik_profile: '', is_active: true, is_promo: false, routers: [] as number[],
 };
 
@@ -82,6 +83,9 @@ export default function BillingPlans() {
             fup_limit_gb: plan.fup_limit_gb ?? '',
             fup_download_speed: plan.fup_download_speed ?? '',
             fup_upload_speed: plan.fup_upload_speed ?? '',
+            daily_fup_limit_gb: plan.daily_fup_limit_gb ?? '',
+            daily_fup_download_speed: plan.daily_fup_download_speed ?? '',
+            daily_fup_upload_speed: plan.daily_fup_upload_speed ?? '',
             is_active: plan.is_active, is_promo: plan.is_promo ?? false, routers: plan.routers || [],
         });
         setEditingId(plan.id);
@@ -96,6 +100,10 @@ export default function BillingPlans() {
             fup_limit_gb: form.fup_limit_gb === '' ? null : form.fup_limit_gb,
             fup_download_speed: form.fup_download_speed === '' ? null : form.fup_download_speed,
             fup_upload_speed: form.fup_upload_speed === '' ? null : form.fup_upload_speed,
+            // Daily FUP is PPPoE-only; other plan types always send it blank.
+            daily_fup_limit_gb: form.service_type !== 'pppoe' || form.daily_fup_limit_gb === '' ? null : form.daily_fup_limit_gb,
+            daily_fup_download_speed: form.service_type !== 'pppoe' || form.daily_fup_download_speed === '' ? null : form.daily_fup_download_speed,
+            daily_fup_upload_speed: form.service_type !== 'pppoe' || form.daily_fup_upload_speed === '' ? null : form.daily_fup_upload_speed,
         };
         if (editingId) {
             updateMutation.mutate({ id: editingId, data: payload });
@@ -255,6 +263,29 @@ export default function BillingPlans() {
                                     <input type="number" min={1} className="w-full border rounded-lg px-3 py-2 text-sm" value={form.fup_upload_speed}
                                         onChange={e => setForm({ ...form, fup_upload_speed: e.target.value })} />
                                 </div>
+                                {form.service_type === 'pppoe' && (
+                                    <>
+                                        <div className="sm:col-span-2 border-t border-border pt-4">
+                                            <h3 className="text-sm font-semibold text-foreground">Optional daily FUP (PPPoE)</h3>
+                                            <p className="text-xs text-muted-foreground mt-1">Once a subscriber uses this much in one day, they drop to the daily speeds until midnight, then return to full speed automatically. Leave all three blank to turn it off.</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-foreground/80 mb-1">Daily limit (GB per day)</label>
+                                            <input type="number" min={0.1} step="0.1" className="w-full border rounded-lg px-3 py-2 text-sm" value={form.daily_fup_limit_gb}
+                                                onChange={e => setForm({ ...form, daily_fup_limit_gb: e.target.value })} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-foreground/80 mb-1">Daily FUP download (Mbps)</label>
+                                            <input type="number" min={1} className="w-full border rounded-lg px-3 py-2 text-sm" value={form.daily_fup_download_speed}
+                                                onChange={e => setForm({ ...form, daily_fup_download_speed: e.target.value })} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-foreground/80 mb-1">Daily FUP upload (Mbps)</label>
+                                            <input type="number" min={1} className="w-full border rounded-lg px-3 py-2 text-sm" value={form.daily_fup_upload_speed}
+                                                onChange={e => setForm({ ...form, daily_fup_upload_speed: e.target.value })} />
+                                        </div>
+                                    </>
+                                )}
                                 <div>
                                     <label className="block text-sm font-medium text-foreground/80 mb-1">Duration</label>
                                     <input type="number" required min={1} className="w-full border rounded-lg px-3 py-2 text-sm" value={form.duration_value}

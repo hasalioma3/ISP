@@ -161,6 +161,34 @@ class NotificationSettings(models.Model):
     expired_followup_enabled = models.BooleanField(default=True)
     expired_followup_hour = models.PositiveSmallIntegerField(default=20)
 
+    # --- Data usage alerts (hotspot data plans) ---
+    # Percentages of a plan's data cap at which the customer gets one
+    # heads-up each, e.g. "50,75,95". If a poll jumps past several at once
+    # only the highest is sent.
+    usage_alerts_enabled = models.BooleanField(default=True)
+    usage_alert_thresholds = models.CharField(max_length=50, default='50,75,95', blank=True)
+    usage_alert_service_types = models.CharField(max_length=30, default='hotspot', blank=True)
+    usage_alert_channels = models.CharField(max_length=30, default='sms', blank=True)
+    # Tell PPPoE customers when the daily FUP slows them down.
+    daily_fup_notify = models.BooleanField(default=True)
+
+    def usage_alert_threshold_list(self):
+        out = set()
+        for part in self._split(self.usage_alert_thresholds):
+            try:
+                value = int(float(part))
+            except ValueError:
+                continue
+            if 0 < value < 100:
+                out.add(value)
+        return sorted(out)
+
+    def usage_alert_channel_list(self):
+        return [c for c in self._split(self.usage_alert_channels) if c in ('sms', 'whatsapp', 'email')] or ['sms']
+
+    def usage_alert_service_type_list(self):
+        return [t for t in self._split(self.usage_alert_service_types) if t in ('hotspot', 'pppoe', 'static')]
+
     def sales_phone_list(self):
         return list(dict.fromkeys(self._split(self.sales_phones)))
 
@@ -222,6 +250,11 @@ class NotificationLog(models.Model):
         ('admin_event', 'Superadmin Event Email'),
         ('voucher_batch_sent', 'Vouchers sent to sales'),
         ('custom_message', 'Message sent by staff'),
+        ('data_usage_alert', 'Data usage alert (50/75/95%)'),
+        ('daily_fup', 'Daily FUP applied'),
+        ('loyalty_earned', 'Loyalty points earned'),
+        ('loyalty_redeemed', 'Loyalty points redeemed'),
+        ('invoice', 'Invoice sent'),
     ]
 
     STATUS_CHOICES = [

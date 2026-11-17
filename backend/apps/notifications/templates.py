@@ -56,6 +56,39 @@ DEFAULTS = {
          'days_left': 'Days until expiry (0 = today)', 'expiry': 'Expiry date and time',
          'price': 'Plan price', 'how_to_pay': 'Buy Goods / Paybill instructions'},
     ),
+    'data_usage_alert': (
+        'Data usage alert (hotspot data plans)',
+        'Hi {first_name}, you have used {percent}% of your {plan} data ({used_gb} GB of {limit_gb} GB). '
+        '{remaining_gb} GB left.',
+        {'percent': 'Threshold reached, e.g. 75', 'plan': 'Plan name', 'used_gb': 'Data used (GB)',
+         'limit_gb': 'Plan data cap (GB)', 'remaining_gb': 'Data left (GB)'},
+    ),
+    'daily_fup_applied': (
+        'Daily FUP applied (PPPoE)',
+        'Hi {first_name}, you have used {used_gb} GB today, the daily fair-use limit on your {plan} plan. '
+        'Your speed is {speed} until midnight, then back to full speed.',
+        {'plan': 'Plan name', 'used_gb': 'Data used today (GB)', 'limit_gb': 'Daily limit (GB)',
+         'speed': 'Reduced speed, e.g. "2/1 Mbps"'},
+    ),
+    'loyalty_earned': (
+        'Loyalty points earned',
+        'Thank you {first_name}! You earned {points} {company} points for your KES {amount} payment. '
+        'You now have {balance} points (worth KES {value}).',
+        {'points': 'Points earned', 'amount': 'Payment amount', 'balance': 'Points balance',
+         'value': 'KES value of the balance'},
+    ),
+    'loyalty_redeemed': (
+        'Loyalty points redeemed',
+        'Hi {first_name}, {points} points were redeemed for KES {amount}, added to your account balance '
+        '(now KES {account_balance}). You have {balance} points left.',
+        {'points': 'Points redeemed', 'amount': 'KES credited', 'account_balance': 'New account balance',
+         'balance': 'Points left'},
+    ),
+    'invoice_sent': (
+        'Invoice sent to customer',
+        'Hi {first_name}, your invoice {number} for KES {total} from {company} is attached. Thank you.',
+        {'number': 'Invoice number', 'total': 'Invoice total', 'date': 'Invoice date'},
+    ),
     'voucher_send': (
         'Voucher code',
         'Your hotspot voucher code: {code}, valid for {plan}. Use it at the login page.',

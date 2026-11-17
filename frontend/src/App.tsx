@@ -37,6 +37,8 @@ const Inventory = lazy(() => import('./pages/admin/Inventory'));
 const NetworkOps = lazy(() => import('./pages/admin/NetworkOps'));
 const NotificationReport = lazy(() => import('./pages/admin/NotificationReport'));
 const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
+const Invoices = lazy(() => import('./pages/admin/Invoices'));
+const Loyalty = lazy(() => import('./pages/admin/Loyalty'));
 
 /** Shown while a lazily loaded page's chunk downloads. */
 function PageFallback() {
@@ -141,6 +143,8 @@ function App() {
             <Route path="billing-plans" element={<BillingPlans />} />
             <Route path="messages" element={<NotificationReport />} />
             <Route path="logs" element={<AuditLogs />} />
+            <Route path="invoices" element={<Invoices />} />
+            <Route path="loyalty" element={<Loyalty />} />
             <Route index element={<Navigate to="dashboard" />} />
           </Route>
 

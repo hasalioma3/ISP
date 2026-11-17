@@ -1,0 +1,109 @@
+# ISP Cloud: the master app plus the shared Postgres/Redis every ISP
+# instance uses. Fully separate from the main ISP stack (../docker-compose.yml):
+# its own project, network, database server and volumes.
+#
+#   cd saas && cp .env.example .env   # fill it in
+#   ./build_tenant_images.sh          # images the ISP instances run
+#   docker compose up -d --build
+#
+# The master UI is then on https://<host>:${SAAS_HTTPS_PORT:-9443}/.
+name: isp-cloud
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: saas/backend/Dockerfile
+  image: isp-saas/master-backend:latest
+  env_file: [.env]
+  environment:
+    DATABASE_URL: postgresql://${POSTGRES_USER:-saas}:${POSTGRES_PASSWORD}@saas-db:5432/${POSTGRES_DB:-saas_master}
+    DB_HOST: saas-db
+    CELERY_BROKER_URL: redis://saas-redis:6379/0
+    SAAS_ORCHESTRATOR: ${SAAS_ORCHESTRATOR:-docker}
+    SAAS_NETWORK: saas_network
+    SAAS_CERTS_VOLUME: saas_tenant_certs
+  restart: unless-stopped
+  networks: [saas]
+  depends_on: [saas-db, saas-redis]
+
+services:
+  saas-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-saas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-saas_master}
+    volumes: [saas_pgdata:/var/lib/postgresql/data]
+    restart: unless-stopped
+    networks: [saas]
+
+  saas-redis:
+    # One logical DB per ISP instance (index = Tenant.redis_db), so allow
+    # far more than Redis's default 16.
+    image: redis:7-alpine
+    command: redis-server --databases ${SAAS_REDIS_DATABASES:-1024} --save 60 1000
+    volumes: [saas_redis:/data]
+    restart: unless-stopped
+    networks: [saas]
+
+  api:
+    <<: *app
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-saas}:${POSTGRES_PASSWORD}@saas-db:5432/${POSTGRES_DB:-saas_master}
+      DB_HOST: saas-db
+      CELERY_BROKER_URL: redis://saas-redis:6379/0
+      SAAS_ORCHESTRATOR: ${SAAS_ORCHESTRATOR:-docker}
+      SAAS_NETWORK: saas_network
+      SAAS_CERTS_VOLUME: saas_tenant_certs
+      RUN_MIGRATIONS: "1"
+    volumes:
+      - saas_data:/data
+      - saas_tenant_certs:/data/certs
+      - saas_static:/app/staticfiles
+
+  worker:
+    <<: *app
+    command: celery -A saas_master worker -l info --concurrency 4
+    volumes:
+      - saas_data:/data
+      - saas_tenant_certs:/data/certs
+      # Creates/stops/removes the ISP instances' containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on: [api]
+
+  beat:
+    <<: *app
+    command: celery -A saas_master beat -l info -s /tmp/celerybeat-schedule
+    depends_on: [api]
+
+  web:
+    build:
+      context: ..
+      dockerfile: saas/frontend/Dockerfile
+    image: isp-saas/master-frontend:latest
+    ports:
+      - "${SAAS_HTTP_PORT:-9080}:80"
+      - "${SAAS_HTTPS_PORT:-9443}:443"
+    volumes:
+      - saas_tenant_certs:/etc/nginx/certs:ro
+      - saas_static:/srv/django-static:ro
+    depends_on: [api]
+    restart: unless-stopped
+    networks: [saas]
+
+networks:
+  saas:
+    name: saas_network
+    # Clear of the main stack (172.28/172.29), docker0 (172.17) and UISP
+    # (172.18.251.0/24). Each ISP instance adds 3 containers here.
+    ipam:
+      config:
+        - subnet: ${SAAS_SUBNET:-172.30.0.0/22}
+
+volumes:
+  saas_pgdata:
+  saas_redis:
+  saas_data:
+  saas_static:
+  saas_tenant_certs:
+    name: saas_tenant_certs

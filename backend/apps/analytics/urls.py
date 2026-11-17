@@ -5,6 +5,7 @@ from .views import (
     RecentPaymentsView, RouterBandwidthTrendView, ChurnForecastView,
     VoucherUsageReportView, DailyUsageView, DayBreakdownView,
 )
+from .top_users import TopHotspotUsersView
 
 urlpatterns = [
     path('dashboard/', DashboardStatsView.as_view(), name='dashboard-stats'),
@@ -20,5 +21,6 @@ urlpatterns = [
     path('router-bandwidth/', RouterBandwidthTrendView.as_view(), name='router-bandwidth-trend'),
     path('churn-forecast/', ChurnForecastView.as_view(), name='churn-forecast'),
     path('usage-daily/', DailyUsageView.as_view(), name='usage-daily'),
+    path('top-hotspot-users/', TopHotspotUsersView.as_view(), name='top-hotspot-users'),
     path('day-breakdown/', DayBreakdownView.as_view(), name='day-breakdown'),
 ]

@@ -34,6 +34,8 @@ def collect_usage_statistics():
         _collect_usage_once()
         enforce_subscription_data_limits()
         enforce_subscription_fup()
+        enforce_daily_fup()
+        send_data_usage_alerts()
     finally:
         if lock is not None:
             try:
@@ -236,6 +238,113 @@ def enforce_subscription_fup():
 
     return applied_count
 
+def _usage_by_subscription(subscription_ids, day=None):
+    """{subscription_id: bytes} in one grouped query (optionally one local day)."""
+    qs = UsageRecord.objects.filter(subscription_id__in=list(subscription_ids))
+    if day is not None:
+        qs = qs.filter(created_at__date=day)
+    rows = qs.values('subscription_id').annotate(up=Sum('upload_bytes'), down=Sum('download_bytes'))
+    return {r['subscription_id']: (r['up'] or 0) + (r['down'] or 0) for r in rows}
+
+
+@shared_task
+def enforce_daily_fup():
+    """
+    Daily FUP for PPPoE plans that set one: when today's usage on the
+    current subscription reaches plan.daily_fup_limit_gb, move the secret to
+    the plan's "-dfup" profile until midnight. After midnight the profile is
+    put back (the plan's own, or its plan-period FUP profile if that has
+    kicked in meanwhile). Runs after every usage poll; both halves are a
+    cheap indexed query when nobody is near their limit.
+    """
+    today = timezone.localdate()
+    applied = lifted = 0
+
+    # 1. Lift yesterday's throttles (and any left on a lapsed subscription).
+    for sub in Subscription.objects.filter(daily_fup_date__isnull=False).exclude(daily_fup_date=today) \
+            .select_related('customer', 'plan'):
+        if sub.status == 'active' and sub.expiry_date > timezone.now():
+            profile = sub.plan.get_fup_mikrotik_profile() if sub.fup_applied else sub.plan.mikrotik_profile
+            result = network_automation.apply_customer_fup(sub.customer, sub.plan, profile_name=profile)
+            if not result.get('success'):
+                logger.error("Could not lift daily FUP for %s: %s", sub.customer.username, result.get('error'))
+                continue
+        Subscription.objects.filter(pk=sub.pk).update(daily_fup_date=None, updated_at=timezone.now())
+        lifted += 1
+
+    # 2. Throttle whoever crossed today's limit.
+    candidates = list(Subscription.objects.filter(
+        status='active', expiry_date__gt=timezone.now(), daily_fup_date__isnull=True,
+        plan__service_type='pppoe', plan__daily_fup_limit_gb__isnull=False,
+        plan__daily_fup_download_speed__isnull=False, plan__daily_fup_upload_speed__isnull=False,
+    ).select_related('customer', 'plan'))
+    if not candidates:
+        return {'applied': 0, 'lifted': lifted}
+    used = _usage_by_subscription([s.pk for s in candidates], day=today)
+    for sub in candidates:
+        used_bytes = used.get(sub.pk, 0)
+        if used_bytes < int(sub.plan.daily_fup_limit_gb * (1024 ** 3)):
+            continue
+        if sub.fup_applied:
+            # Already on the (stricter, longer) plan-period FUP: just record
+            # that the daily limit was hit so we don't re-check all day.
+            Subscription.objects.filter(pk=sub.pk).update(daily_fup_date=today)
+            continue
+        result = network_automation.apply_customer_fup(
+            sub.customer, sub.plan, profile_name=sub.plan.get_daily_fup_mikrotik_profile())
+        if not result.get('success'):
+            logger.error("Failed to apply daily FUP for %s: %s", sub.customer.username, result.get('error'))
+            continue
+        if Subscription.objects.filter(pk=sub.pk, daily_fup_date__isnull=True).update(
+                daily_fup_date=today, updated_at=timezone.now()):
+            applied += 1
+            logger.info("Daily FUP applied to %s after %.2f GB today", sub.customer.username, used_bytes / 1024 ** 3)
+            from apps.notifications.tasks import send_daily_fup_notice
+            send_daily_fup_notice.delay(sub.pk, round(used_bytes / 1024 ** 3, 2))
+    return {'applied': applied, 'lifted': lifted}
+
+
+@shared_task
+def send_data_usage_alerts():
+    """
+    Tell customers on capped data plans when they pass each threshold in
+    Settings -> Notifications (default 50/75/95% of the plan's data, hotspot
+    plans). Each threshold is announced once per subscription; a jump past
+    several in one poll sends only the highest. The 100% case needs no
+    alert: enforce_subscription_data_limits ends the plan then.
+    """
+    from apps.notifications.models import NotificationSettings
+    cfg = NotificationSettings.load()
+    thresholds = cfg.usage_alert_threshold_list()
+    types = cfg.usage_alert_service_type_list()
+    if not (cfg.usage_alerts_enabled and thresholds and types):
+        return 0
+    subs = list(Subscription.objects.filter(
+        status='active', expiry_date__gt=timezone.now(),
+        plan__data_limit_gb__isnull=False, plan__data_limit_gb__gt=0, plan__service_type__in=types,
+    ).select_related('plan'))
+    if not subs:
+        return 0
+    used = _usage_by_subscription([s.pk for s in subs])
+    queued = 0
+    for sub in subs:
+        limit = int(sub.plan.data_limit_gb * (1024 ** 3))
+        percent = used.get(sub.pk, 0) * 100 / limit if limit else 0
+        already = set(sub.usage_alerts_sent or [])
+        crossed = [t for t in thresholds if percent >= t and t not in already]
+        if not crossed or percent >= 100:
+            continue
+        sent = sorted(already | set(t for t in thresholds if percent >= t))
+        # Claim the thresholds first (compare-and-set on the old list) so two
+        # overlapping polls can't both send.
+        if not Subscription.objects.filter(pk=sub.pk, usage_alerts_sent=sub.usage_alerts_sent).update(usage_alerts_sent=sent):
+            continue
+        from apps.notifications.tasks import send_data_usage_alert
+        send_data_usage_alert.delay(sub.pk, max(crossed), used.get(sub.pk, 0))
+        queued += 1
+    return queued
+
+
 def _static_targets_for_router(router):
     """Active static customers whose plan is served by this router."""
     targets = []
@@ -333,8 +442,10 @@ def update_usage_record(username, delta_upload, delta_download, mac, ip, router_
         if not subscription:
             return False
 
-        # One accumulating record per customer per day per source IP.
-        today = timezone.now().date()
+        # One accumulating record per customer per day per source IP. The
+        # local (Africa/Nairobi) date, so a "day" of usage -- which the daily
+        # FUP counts -- runs midnight to midnight here, not 03:00 to 03:00.
+        today = timezone.localdate()
 
         usage_record = UsageRecord.objects.filter(
             customer=customer,
@@ -527,6 +638,18 @@ def sync_plan_to_routers(plan_id):
                             )
                         if not fup_pppoe['success']:
                             logger.error(f"{router.name}: PPPoE FUP profile sync failed: {fup_pppoe.get('error')}")
+                    if plan.has_daily_fup:
+                        # Same profile shape as the plan's, at the daily-FUP
+                        # rate; enforce_daily_fup moves secrets onto it.
+                        dfup_profile = plan.get_daily_fup_mikrotik_profile()
+                        dfup_rate = f"{plan.daily_fup_upload_speed}M/{plan.daily_fup_download_speed}M"
+                        dfup_kwargs = dict(name=dfup_profile, rate_limit=dfup_rate, remote_address='pppoe_pool',
+                                           local_address=pppoe_gateway, on_up=on_up, on_down=on_down)
+                        dfup = mikrotik.add_pppoe_profile(**dfup_kwargs)
+                        if not dfup['success']:
+                            dfup = mikrotik.update_pppoe_profile(**dfup_kwargs)
+                        if not dfup['success']:
+                            logger.error(f"{router.name}: PPPoE daily FUP profile sync failed: {dfup.get('error')}")
                 else:
                     res_pppoe = {'success': True}  # Skip if not a PPPoE plan
 

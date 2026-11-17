@@ -1,0 +1,11 @@
+# Used by BuildKit for saas/backend/Dockerfile (context = repo root):
+# send only what the Dockerfile copies.
+*
+!saas/backend
+!saas/tenant
+!backend/apps/__init__.py
+!backend/apps/notifications/__init__.py
+!backend/apps/notifications/fields.py
+saas/backend/db.sqlite3
+saas/backend/data
+**/__pycache__

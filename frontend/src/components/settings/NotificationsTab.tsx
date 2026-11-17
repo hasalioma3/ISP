@@ -15,6 +15,7 @@ export default function NotificationsTab() {
             <SalesContactsSection />
             <ConfirmationsSection />
             <RenewalRemindersSection />
+            <UsageAlertsSection />
             <SuperadminEmailsSection />
             <MessageTemplatesSection />
             <SmsSection />
@@ -178,6 +179,82 @@ function SalesContactsSection() {
                     {save.isPending ? 'Saving...' : 'Save sales contacts'}
                 </button>
             </form>
+        </div>
+    );
+}
+
+const csvToggle = (csv: string | undefined, value: string, on: boolean) => {
+    const set = new Set((csv || '').split(',').map((x) => x.trim()).filter(Boolean));
+    if (on) set.add(value); else set.delete(value);
+    return Array.from(set).join(',');
+};
+
+/**
+ * Data usage alerts: a heads-up at e.g. 50%, 75% and 95% of a capped plan's
+ * data (hotspot by default), once each per subscription; plus the PPPoE
+ * daily-FUP notice.
+ */
+function UsageAlertsSection() {
+    const { data: settings } = useQuery({
+        queryKey: ['notification-settings'],
+        queryFn: async () => (await notificationAPI.getSettings()).data,
+    });
+    const [thresholds, setThresholds] = useState('50,75,95');
+    useEffect(() => { if (settings) setThresholds(settings.usage_alert_thresholds ?? '50,75,95'); }, [settings]);
+    const save = useSettingsSave('Usage alerts saved');
+    const enabled = settings?.usage_alerts_enabled ?? true;
+    const types = settings?.usage_alert_service_types ?? 'hotspot';
+    const channels = settings?.usage_alert_channels ?? 'sms';
+
+    return (
+        <div className={SECTION_CARD}>
+            <h3 className="text-lg font-bold mb-1">Data usage alerts</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+                Customers on plans with a data limit get one message as they pass each percentage of their data (if a
+                single check jumps past several, only the highest is sent). At 100% the plan ends as usual.
+            </p>
+            <label className="flex items-center gap-2 text-sm mb-4">
+                <input type="checkbox" checked={enabled} disabled={save.isPending}
+                    onChange={(e) => save.mutate({ usage_alerts_enabled: e.target.checked })} />
+                Send data usage alerts
+            </label>
+            <form className="flex flex-wrap items-end gap-3 mb-4" onSubmit={(e) => { e.preventDefault(); save.mutate({ usage_alert_thresholds: thresholds }); }}>
+                <div>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Alert at (% of the plan&apos;s data)</label>
+                    <input className="w-56 border rounded-lg px-3 py-2 text-sm" value={thresholds} disabled={!enabled}
+                        onChange={(e) => setThresholds(e.target.value)} placeholder="50,75,95" />
+                </div>
+                <button type="submit" disabled={save.isPending || !enabled} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50">Save</button>
+            </form>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <p className="font-medium text-foreground/80 mb-1">For plans of type</p>
+                    {[['hotspot', 'Hotspot'], ['pppoe', 'PPPoE'], ['static', 'Static IP']].map(([v, l]) => (
+                        <label key={v} className="flex items-center gap-2">
+                            <input type="checkbox" disabled={!enabled || save.isPending} checked={types.split(',').includes(v)}
+                                onChange={(e) => save.mutate({ usage_alert_service_types: csvToggle(types, v, e.target.checked) })} />
+                            {l}
+                        </label>
+                    ))}
+                </div>
+                <div>
+                    <p className="font-medium text-foreground/80 mb-1">Send by</p>
+                    {[['sms', 'SMS'], ['whatsapp', 'WhatsApp'], ['email', 'Email']].map(([v, l]) => (
+                        <label key={v} className="flex items-center gap-2">
+                            <input type="checkbox" disabled={!enabled || save.isPending} checked={channels.split(',').includes(v)}
+                                onChange={(e) => save.mutate({ usage_alert_channels: csvToggle(channels, v, e.target.checked) || 'sms' })} />
+                            {l}
+                        </label>
+                    ))}
+                    <p className="text-xs text-muted-foreground mt-1">Falls back to SMS if nothing else gets through.</p>
+                </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm mt-4 pt-4 border-t">
+                <input type="checkbox" checked={settings?.daily_fup_notify ?? true} disabled={save.isPending}
+                    onChange={(e) => save.mutate({ daily_fup_notify: e.target.checked })} />
+                Tell PPPoE customers when the daily FUP slows them down (uses the payment confirmation channels)
+            </label>
+            <p className="text-xs text-muted-foreground mt-2">The wording of both messages can be changed under Message templates.</p>
         </div>
     );
 }

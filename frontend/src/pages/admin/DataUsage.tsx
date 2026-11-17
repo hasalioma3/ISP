@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import ExportMenu from '../../components/ExportMenu';
+import TopHotspotUsers from '../../components/TopHotspotUsers';
 
 const PERIODS = [
     { key: 'daily', label: 'Daily' },
@@ -88,6 +89,8 @@ export default function DataUsage() {
     return (
         <div>
             <h1 className="text-2xl font-bold mb-6">Data Usage</h1>
+
+            <TopHotspotUsers className="mb-6" defaultPeriod={period} />
 
             <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
                 <div className="bg-primary px-6 py-4 flex items-center text-white font-bold">

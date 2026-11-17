@@ -13,13 +13,47 @@ import hashlib
 
 
 def normalize_phone(phone_number):
-    """Coerce 07XXXXXXXX / +254XXXXXXXXX / 254XXXXXXXXX to 254XXXXXXXXX."""
-    phone_number = (phone_number or '').strip()
-    if phone_number.startswith('0'):
-        return '254' + phone_number[1:]
-    if phone_number.startswith('+'):
-        return phone_number[1:]
-    return phone_number
+    """Coerce any Kenyan mobile format to 254XXXXXXXXX.
+
+    Handles 07XXXXXXXX, +254XXXXXXXXX, 254XXXXXXXXX and the bare nine-digit
+    form people often type or paste ("725316559", "712 345 678") -- the last
+    one used to reach Africa's Talking/Daraja unchanged and be rejected as an
+    invalid number. Spaces, dashes and brackets are dropped first. Anything
+    that still isn't a Kenyan mobile is returned as-is (digits only) so the
+    caller's own length check reports it.
+    """
+    raw = (phone_number or '').strip()
+    digits = ''.join(ch for ch in raw if ch.isdigit())
+    if not digits:
+        return raw
+    if digits.startswith('254'):
+        return digits
+    if digits.startswith('0') and len(digits) == 10:
+        return '254' + digits[1:]
+    if len(digits) == 9 and digits[0] in '17':
+        return '254' + digits
+    return digits
+
+
+def fix_bare_phone(phone_number):
+    """Only repair the bare nine-digit form ("725316559" -> "254725316559");
+    any other value (07..., 254..., +254..., foreign) is returned as typed,
+    so valid stored numbers never change shape."""
+    raw = (phone_number or '').strip()
+    digits = ''.join(ch for ch in raw if ch.isdigit())
+    if len(digits) == 9 and digits[0] in '17' and not raw.startswith('+'):
+        return '254' + digits
+    return raw
+
+
+def local_phone(phone_number):
+    """254XXXXXXXXX / 9-digit / 07... -> 07XXXXXXXX, the format customer
+    records and guest hotspot usernames have always used. Unrecognised input
+    is returned stripped and unchanged."""
+    full = normalize_phone(phone_number)
+    if len(full) == 12 and full.startswith('254') and full.isdigit():
+        return '0' + full[3:]
+    return (phone_number or '').strip()
 
 
 def hash_phone(phone_number):

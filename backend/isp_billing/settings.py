@@ -65,6 +65,9 @@ INSTALLED_APPS = [
     'apps.inventory',
     'apps.audit',
     'apps.backups',
+    'apps.archive',
+    'apps.loyalty',
+    'apps.invoicing',
 ]
 
 if DEBUG:

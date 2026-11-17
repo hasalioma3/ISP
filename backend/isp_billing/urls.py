@@ -20,6 +20,9 @@ urlpatterns = [
     path('api/notifications/', include('apps.notifications.urls')),
     path('api/audit/', include('apps.audit.urls')),
     path('api/backups/', include('apps.backups.urls')),
+    path('api/archive/', include('apps.archive.urls')),
+    path('api/loyalty/', include('apps.loyalty.urls')),
+    path('api/invoicing/', include('apps.invoicing.urls')),
 ]
 
 # Debug toolbar (development only)

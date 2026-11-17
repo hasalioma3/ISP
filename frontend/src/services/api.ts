@@ -335,3 +335,49 @@ export const inventoryAPI = {
 };
 
 export default api;
+
+// Data archive (Settings -> Archive, superadmins)
+export const archiveAPI = {
+    getSettings: (params?: { months?: number }) => api.get('/archive/settings/', { params }),
+    updateSettings: (data: Record<string, unknown>) => api.put('/archive/settings/', data),
+    runs: () => api.get('/archive/runs/'),
+    runNow: () => api.post('/archive/runs/'),
+    download: (id: number) => api.get(`/archive/runs/${id}/`, { responseType: 'blob' }),
+    restore: (id: number) => api.post(`/archive/runs/${id}/`),
+    remove: (id: number) => api.delete(`/archive/runs/${id}/`),
+};
+
+// Loyalty programme
+export const loyaltyAPI = {
+    getSettings: () => api.get('/loyalty/settings/'),
+    updateSettings: (data: Record<string, unknown>) => api.put('/loyalty/settings/', data),
+    overview: (params?: { search?: string }) => api.get('/loyalty/overview/', { params }),
+    customer: (id: number) => api.get(`/loyalty/customers/${id}/`),
+    act: (id: number, data: { action: 'redeem' | 'adjust'; points: number; reason?: string }) =>
+        api.post(`/loyalty/customers/${id}/`, data),
+    mine: () => api.get('/loyalty/me/'),
+    redeemMine: (points: number) => api.post('/loyalty/me/', { points }),
+};
+
+// Customer invoices + KRA eTIMS
+export const invoiceAPI = {
+    getSettings: () => api.get('/invoicing/settings/'),
+    updateSettings: (data: Record<string, unknown>) => api.put('/invoicing/settings/', data),
+    etims: (action: 'initialize' | 'register_item') => api.post('/invoicing/settings/etims/', { action }),
+    preview: (template: string) => api.get('/invoicing/templates/preview/', { params: { template }, responseType: 'blob' }),
+    list: (params?: Record<string, unknown>) => api.get('/invoicing/invoices/', { params }),
+    create: (data: Record<string, unknown>) => api.post('/invoicing/invoices/', data),
+    fromTransaction: (data: Record<string, unknown>) => api.post('/invoicing/invoices/from-transaction/', data),
+    payments: (params?: Record<string, unknown>) => api.get('/invoicing/payments/', { params }),
+    get: (id: number) => api.get(`/invoicing/invoices/${id}/`),
+    update: (id: number, data: Record<string, unknown>) => api.patch(`/invoicing/invoices/${id}/`, data),
+    pdf: (id: number, template?: string) =>
+        api.get(`/invoicing/invoices/${id}/pdf/`, { params: { template }, responseType: 'blob' }),
+    action: (id: number, action: string, extra?: Record<string, unknown>) =>
+        api.post(`/invoicing/invoices/${id}/action/`, { action, ...extra }),
+    mine: () => api.get('/invoicing/mine/'),
+    myPdf: (id: number) => api.get(`/invoicing/mine/${id}/pdf/`, { responseType: 'blob' }),
+};
+
+export const topHotspotUsers = (params: { period: string; by?: string; date?: string }) =>
+    api.get('/analytics/top-hotspot-users/', { params });

@@ -1,0 +1,95 @@
+# One ISP's instance of the ISP billing app, run by the master app
+# (saas/backend/cloud/tenants/orchestrator.py) as project saas-<slug>:
+#
+#   docker compose -p saas-<slug> -f docker-compose.tenant.yml --env-file <slug>.env up -d
+#
+# Same services as the repo's docker-compose.company.yml, but:
+#   * pre-built images (saas/build_tenant_images.sh), so sign-ups never wait
+#     on a build and every ISP runs the exact same version;
+#   * no bind mounts -- the master runs compose from inside a container via
+#     the Docker socket, where a relative host path would be wrong. The TLS
+#     certificate comes from a shared named volume instead;
+#   * Postgres/Redis are the SaaS stack's own (saas-db / saas-redis on
+#     saas_network), never the main ISP's database server.
+
+services:
+  backend:
+    image: ${TENANT_IMAGE_PREFIX}backend:${TENANT_IMAGE_TAG}
+    command: gunicorn isp_billing.wsgi:application --bind 0.0.0.0:8000 --workers 1 --threads 8
+    env_file: ["${TENANT_ENV_FILE}"]
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/mediafiles
+      - backup_volume:/backups
+    restart: unless-stopped
+    networks:
+      default:
+      saas:
+        # How the master forwards M-Pesa callbacks / checks health. Every
+        # tenant's backend is "backend" in its own project, so the shared
+        # network needs a unique name.
+        aliases: ["t-${TENANT_SLUG}-backend"]
+    mem_limit: 512m
+
+  frontend:
+    image: ${TENANT_IMAGE_PREFIX}frontend:${TENANT_IMAGE_TAG}
+    ports:
+      - "${TENANT_PORT}:443"
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/mediafiles
+      - certs:/etc/nginx/certs:ro
+    depends_on: [backend]
+    restart: unless-stopped
+    networks: [default]
+    mem_limit: 64m
+
+  celery_worker:
+    image: ${TENANT_IMAGE_PREFIX}backend:${TENANT_IMAGE_TAG}
+    command: celery -A isp_billing worker -l info --concurrency 2
+    env_file: ["${TENANT_ENV_FILE}"]
+    volumes:
+      - media_volume:/app/mediafiles
+      - backup_volume:/backups
+      - whatsapp_session:/whatsapp_auth:ro
+    depends_on: [backend]
+    restart: unless-stopped
+    networks: [default, saas]
+    mem_limit: 512m
+
+  celery_beat:
+    image: ${TENANT_IMAGE_PREFIX}backend:${TENANT_IMAGE_TAG}
+    command: celery -A isp_billing beat -l info
+    env_file: ["${TENANT_ENV_FILE}"]
+    depends_on: [backend]
+    restart: unless-stopped
+    networks: [default, saas]
+    mem_limit: 256m
+
+  whatsapp_service:
+    image: ${TENANT_IMAGE_PREFIX}whatsapp:${TENANT_IMAGE_TAG}
+    volumes:
+      - whatsapp_session:/app/auth
+    restart: unless-stopped
+    # This tenant's own network only; never published (see the ISP app's
+    # CLAUDE.md: network isolation is its only access control).
+    networks: [default]
+    mem_limit: 256m
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${TENANT_SUBNET}
+  saas:
+    external: true
+    name: ${SAAS_NETWORK}
+
+volumes:
+  static_volume:
+  media_volume:
+  backup_volume:
+  whatsapp_session:
+  certs:
+    external: true
+    name: ${SAAS_CERTS_VOLUME}

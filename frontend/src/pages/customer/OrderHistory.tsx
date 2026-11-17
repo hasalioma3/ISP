@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { billingAPI } from '../../services/api';
+import toast from 'react-hot-toast';
+import { billingAPI, invoiceAPI } from '../../services/api';
 import { format } from 'date-fns';
-import { Receipt, Loader2 } from 'lucide-react';
+import { Receipt, Loader2, FileText, Download } from 'lucide-react';
+import { downloadBlob } from '../../utils/downloadBlob';
+import { errText } from '../../utils/errText';
 
 export default function OrderHistory() {
     const { data: transactions, isLoading } = useQuery({
@@ -11,6 +14,15 @@ export default function OrderHistory() {
             return res.data.results || res.data;
         },
     });
+
+    const { data: invoices } = useQuery({
+        queryKey: ['my-invoices'],
+        queryFn: async () => (await invoiceAPI.mine()).data as any[],
+    });
+    const download = async (inv: any) => {
+        try { downloadBlob((await invoiceAPI.myPdf(inv.id)).data, `${inv.number}.pdf`); }
+        catch (e) { toast.error(errText(e, 'Could not download the invoice')); }
+    };
 
     return (
         <div>
@@ -56,6 +68,30 @@ export default function OrderHistory() {
                     </table>
                 </div>
             </div>
+
+            {invoices && invoices.length > 0 && (
+                <div className="mt-8">
+                    <h2 className="text-lg font-bold text-foreground mb-3 flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-muted-foreground" /> Invoices
+                    </h2>
+                    <div className="bg-card rounded-2xl shadow-sm border border-border divide-y divide-border">
+                        {invoices.map((inv) => (
+                            <div key={inv.id} className="flex items-center justify-between gap-3 px-6 py-3 text-sm">
+                                <div className="min-w-0">
+                                    <p className="font-medium font-mono">{inv.number}
+                                        {inv.etims_signed && <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 font-sans text-xs text-green-800">KRA eTIMS</span>}
+                                    </p>
+                                    <p className="truncate text-xs text-muted-foreground">{format(new Date(inv.issue_date), 'MMM d, yyyy')} · {inv.description}</p>
+                                </div>
+                                <span className="font-semibold whitespace-nowrap">KES {Number(inv.total).toLocaleString()}</span>
+                                <button onClick={() => download(inv)} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-secondary">
+                                    <Download className="h-3.5 w-3.5" /> PDF
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

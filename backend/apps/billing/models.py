@@ -61,6 +61,18 @@ class BillingPlan(models.Model):
     fup_limit_gb = models.PositiveIntegerField(null=True, blank=True)
     fup_download_speed = models.PositiveIntegerField(null=True, blank=True, help_text="FUP download speed in Mbps")
     fup_upload_speed = models.PositiveIntegerField(null=True, blank=True, help_text="FUP upload speed in Mbps")
+
+    # Daily FUP (PPPoE plans): once a subscriber moves this much data in one
+    # calendar day (Africa/Nairobi), they drop to the daily speeds until
+    # midnight, then go back to full speed. Independent of the plan-period
+    # FUP above; when both are in force the plan-period one wins (it is the
+    # longer-lived restriction). All three set, or all three blank.
+    daily_fup_limit_gb = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)],
+        help_text="Daily usage (GB) after which the daily FUP speeds apply until midnight",
+    )
+    daily_fup_download_speed = models.PositiveIntegerField(null=True, blank=True, help_text="Daily FUP download speed in Mbps")
+    daily_fup_upload_speed = models.PositiveIntegerField(null=True, blank=True, help_text="Daily FUP upload speed in Mbps")
     
     # MikroTik Profile Names
     mikrotik_profile = models.CharField(
@@ -112,6 +124,14 @@ class BillingPlan(models.Model):
 
     def get_fup_mikrotik_profile(self):
         return f"{self.mikrotik_profile}-fup"
+
+    @property
+    def has_daily_fup(self):
+        return bool(self.service_type == 'pppoe' and self.daily_fup_limit_gb
+                    and self.daily_fup_download_speed and self.daily_fup_upload_speed)
+
+    def get_daily_fup_mikrotik_profile(self):
+        return f"{self.mikrotik_profile}-dfup"
 
     def get_duration_timedelta(self):
         """
@@ -166,6 +186,12 @@ class Subscription(models.Model):
     # Status
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
     fup_applied = models.BooleanField(default=False)
+    # Local date the daily FUP was applied; cleared when it's lifted after
+    # midnight. Non-null and == today means "throttled for the rest of today".
+    daily_fup_date = models.DateField(null=True, blank=True)
+    # Percentages of the plan's data cap already announced to the customer
+    # (e.g. [50, 75]), so each usage alert goes out once per subscription.
+    usage_alerts_sent = models.JSONField(default=list, blank=True)
     
     # Auto-renewal
     auto_renew = models.BooleanField(default=False)

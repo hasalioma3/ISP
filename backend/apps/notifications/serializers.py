@@ -31,6 +31,7 @@ class NotificationSettingsSerializer(serializers.ModelSerializer):
             'telegram_bot_token', 'telegram_webhook_secret', 'telegram_bot_username',
             'telegram_bot_token_is_set', 'telegram_webhook_secret_is_set',
             'admin_phones', 'admin_emails', 'admin_phone_channels', 'confirmation_service_types', 'admin_event_emails', 'daily_report_enabled', 'confirmation_channels', 'confirmation_sms_fallback', 'reminder_enabled', 'reminder_days_before', 'reminder_every_days', 'reminder_on_expiry_day', 'reminder_hour', 'reminder_service_types', 'reminder_channels', 'reminder_sms_fallback', 'reminder_schedule', 'sales_phones', 'sales_emails', 'expired_followup_enabled', 'expired_followup_hour', 'superadmin_recipients',
+            'usage_alerts_enabled', 'usage_alert_thresholds', 'usage_alert_service_types', 'usage_alert_channels', 'daily_fup_notify',
             'email_enabled', 'smtp_provider', 'smtp_host', 'smtp_port', 'smtp_security',
             'smtp_username', 'smtp_password', 'smtp_password_is_set', 'email_from_address', 'email_from_name',
             'updated_at',
@@ -74,7 +75,18 @@ class NotificationSettingsSerializer(serializers.ModelSerializer):
         bad = [p for p in phones if not (normalize_phone(p).isdigit() and len(normalize_phone(p)) == 12)]
         if bad:
             raise serializers.ValidationError(f"Not valid phone number(s): {', '.join(bad)} (use 07XXXXXXXX or 2547XXXXXXXX)")
-        return '\n'.join(dict.fromkeys(phones))
+        from apps.payments.services.phone_hash import fix_bare_phone
+        return '\n'.join(dict.fromkeys(fix_bare_phone(p) for p in phones))
+
+    def validate_usage_alert_thresholds(self, value):
+        parts = NotificationSettings._split(value)
+        try:
+            nums = sorted({int(float(p)) for p in parts})
+        except ValueError:
+            raise serializers.ValidationError('Use whole percentages separated by commas, e.g. 50,75,95')
+        if any(n <= 0 or n >= 100 for n in nums):
+            raise serializers.ValidationError('Each percentage must be between 1 and 99')
+        return ','.join(str(n) for n in nums)
 
     def validate_sales_emails(self, value):
         return self.validate_admin_emails(value)

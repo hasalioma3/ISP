@@ -16,11 +16,16 @@ class InitiatePaymentSerializer(serializers.Serializer):
     mac_address = serializers.CharField(required=False, allow_blank=True, max_length=17)
     
     def validate_phone_number(self, value):
-        # Basic phone number validation
+        # Stored and used as the guest username in 07XXXXXXXX form, so a
+        # bare "725316559" or "254725316559" lands on the same account.
+        from apps.payments.services.phone_hash import local_phone, normalize_phone
         value = value.strip()
         if not value:
             raise serializers.ValidationError("Phone number is required")
-        return value
+        full = normalize_phone(value)
+        if not (full.isdigit() and len(full) == 12):
+            raise serializers.ValidationError("Enter a valid phone number, e.g. 0712345678")
+        return local_phone(value)
 
 
 class PaymentCallbackSerializer(serializers.ModelSerializer):
